@@ -1,5 +1,6 @@
 import { authenticate, respond, preflight, handleError, jsonBody, rateLimit } from '../_shared/http.ts';
 import { z } from 'npm:zod@4';
+import { hasAuthorizedRunStepIds } from '../_shared/run-report.ts';
 
 const ErrorCode = z.string().regex(/^[A-Z0-9_:-]{1,100}$/);
 const Run = z.object({
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
     if ((device.android_api ?? 0) < (payload.minAndroidApi ?? 23)) throw Object.assign(new Error('Device Android API is below the recipe requirement.'), { status: 409 });
     if (payload.minAppVersion && compareVersions(value.app_version, payload.minAppVersion) < 0) throw Object.assign(new Error('Android app version is below the recipe requirement.'), { status: 409 });
     const knownStepIds = new Set((payload.steps ?? []).map((step) => step.id));
-    if (value.step_results.some((step) => !knownStepIds.has(step.step_id))) throw Object.assign(new Error('Run contains a step ID that is not part of the signed recipe.'), { status: 422 });
+    if (!hasAuthorizedRunStepIds(value.result, value.step_results, knownStepIds)) throw Object.assign(new Error('Run contains a step ID that is not part of the signed recipe.'), { status: 422 });
 
     const { data, error } = await admin.from('repair_runs').insert({ ...value, user_id: user.id }).select('id').single();
     if (error) throw error;
