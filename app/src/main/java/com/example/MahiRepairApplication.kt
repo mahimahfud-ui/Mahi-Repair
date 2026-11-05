@@ -40,11 +40,12 @@ class MahiRepairApplication : Application() {
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)
 
-        // Initialize default verified recipes and schedule periodic background sync
+        // Remove credentials written in plaintext by earlier app versions.
         applicationScope.launch {
-            toolRepository.initializeCatalogIfEmpty()
+            preferencesManager.clearLegacyPlaintextSession()
         }
 
+        // Schedule background synchronization; repairs still require live server authorization.
         SyncManager.schedulePeriodicSync(this)
     }
 }
