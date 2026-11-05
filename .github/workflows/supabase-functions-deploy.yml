@@ -1,10 +1,10 @@
-name: Deploy Supabase Edge Functions
+name: Deploy Supabase Production
 
 on:
   workflow_dispatch:
     inputs:
       confirm_production:
-        description: "Type DEPLOY to update the live Mahi-Repair Supabase project"
+        description: "Type DEPLOY to apply pending migrations and update the live Mahi-Repair Supabase project"
         required: true
         type: string
 
@@ -17,13 +17,16 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy all 15 Edge Functions
+    name: Apply database migrations and deploy 15 Edge Functions
     if: github.ref == 'refs/heads/main' && inputs.confirm_production == 'DEPLOY'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: supabase-production
       url: https://supabase.com/dashboard/project/shwqsljicmhflnvjqjah/functions
+    env:
+      PROJECT_REF: shwqsljicmhflnvjqjah
+
     steps:
       - name: Checkout main
         uses: actions/checkout@v7
@@ -33,19 +36,78 @@ jobs:
         with:
           version: 2.122.1
 
-      - name: Validate deployment credentials
+      - name: Validate protected deployment configuration
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          ADMIN_ORIGIN: ${{ vars.ADMIN_ORIGIN }}
+        shell: bash
         run: |
-          test -n "$SUPABASE_ACCESS_TOKEN" || {
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN}" || {
             echo "::error::Add SUPABASE_ACCESS_TOKEN to the supabase-production GitHub environment."
             exit 1
           }
+          test -n "${SUPABASE_DB_PASSWORD}" || {
+            echo "::error::Add SUPABASE_DB_PASSWORD to the supabase-production GitHub environment."
+            exit 1
+          }
+          test -n "${ADMIN_ORIGIN}" || {
+            echo "::error::Set the ADMIN_ORIGIN GitHub environment variable to the exact HTTPS Render origin."
+            exit 1
+          }
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          value = os.environ["ADMIN_ORIGIN"]
+          parsed = urlparse(value)
+          if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+              raise SystemExit("ADMIN_ORIGIN must be one exact HTTPS origin without a path, query or fragment.")
+          PY
 
-      - name: Deploy Edge Functions with JWT verification enabled
+      - name: Link the production Supabase project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: shwqsljicmhflnvjqjah
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Verify signing private key is already stored in Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_names="$(supabase secrets list --project-ref "$PROJECT_REF")"
+          if ! grep -Fq "RECIPE_SIGNING_PRIVATE_KEY_PEM" <<< "$secret_names"; then
+            echo "::error::Add RECIPE_SIGNING_PRIVATE_KEY_PEM directly in Supabase Dashboard → Edge Function Secrets before deployment."
+            exit 1
+          fi
+
+      - name: Configure the Admin Panel origin in Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          ADMIN_ORIGIN: ${{ vars.ADMIN_ORIGIN }}
+        run: |
+          supabase secrets set "ADMIN_ORIGIN=$ADMIN_ORIGIN" --project-ref "$PROJECT_REF" --yes
+
+      - name: Preview pending database migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase db push --linked --dry-run
+
+      - name: Apply reviewed database migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase db push --linked --yes
+
+      - name: Deploy all 15 Edge Functions with JWT verification enabled
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -71,3 +133,10 @@ jobs:
             supabase functions deploy "${function}" --project-ref "$PROJECT_REF"
             echo "::endgroup::"
           done
+
+      - name: Verify deployed migration history
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase migration list --linked
