@@ -63,6 +63,15 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
 
+      - name: Run Compose UI tests on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+
       - name: Scan Android source for embedded privileged secrets
         run: |
           if grep -RInE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' app/src; then
@@ -81,6 +90,17 @@ jobs:
             exit 1
           fi
           echo "No private signing key or service-role credential markers found in the debug APK."
+
+      - name: Upload Android Compose UI test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-compose-ui-test-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Android unit-test reports
         if: always()
