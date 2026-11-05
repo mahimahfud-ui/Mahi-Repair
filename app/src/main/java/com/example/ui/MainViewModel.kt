@@ -164,6 +164,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     userEmail = currentEmail
                 )
                 toolRepo.recordRepairRun(report)
+            } catch (_: Exception) {
+                _syncStatusMessage.value = "The repair could not be completed. Try again."
             } finally {
                 executionMutex.unlock()
             }
