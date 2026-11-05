@@ -66,8 +66,12 @@ class RecipeExecutionEngine(
         if (current.isEmpty() || required.isEmpty()) return false
         val count = maxOf(current.size, required.size)
         for (index in 0 until count) {
-            val currentPart = current.getOrNull(index)?.toBigIntegerOrNull() ?: BigInteger.ZERO
-            val requiredPart = required.getOrNull(index)?.toBigIntegerOrNull() ?: BigInteger.ZERO
+            val currentPart = if (index < current.size) {
+                current[index].toBigIntegerOrNull() ?: return false
+            } else BigInteger.ZERO
+            val requiredPart = if (index < required.size) {
+                required[index].toBigIntegerOrNull() ?: return false
+            } else BigInteger.ZERO
             val comparison = currentPart.compareTo(requiredPart)
             if (comparison != 0) return comparison > 0
         }
