@@ -30,8 +30,7 @@ class AuthRepository(
                 Result.failure(Exception("Supabase Auth error: $err. Ensure the Owner has invited this email."))
             }
         } else {
-            // Offline / Unconfigured Cloud fallback for initial family verification
-            return Result.success("Simulated demo mode: Verification code '123456' sent to $cleanEmail.")
+            return Result.failure(IllegalStateException("Repair service is not configured. Please try again later."))
         }
     }
 
@@ -59,11 +58,7 @@ class AuthRepository(
                 Result.failure(Exception("Verification failed: $err"))
             }
         } else {
-            // Local offline verified session for testing before Supabase keys are entered
-            val token = "local_dev_token_${System.currentTimeMillis()}"
-            val role = "invited_member"
-            preferencesManager.saveSession(cleanEmail, token, role)
-            return Result.success(UserSession(cleanEmail, token, role, true))
+            return Result.failure(IllegalStateException("Repair service is not configured. Please try again later."))
         }
     }
 
