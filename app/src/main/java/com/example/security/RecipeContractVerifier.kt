@@ -13,6 +13,12 @@ import java.security.Signature
  * This validates a recipe; it does not execute the recipe's actions.
  */
 object RecipeContractVerifier {
+    const val SIGNATURE_ALGORITHM = "RSA-SHA256"
+
+    fun requireSupportedSignatureAlgorithm(algorithm: String) {
+        require(algorithm == SIGNATURE_ALGORITHM) { "Unsupported recipe signature algorithm" }
+    }
+
     private val actionRisk = mapOf(
         "CHECK_INTERNET" to "read_only", "DNS_LOOKUP" to "read_only",
         "HTTPS_PROBE" to "read_only", "CHECK_APP_INSTALLED" to "read_only",
@@ -149,7 +155,7 @@ object RecipeContractVerifier {
                 keys(setOf("title", "instructions"), setOf("title", "instructions")); text("title", 100)
                 val instructions = p.optJSONArray("instructions") ?: error("Invalid instructions")
                 require(instructions.length() in 1..30) { "Invalid instruction count" }
-                for (i in 0 until instructions.length()) require(instructions.getString(i).isNotBlank() && instructions.getString(i).length <= 1000) { "Invalid instruction" }
+                for (i in 0 until instructions.length()) require(instructions.opt(i) is String && instructions.getString(i).isNotBlank() && instructions.getString(i).length <= 1000) { "Invalid instruction" }
             }
             "ASK_USER_CONFIRMATION" -> {
                 keys(setOf("title", "message", "confirmLabel"), setOf("title", "message")); text("title", 100); text("message", 1000)
