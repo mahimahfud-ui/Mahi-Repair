@@ -49,7 +49,10 @@ fun MahiRepairApp(
     } else {
         MainScreen(
             state = state,
-            viewModel = viewModel
+            onRunRepair = { viewModel.onRunRepair() },
+            onRetryAvailability = { viewModel.onRetryAvailability() },
+            onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
+            onDismissExecution = { viewModel.onDismissExecution() }
         )
     }
 }
