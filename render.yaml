@@ -1,0 +1,21 @@
+# Mahi Repair Admin Panel — PR preview/staging service.
+# Production must be created separately after PR review and merge.
+services:
+  - type: web
+    name: mahi-repair-admin-preview
+    runtime: node
+    plan: free
+    region: singapore
+    repo: https://github.com/mahimahfud-ui/Mahi-Repair
+    branch: security-hardening/run-repair
+    rootDir: admin-panel
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://shwqsljicmhflnvjqjah.supabase.co
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false

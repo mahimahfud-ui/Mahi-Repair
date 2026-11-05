@@ -7,6 +7,7 @@ import com.example.MahiRepairApplication
 import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairTool
+import com.example.domain.models.RepairRunReport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,11 +20,12 @@ import kotlinx.coroutines.sync.Mutex
 
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
-    val primaryTool: RepairTool? = null,
-    val isPrimaryToolLoading: Boolean = true,
+    val tools: List<RepairTool> = emptyList(),
+    val isToolsLoading: Boolean = true,
     val canRetryAvailability: Boolean = false,
     val isPreparingRepair: Boolean = false,
     val repairStatusMessage: String? = null,
+    val isToolPickerOpen: Boolean = false,
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
@@ -36,10 +38,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val toolRepo = app.toolRepository
     private val engine = app.recipeExecutionEngine
 
-    private val _isPrimaryToolLoading = MutableStateFlow(true)
+    private val _isToolsLoading = MutableStateFlow(true)
     private val _canRetryAvailability = MutableStateFlow(false)
     private val _isPreparingRepair = MutableStateFlow(false)
     private val _repairStatusMessage = MutableStateFlow<String?>(null)
+    private val _isToolPickerOpen = MutableStateFlow(false)
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
@@ -47,11 +50,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val uiState: StateFlow<MainUiState> = combine(
         authRepo.sessionFlow,
-        toolRepo.primaryRepairToolFlow,
-        _isPrimaryToolLoading,
+        toolRepo.toolsFlow,
+        _isToolsLoading,
         _canRetryAvailability,
         _isPreparingRepair,
         _repairStatusMessage,
+        _isToolPickerOpen,
         engine.engineState,
         _authStatusMessage,
         _isAuthLoading,
@@ -59,15 +63,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
-            primaryTool = values[1] as RepairTool?,
-            isPrimaryToolLoading = values[2] as Boolean,
+            tools = values[1] as List<RepairTool>,
+            isToolsLoading = values[2] as Boolean,
             canRetryAvailability = values[3] as Boolean,
             isPreparingRepair = values[4] as Boolean,
             repairStatusMessage = values[5] as String?,
-            executionState = values[6] as ExecutionEvent,
-            authStatusMessage = values[7] as String?,
-            isAuthLoading = values[8] as Boolean,
-            otpSentForEmail = values[9] as String?
+            isToolPickerOpen = values[6] as Boolean,
+            executionState = values[7] as ExecutionEvent,
+            authStatusMessage = values[8] as String?,
+            isAuthLoading = values[9] as Boolean,
+            otpSentForEmail = values[10] as String?
         )
     }.stateIn(
         viewModelScope,
@@ -79,10 +84,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             authRepo.sessionFlow.collectLatest { session ->
                 if (session.isAuthenticated) {
-                    refreshPrimaryRepair()
+                    refreshTools()
                 } else {
-                    _isPrimaryToolLoading.value = false
+                    _isToolsLoading.value = false
                     _canRetryAvailability.value = false
+                    _isToolPickerOpen.value = false
                     _repairStatusMessage.value = null
                 }
             }
@@ -90,44 +96,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onRetryAvailability() {
-        if (_isPrimaryToolLoading.value || _isPreparingRepair.value) return
-        viewModelScope.launch { refreshPrimaryRepair() }
+        if (_isToolsLoading.value || _isPreparingRepair.value) return
+        viewModelScope.launch { refreshTools() }
     }
 
-    private suspend fun refreshPrimaryRepair() {
-        _isPrimaryToolLoading.value = true
+    private suspend fun refreshTools() {
+        _isToolsLoading.value = true
         _canRetryAvailability.value = false
         _repairStatusMessage.value = null
 
         val result = toolRepo.syncTools()
-        _isPrimaryToolLoading.value = false
+        _isToolsLoading.value = false
 
         if (result.isSuccess) {
-            val available = result.getOrThrow() > 0
+            val count = result.getOrThrow()
             _canRetryAvailability.value = false
-            _repairStatusMessage.value = if (available) {
-                "Your repair is ready."
-            } else {
-                "Run Repair is not available yet."
+            _repairStatusMessage.value = when (count) {
+                0 -> "No repair tools are currently available."
+                1 -> "1 repair tool is ready."
+                else -> "$count repair tools are ready."
             }
         } else {
             _canRetryAvailability.value = true
             _repairStatusMessage.value =
-                "We couldn't check repair availability. Check your connection and try again."
+                "We couldn't refresh your repair list. Check your connection and try again."
         }
     }
 
+    /** RUN REPAIR opens the live, server-authorized catalogue instead of executing a fixed recipe. */
     fun onRunRepair() {
-        if (_isPrimaryToolLoading.value || _isPreparingRepair.value) return
-        if (!executionMutex.tryLock()) return
+        if (_isToolsLoading.value || _isPreparingRepair.value) return
+        viewModelScope.launch {
+            val tools = toolRepo.toolsFlow.first()
+            if (tools.isEmpty()) {
+                refreshTools()
+            } else {
+                _isToolPickerOpen.value = true
+            }
+        }
+    }
+
+    fun onDismissToolPicker() {
+        _isToolPickerOpen.value = false
+    }
+
+    fun onSelectTool(toolId: String) {
+        if (_isToolsLoading.value || _isPreparingRepair.value || !executionMutex.tryLock()) return
+        _isToolPickerOpen.value = false
 
         viewModelScope.launch {
             _isPreparingRepair.value = true
             _repairStatusMessage.value = "Preparing your repair..."
 
             try {
-                val tool = toolRepo.primaryRepairToolFlow.first()
-                    ?: throw IllegalStateException("The primary repair is not currently available.")
+                val tool = toolRepo.toolsFlow.first().firstOrNull { it.id == toolId }
+                    ?: throw IllegalStateException("This repair is no longer in your available list.")
 
                 val currentSession = authRepo.getValidSession().getOrElse { cause ->
                     throw IllegalStateException("Your session has expired. Please sign in again.", cause)
@@ -136,11 +159,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     throw IllegalStateException("Your session has expired. Please sign in again.")
                 }
 
+                // Never execute the cached Room entry. The Edge Function rechecks membership,
+                // device ownership, publication state and current version on every run.
                 val payload = toolRepo.getSignedPayloadAndSignature(tool.id).getOrElse { cause ->
-                    throw IllegalStateException("The repair is not currently authorized for this device.", cause)
+                    throw IllegalStateException("This repair is no longer authorized for this device.", cause)
                 }
 
-                val report = engine.executeRecipe(
+                val report: RepairRunReport = engine.executeRecipe(
                     tool = tool,
                     rawSignedPayload = payload.first,
                     signatureBase64 = payload.second,
@@ -149,17 +174,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val uploadResult = toolRepo.recordRepairRun(report)
                 _repairStatusMessage.value = if (uploadResult.isSuccess) {
-                    null
+                    "Repair completed."
                 } else {
-                    "The repair run finished, but its report could not be sent. Check your connection."
+                    "The repair finished, but its report could not be sent. Check your connection."
                 }
             } catch (error: Exception) {
                 _canRetryAvailability.value = true
                 _repairStatusMessage.value = when {
                     error.message?.contains("session", ignoreCase = true) == true ->
                         "Your session expired. Please sign in again."
-                    else -> "The repair could not be started. Check your connection and try again."
+                    else -> "This repair is no longer available. Refresh the repair list and try again."
                 }
+                // A 401/403 means the local list may be stale. The repository clears it
+                // when the server rejects the catalogue request; never trust the cache to execute.
             } finally {
                 _isPreparingRepair.value = false
                 executionMutex.unlock()

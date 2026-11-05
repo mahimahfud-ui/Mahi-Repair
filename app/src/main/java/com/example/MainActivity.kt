@@ -32,6 +32,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        (application as MahiRepairApplication).setAppForegrounded(true)
+    }
+
+    override fun onStop() {
+        (application as MahiRepairApplication).setAppForegrounded(false)
+        super.onStop()
+    }
 }
 
 @Composable
@@ -51,6 +61,8 @@ fun MahiRepairApp(
             state = state,
             onRunRepair = { viewModel.onRunRepair() },
             onRetryAvailability = { viewModel.onRetryAvailability() },
+            onSelectTool = { viewModel.onSelectTool(it) },
+            onDismissToolPicker = { viewModel.onDismissToolPicker() },
             onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
             onDismissExecution = { viewModel.onDismissExecution() }
         )

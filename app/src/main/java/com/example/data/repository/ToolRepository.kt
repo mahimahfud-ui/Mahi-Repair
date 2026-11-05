@@ -17,13 +17,22 @@ import com.example.domain.models.ToolCategory
 import com.example.security.RecipeContractVerifier
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.UUID
+import android.util.Base64
+import org.json.JSONObject
+import java.nio.charset.StandardCharsets
+
+data class RealtimeIdentity(
+    val userId: String,
+    val deviceId: String,
+    val accessToken: String,
+    val expiresAtMillis: Long
+)
 
 class ToolRepository(
     private val database: AppDatabase,
@@ -34,7 +43,6 @@ class ToolRepository(
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
     private val recipeSlugsByToolId = MutableStateFlow<Map<String, String>>(emptyMap())
-    private companion object { const val PRIMARY_REPAIR_SLUG = "run-repair" }
     private val syncMutex = Mutex()
     private val deviceRegistrationMutex = Mutex()
 
@@ -42,13 +50,6 @@ class ToolRepository(
 
     val toolsFlow: Flow<List<RepairTool>> = toolDao.getEnabledToolsFlow().map { entities ->
         entities.map { it.toDomain() }
-    }
-
-    /** Only the canonical owner-published Run Repair recipe is exposed to the ordinary app. */
-    val primaryRepairToolFlow: Flow<RepairTool?> = combine(
-        toolDao.getEnabledToolsFlow(), recipeSlugsByToolId
-    ) { entities, slugs ->
-        entities.firstOrNull { slugs[it.id] == PRIMARY_REPAIR_SLUG }?.toDomain()
     }
 
     /**
@@ -131,7 +132,7 @@ class ToolRepository(
             val dtos = remoteResult.getOrThrow()
             val now = System.currentTimeMillis()
             val nextRecipeSlugs = mutableMapOf<String, String>()
-            val entities = dtos.mapNotNull { dto ->
+            val entities = dtos.map { dto ->
                 UUID.fromString(dto.toolId)
                 val recipe = verifiedPayload(
                     signedPayload = dto.signedPayload,
@@ -140,7 +141,9 @@ class ToolRepository(
                     expectedVersion = dto.version
                 )
                 val recipeSlug = recipe.getString("toolId")
-                if (recipeSlug != PRIMARY_REPAIR_SLUG) return@mapNotNull null
+                require(recipeSlug.matches(Regex("^[a-z0-9]+(-[a-z0-9]+)*$"))) {
+                    "The signed repair tool identifier is invalid."
+                }
                 nextRecipeSlugs[dto.toolId] = recipeSlug
                 val category = recipe.getString("category")
                 val minAndroidApi = recipe.optInt("minAndroidApi", 23)
@@ -170,14 +173,55 @@ class ToolRepository(
             }
 
             // Do not replace a verified local catalog unless every remote entry passed verification.
+            // Publish the verified ID-to-slug map before Room notifies UI collectors.
+            recipeSlugsByToolId.value = nextRecipeSlugs
             toolDao.clearAll()
             if (entities.isNotEmpty()) toolDao.insertTools(entities)
-            recipeSlugsByToolId.value = nextRecipeSlugs
             preferencesManager.updateLastSyncTime(now)
             Result.success(entities.size)
         } catch (error: Exception) {
+            clearCatalogWhenServerRejects(error)
             Result.failure(IllegalStateException("Could not securely synchronize repair tools.", error))
         }
+    }
+
+    private suspend fun clearCatalogWhenServerRejects(error: Throwable) {
+        val messages = generateSequence(error) { it.cause }
+            .mapNotNull { it.message }
+            .joinToString(" ")
+        if (Regex("HTTP\\s+(401|403|404)").containsMatchIn(messages)) {
+            clearLocalCatalog()
+        }
+    }
+
+    /**
+     * Realtime topic identity is derived from the signed-in JWT subject. The server
+     * independently validates the JWT and the device/user relationship through RLS.
+     */
+    suspend fun getRealtimeIdentity(): Result<RealtimeIdentity> {
+        return try {
+            val session = authRepository.getValidSession().getOrElse { cause ->
+                throw IllegalStateException("Sign in is required for live repair updates.", cause)
+            }
+            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
+            val tokenParts = session.token.split('.')
+            require(tokenParts.size == 3) { "The authentication session is malformed." }
+            val payload = Base64.decode(
+                tokenParts[1],
+                Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+            )
+            val userId = JSONObject(String(payload, StandardCharsets.UTF_8))
+                .getString("sub")
+                .also { UUID.fromString(it) }
+            Result.success(RealtimeIdentity(userId, deviceId, session.token, session.expiresAtMillis))
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun clearLocalCatalog() {
+        toolDao.clearAll()
+        recipeSlugsByToolId.value = emptyMap()
     }
 
     /**
@@ -204,11 +248,12 @@ class ToolRepository(
             )
             val expectedSlug = recipeSlugsByToolId.value[toolId]
                 ?: throw IllegalStateException("Refresh the repair list before running this repair.")
-            if (expectedSlug != PRIMARY_REPAIR_SLUG || recipe.getString("toolId") != PRIMARY_REPAIR_SLUG) {
+            if (recipe.getString("toolId") != expectedSlug) {
                 throw IllegalArgumentException("The repair release does not match the selected repair.")
             }
             Result.success(signed.signedPayload to signed.signature)
         } catch (error: Exception) {
+            clearCatalogWhenServerRejects(error)
             Result.failure(error)
         }
     }

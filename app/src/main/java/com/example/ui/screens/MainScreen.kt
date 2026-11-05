@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,15 +48,17 @@ fun MainScreen(
     state: MainUiState,
     onRunRepair: () -> Unit,
     onRetryAvailability: () -> Unit,
+    onSelectTool: (String) -> Unit,
+    onDismissToolPicker: () -> Unit,
     onSubmitUserAction: (Boolean) -> Unit,
     onDismissExecution: () -> Unit
 ) {
-    val canRun = state.primaryTool != null &&
-        !state.isPrimaryToolLoading &&
+    val canRun = state.tools.isNotEmpty() &&
+        !state.isToolsLoading &&
         !state.isPreparingRepair
-    val canRetry = state.primaryTool == null &&
+    val canRetry = state.tools.isEmpty() &&
         state.canRetryAvailability &&
-        !state.isPrimaryToolLoading &&
+        !state.isToolsLoading &&
         !state.isPreparingRepair
 
     Scaffold(containerColor = MahiBlack) { padding ->
@@ -100,8 +107,7 @@ fun MainScreen(
 
                 Button(
                     onClick = {
-                        if (state.primaryTool != null) onRunRepair()
-                        else onRetryAvailability()
+                        if (state.tools.isNotEmpty()) onRunRepair() else onRetryAvailability()
                     },
                     enabled = canRun || canRetry,
                     shape = RoundedCornerShape(16.dp),
@@ -114,7 +120,7 @@ fun MainScreen(
                         .height(58.dp)
                         .testTag("run_repair_button")
                 ) {
-                    if (state.isPrimaryToolLoading || state.isPreparingRepair) {
+                    if (state.isToolsLoading || state.isPreparingRepair) {
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier.size(21.dp),
@@ -134,15 +140,16 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 val status = when {
-                    state.isPrimaryToolLoading -> "Checking repair availability..."
+                    state.isToolsLoading -> "Checking available repairs..."
                     state.isPreparingRepair -> "Preparing your repair..."
-                    state.primaryTool != null -> state.repairStatusMessage ?: "Ready when you are."
-                    else -> state.repairStatusMessage ?: "Run Repair is not available yet."
+                    state.tools.isNotEmpty() -> state.repairStatusMessage
+                        ?: "${state.tools.size} repair tools available."
+                    else -> state.repairStatusMessage ?: "No repair tools are currently available."
                 }
 
                 Text(
                     text = status,
-                    color = if (state.primaryTool == null && !state.isPrimaryToolLoading) {
+                    color = if (state.tools.isEmpty() && !state.isToolsLoading) {
                         MahiTextMuted
                     } else {
                         MahiTextSecondary
@@ -155,6 +162,64 @@ fun MainScreen(
                 )
             }
         }
+    }
+
+    if (state.isToolPickerOpen) {
+        AlertDialog(
+            onDismissRequest = onDismissToolPicker,
+            title = {
+                Text(
+                    text = "Choose a repair",
+                    color = MahiTextPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                ) {
+                    items(state.tools, key = { it.id }) { tool ->
+                        TextButton(
+                            onClick = { onSelectTool(tool.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = tool.name,
+                                    color = MahiTextPrimary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "${tool.category.title} · v${tool.version}",
+                                    color = MahiTextMuted,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                if (tool.description.isNotBlank()) {
+                                    Text(
+                                        text = tool.description,
+                                        color = MahiTextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismissToolPicker) {
+                    Text("CLOSE", color = MahiRedPrimary)
+                }
+            },
+            containerColor = Color(0xFF191B23),
+            titleContentColor = MahiTextPrimary,
+            textContentColor = MahiTextSecondary
+        )
     }
 
     ExecutionDialog(

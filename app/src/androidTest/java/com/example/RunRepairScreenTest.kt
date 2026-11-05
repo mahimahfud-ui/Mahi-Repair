@@ -24,22 +24,36 @@ class RunRepairScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private val primaryTool = RepairTool(
+    private val networkTool = RepairTool(
         id = "server-tool-id",
-        name = "Run Repair",
-        description = "Owner-published repair workflow",
+        name = "Network Diagnostics",
+        description = "Check network and DNS connectivity.",
+        category = ToolCategory.GENERAL,
+        version = "2",
+        problemDescription = "Network diagnostics"
+    )
+
+    private val dnsTool = RepairTool(
+        id = "dns-tool-id",
+        name = "DNS Troubleshooting",
+        description = "Resolve and verify DNS records.",
         category = ToolCategory.GENERAL,
         version = "1",
-        problemDescription = "Primary repair workflow"
+        problemDescription = "DNS troubleshooting"
     )
 
     @Test
-    fun homeShowsOnlyThePrimaryRunRepairAction() {
+    fun homeShowsOnlyRunRepairActionUntilTheUserOpensTheCatalogue() {
         composeRule.setContent {
             MainScreen(
-                state = MainUiState(primaryTool = primaryTool, isPrimaryToolLoading = false),
+                state = MainUiState(
+                    tools = listOf(networkTool, dnsTool),
+                    isToolsLoading = false
+                ),
                 onRunRepair = {},
                 onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
                 onSubmitUserAction = {},
                 onDismissExecution = {}
             )
@@ -53,38 +67,73 @@ class RunRepairScreenTest {
         composeRule.onNodeWithTag("history_button").assertDoesNotExist()
         composeRule.onNodeWithTag("sign_out_button").assertDoesNotExist()
         composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Search repair tools...", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Network Diagnostics").assertDoesNotExist()
+        composeRule.onNodeWithText("DNS Troubleshooting").assertDoesNotExist()
     }
 
     @Test
-    fun runRepairButtonInvokesTheSinglePrimaryAction() {
-        var runCount = 0
+    fun runRepairButtonInvokesCatalogueOpeningAction() {
+        var openCount = 0
         composeRule.setContent {
             MainScreen(
-                state = MainUiState(primaryTool = primaryTool, isPrimaryToolLoading = false),
-                onRunRepair = { runCount++ },
+                state = MainUiState(
+                    tools = listOf(networkTool),
+                    isToolsLoading = false
+                ),
+                onRunRepair = { openCount++ },
                 onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
                 onSubmitUserAction = {},
                 onDismissExecution = {}
             )
         }
 
         composeRule.onNodeWithTag("run_repair_button").performClick()
-        composeRule.runOnIdle { assertEquals(1, runCount) }
+        composeRule.runOnIdle { assertEquals(1, openCount) }
     }
 
     @Test
-    fun unavailableRecipeKeepsRunRepairDisabled() {
+    fun catalogueDisplaysOnlyTheSuppliedPublishedToolEntries() {
+        var selectedToolId = ""
         composeRule.setContent {
             MainScreen(
                 state = MainUiState(
-                    primaryTool = null,
-                    isPrimaryToolLoading = false,
-                    canRetryAvailability = false,
-                    repairStatusMessage = "Run Repair is not available yet."
+                    tools = listOf(networkTool, dnsTool),
+                    isToolsLoading = false,
+                    isToolPickerOpen = true
                 ),
                 onRunRepair = {},
                 onRetryAvailability = {},
+                onSelectTool = { selectedToolId = it },
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Network Diagnostics").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("DNS Troubleshooting").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("v2", substring = true).assertExists()
+        composeRule.onNodeWithText("v1", substring = true).assertExists()
+        composeRule.onNodeWithText("DNS Troubleshooting").performClick()
+        composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
+    }
+
+    @Test
+    fun unavailableCatalogueKeepsRunRepairDisabled() {
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(
+                    tools = emptyList(),
+                    isToolsLoading = false,
+                    canRetryAvailability = false,
+                    repairStatusMessage = "No repair tools are currently available."
+                ),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
                 onSubmitUserAction = {},
                 onDismissExecution = {}
             )
@@ -92,6 +141,6 @@ class RunRepairScreenTest {
 
         composeRule.onNodeWithTag("run_repair_button").assertIsNotEnabled()
         composeRule.onNodeWithTag("repair_status").assertExists()
-        composeRule.onNodeWithText("Run Repair is not available yet.").assertExists()
+        composeRule.onNodeWithText("No repair tools are currently available.").assertExists()
     }
 }
