@@ -100,20 +100,23 @@ class ToolRepository(
      */
     suspend fun syncTools(): Result<Int> = syncMutex.withLock {
         if (!supabaseClient.isConfigured()) {
-            return Result.failure(IllegalStateException("The repair service is not configured."))
+            return@withLock Result.failure(IllegalStateException("The repair service is not configured."))
         }
 
         val sessionResult = authRepository.getValidSession()
         if (sessionResult.isFailure) {
-            return Result.failure(sessionResult.exceptionOrNull() ?: IllegalStateException("Please sign in."))
+            return@withLock Result.failure(
+                sessionResult.exceptionOrNull() ?: IllegalStateException("Please sign in.")
+            )
         }
 
-        return try {
+        try {
             val session = sessionResult.getOrThrow()
             val deviceId = ensureRegisteredDeviceId(session.token)
             val remoteResult = supabaseClient.getMyRepairTools(deviceId, session.token)
             if (remoteResult.isFailure) {
-                throw remoteResult.exceptionOrNull() ?: IllegalStateException("Repair catalog synchronization failed.")
+                throw remoteResult.exceptionOrNull()
+                    ?: IllegalStateException("Repair catalog synchronization failed.")
             }
 
             val dtos = remoteResult.getOrThrow()
@@ -149,15 +152,13 @@ class ToolRepository(
                     isNew = true,
                     enabled = true,
                     targetPackage = null,
-                    // The signature is verified at sync and fetched/verified again at execution.
-                    // Do not treat cached payloads as current authorization.
                     rawSignedPayload = "",
                     signatureBase64 = "",
                     lastUpdated = now
                 )
             }
 
-            // Only replace the local catalog after every returned recipe has passed verification.
+            // Do not replace a verified local catalog unless every remote entry passed verification.
             toolDao.clearAll()
             if (entities.isNotEmpty()) toolDao.insertTools(entities)
             recipeSlugsByToolId.clear()
@@ -167,7 +168,7 @@ class ToolRepository(
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely synchronize repair tools.", error))
         }
-        }
+    }
 
     /**
      * Always fetch a current signed release from the server at execution time.
