@@ -1,213 +1,100 @@
-# Mahi Repair — Personal Android Repair Toolkit
-## Architecture, Backend API Contract & Setup Guide
+# Mahi Repair — setup and integration guide
 
-**Mahi Repair** is a private Android repair toolkit designed exclusively for the Owner's family and trusted friends. It communicates with the Owner's **Mahi Repair Cloud** backend (Supabase) and executes published, digitally-signed repair recipes on non-rooted Android devices.
+## Product layout
 
----
+1. **Android app:** a single **RUN REPAIR** action on the home screen. Tapping it opens the currently published and authorized repair-tool picker.
+2. **Admin Panel:** a separate private Next.js owner console. It drafts, validates, tests, signs and publishes recipes, and manages invited members and registered devices.
+3. **Supabase backend:** Auth, PostgreSQL/RLS, private Realtime Broadcast and Edge Functions.
 
-## 1. Core Architecture & Security Model
+The Android app does not expose Admin Panel navigation, credentials, signing controls or backend management screens.
 
-The application enforces strict defense-in-depth security principles:
+## Android authentication and storage
 
-1. **Zero Unrestricted Execution**:
-   - The application **never** downloads or runs arbitrary shell scripts, bytecode, DEX, JAR, JavaScript, or dynamic libraries.
-   - All repair capabilities are mapped to an **allowlisted registry of 13 native Kotlin actions**.
-   - Any unknown action identifier causes immediate recipe rejection.
+- Invite-only Supabase email OTP; account creation is disabled.
+- Device registration returns a server-issued device UUID. The app persists it and supplies it to authorized catalogue/run calls.
+- Access and refresh tokens are encrypted with Android Keystore-backed AES-GCM in app-private storage.
+- Session refresh is serialized to protect rotating refresh tokens. Expired or rejected sessions fail closed.
+- Room stores only successfully signature-verified catalogue data and repair history. Server-side authorization remains authoritative.
 
-2. **RSA-SHA256 Digital Signature Verification**:
-   - Every published recipe is signed by the Owner's private key (`SHA256withRSA`).
-   - The Android client holds only the corresponding public verification key.
-   - The client verifies the exact raw bytes of the recipe against the signature using Android Java Cryptography Architecture (JCA) APIs before parsing or executing any step.
-   - Tampered payloads, mismatched signatures, or expired recipes are rejected and logged.
+## Canonical signed recipe contract
 
-3. **Safe Android Troubleshooting**:
-   - Zero root requirements.
-   - No Accessibility Service abuse or Device Admin privileges.
-   - Respects Android sandbox restrictions by guiding users to official system settings (e.g. `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, `Settings.ACTION_WIFI_SETTINGS`).
-   - Explicit user consent and guidance cards are displayed before sensitive operations.
+The Admin Panel is the source of truth:
 
-4. **Multi-Tier Persistence & Offline Resilience**:
-   - **DataStore**: Stores authenticated session tokens, email, role, and last sync timestamp.
-   - **Room Database**: Caches published tool metadata and maintains an immutable local audit log of repair runs.
-   - **WorkManager**: Background synchronization scheduled every 6 hours with `NetworkType.CONNECTED` battery constraints.
+- Schema: `admin-panel/schemas/repair-recipe-v1.schema.json`
+- Catalog/canonical serializer: `admin-panel/src/lib/recipe/`
+- Edge Function validator/signer: `admin-panel/supabase/functions/_shared/`
+- Android verifier contract: `admin-panel/android-contract/RecipeSignatureVerifier.kt`
 
----
+The Admin Panel signs canonical JSON with RSA-3072 / RSA-SHA256 (RSASSA-PKCS1-v1_5). Android verifies the exact UTF-8 bytes before parsing. Do not parse and reserialize before verification.
 
-## 2. Supported Native Action Registry (13 Actions)
+The APK embeds only the matching X.509 public key. Keep the PKCS#8 private key only in Supabase Edge Function Secrets. Never put it in Android resources, GitHub, Render or the browser.
 
-Every step in a repair recipe must specify one of the following 13 allowlisted actions:
+## Existing native action allowlist and one-install behavior
 
-| Action ID | Description | Parameters | Native Implementation |
-| :--- | :--- | :--- | :--- |
-| `CHECK_INTERNET` | Validates active network connectivity | None | Uses `ConnectivityManager` to inspect `NET_CAPABILITY_INTERNET` & `NET_CAPABILITY_VALIDATED`. |
-| `DNS_LOOKUP` | Resolves target hostname | `hostname` (string) | Uses `InetAddress.getAllByName(hostname)`, measures resolution latency in milliseconds. |
-| `HTTPS_PROBE` | Probes HTTP/HTTPS endpoint | `url` (string), `timeout_ms` (int) | Makes an HTTPS GET probe via `HttpURLConnection`, validates TLS handshake and HTTP 200/204 response. |
-| `CHECK_APP_INSTALLED` | Verifies target app package status | `package_name` (string) | Queries `PackageManager.getPackageInfo()`, retrieves version name and enabled state. |
-| `CHECK_STORAGE` | Inspects internal flash storage | `min_free_mb` (int) | Uses `StatFs(Environment.getDataDirectory().path)` to verify sufficient free space. |
-| `OPEN_APP` | Launches target application | `package_name` (string) | Uses `PackageManager.getLaunchIntentForPackage()` with `FLAG_ACTIVITY_NEW_TASK`. |
-| `OPEN_APP_DETAILS` | Opens App Info for Clear Cache | `package_name` (string), `instruction` (string) | Opens `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` with `package:<package_name>`. |
-| `OPEN_ANDROID_SETTINGS` | Opens system settings screen | `setting_type` (WIFI, NETWORK, DATE, STORAGE) | Dispatches appropriate Android `Settings.ACTION_*` intent. |
-| `SHOW_GUIDE` | Displays step-by-step guidance card | `guide_title`, `guide_description`, `guide_steps` | Suspends execution and displays an interactive modal card with numbered guidance steps. |
-| `ASK_USER_CONFIRMATION` | Prompts user for explicit consent | `title`, `message`, `explanation` | Displays a confirmation dialog requiring user approval before continuing. |
-| `REQUEST_OWN_APP_PERMISSION`| Verifies/requests app permission | `permission` (string) | Validates permissions via `ContextCompat.checkSelfPermission()`. |
-| `VERIFY_INTERNET` | Post-repair internet verification | `host` (string) | Actively tests post-repair traffic to ensure problem resolution. |
-| `VERIFY_DNS` | Post-repair DNS verification | `domain` (string) | Resolves domain post-repair to confirm resolution restored. |
+The installed APK implements these 13 native actions:
 
----
+`CHECK_INTERNET`, `DNS_LOOKUP`, `HTTPS_PROBE`, `CHECK_APP_INSTALLED`, `CHECK_STORAGE`, `OPEN_APP`, `OPEN_APP_DETAILS`, `OPEN_ANDROID_SETTINGS`, `SHOW_GUIDE`, `ASK_USER_CONFIRMATION`, `REQUEST_OWN_APP_PERMISSION`, `VERIFY_INTERNET`, `VERIFY_DNS`.
 
-## 3. Supabase Cloud Backend Integration
+The owner can publish additional recipes combining these actions without requiring users to reinstall the APK. A new Kotlin action, Android permission declaration or unsupported OS capability requires an app update. The app never executes remote scripts, shell commands, JavaScript, DEX, JAR, APKs or downloaded libraries.
 
-### 3.1 Environment Configuration (`.env` and `.env.example`)
+## Supabase API flow
 
-Set your Supabase credentials in the AI Studio Secrets panel or in `.env`:
+1. `register-device` creates or updates a registered device and returns its server-issued ID.
+2. `get-my-repair-tools` returns the currently published releases authorized for that member/device.
+3. Android verifies each detached signature before writing an entry to Room.
+4. Before execution, Android fetches the selected release again through `get-signed-repair-tool`; the server rechecks member, device, assignment, publication state and version.
+5. The native engine validates every action ID and parameter locally, then runs only its compiled implementation.
+6. `submit-repair-run` stores bounded execution telemetry. The app does not upload personal files, messages, photos or unrelated device data.
 
-```properties
-SUPABASE_URL="https://your-project-id.supabase.co"
-SUPABASE_ANON_KEY="your-supabase-anon-key"
-```
+Use `admin-panel/docs/ANDROID_API_CONTRACT.md` for exact request and response shapes.
 
-The app also provides an in-app **Connection Settings Dialog** (tap the gear icon in the top bar) to view connection status or update credentials dynamically on device.
+## Realtime and recovery
 
-### 3.2 Supabase Authentication (Email OTP)
+- Private WebSocket channel while Android is foregrounded.
+- Topic is scoped to one authenticated member and one server-issued device UUID.
+- Events carry only an opaque event ID, never a recipe or signature.
+- On notification the app refetches its authorized catalogue and verifies signatures before replacing local state.
+- App launch, foreground/resume, reconnect and periodic WorkManager sync recover missed events.
+- A Realtime event is only a hint to refetch; it never authorizes catalogue access or execution.
 
-The app integrates with Supabase Auth for invited family and friends:
-1. User enters their invited email address.
-2. The app issues `POST /auth/v1/otp` with body `{"email": "...", "create_user": false}`.
-3. User enters the 6-digit OTP code received via email.
-4. The app issues `POST /auth/v1/verify` with body `{"type": "email", "email": "...", "token": "..."}`.
-5. The session token is saved securely in Jetpack DataStore.
+Production requires migration `20261106120000_private_realtime_catalog_broadcast.sql` and Supabase Realtime **Allow public access** disabled.
 
-### 3.3 Backend API Contract (Edge Functions)
+## Environment variables and secrets
 
-Follow this contract in your separate Owner Admin Panel and Supabase Edge Functions:
+### Android build
 
-#### 1. `get-my-repair-tools`
-- **Method**: `GET`
-- **Path**: `/functions/v1/get-my-repair-tools`
-- **Headers**:
-  ```http
-  apikey: <SUPABASE_ANON_KEY>
-  Authorization: Bearer <USER_ACCESS_TOKEN>
-  ```
-- **Response** (`200 OK`):
-  ```json
-  [
-    {
-      "id": "tool_youtube_repair",
-      "name": "YouTube Quick Repair",
-      "description": "Fixes video playback errors and clears corrupted cache.",
-      "category": "Media & Streaming",
-      "version": "1.2.0",
-      "problem_description": "Video buffering, black screen on launch, or playback error 400.",
-      "min_app_version": 1,
-      "min_android_sdk": 26,
-      "is_new": true,
-      "enabled": true,
-      "target_package": "com.google.android.youtube",
-      "updated_at": 1730790000000
-    }
-  ]
-  ```
+The root `.env.example` retains:
 
-#### 2. `get-signed-repair-tool`
-- **Method**: `POST`
-- **Path**: `/functions/v1/get-signed-repair-tool`
-- **Headers**:
-  ```http
-  apikey: <SUPABASE_ANON_KEY>
-  Authorization: Bearer <USER_ACCESS_TOKEN>
-  Content-Type: application/json
-  ```
-- **Request Body**:
-  ```json
-  {
-    "tool_id": "tool_youtube_repair"
-  }
-  ```
-- **Response** (`200 OK`):
-  ```json
-  {
-    "tool_id": "tool_youtube_repair",
-    "version": "1.2.0",
-    "signed_payload": "{\"recipe_id\":\"recipe_yt_01\",\"tool_id\":\"tool_youtube_repair\",\"version\":\"1.2.0\",\"required_android_sdk\":26,\"steps\":[...]}",
-    "signature_base64": "MIIEvgIBADANBgkqhkiG9w0BAQEFAASC..."
-  }
-  ```
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` — public client key name retained for build compatibility
+- `RECIPE_SIGNING_PUBLIC_KEY_PEM` — matching X.509 public PEM, safe to bundle in the APK
 
-#### 3. `submit-repair-run`
-- **Method**: `POST`
-- **Path**: `/functions/v1/submit-repair-run`
-- **Headers**:
-  ```http
-  apikey: <SUPABASE_ANON_KEY>
-  Authorization: Bearer <USER_ACCESS_TOKEN>
-  Content-Type: application/json
-  ```
-- **Request Body**:
-  ```json
-  {
-    "run_id": "uuid-v4",
-    "tool_id": "tool_youtube_repair",
-    "tool_name": "YouTube Quick Repair",
-    "tool_version": "1.2.0",
-    "user_email": "friend@example.com",
-    "device_model": "Google Pixel 8",
-    "android_sdk": 34,
-    "start_time": 1730790010000,
-    "end_time": 1730790015000,
-    "result": "SUCCESS",
-    "final_diagnosis": "All repair and diagnostic steps passed successfully.",
-    "steps": [
-      {
-        "step_id": "step_yt_net",
-        "action": "CHECK_INTERNET",
-        "title": "Check Internet Connection",
-        "status": "COMPLETED",
-        "message": "Internet connection active and validated (Wi-Fi).",
-        "duration_ms": 120
-      }
-    ]
-  }
-  ```
+The checked-in public-key value is a placeholder. Production signed recipes cannot verify until a real matching key pair is configured.
 
----
+### Admin Panel and Edge Functions
 
-## 4. Signing Recipes in the Admin Panel (RSA-SHA256)
+Admin Panel browser-safe variables:
 
-When the Owner creates a recipe in the Admin Panel, sign the raw JSON string before publishing:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_APP_URL`
 
-```python
-# Python snippet for Admin Panel recipe signing:
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import serialization
-import base64
+Supabase automatically injects the reserved `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` values into Edge Functions. Do not create custom secrets using the `SUPABASE_` prefix.
 
-def sign_recipe(recipe_json_str: str, private_key_pem: bytes) -> str:
-    private_key = serialization.load_pem_private_key(private_key_pem, password=None)
-    signature = private_key.sign(
-        recipe_json_str.encode('utf-8'),
-        padding.PKCS1v15(),
-        hashes.SHA256()
-    )
-    return base64.b64encode(signature).decode('utf-8')
-```
+Custom Edge Function secrets:
 
----
+- `RECIPE_SIGNING_PRIVATE_KEY_PEM`: manually add in Supabase Dashboard → Edge Function Secrets.
+- `ADMIN_ORIGIN`: exact deployed HTTPS Admin Panel origin; the guarded production workflow syncs it from the protected GitHub environment variable.
 
-## 5. Building and Testing the Application
+## Deployment
 
-### 5.1 Run Unit and Robolectric Tests
-```bash
-gradle :app:testDebugUnitTest
-```
+Render preview: https://mahi-repair-admin-preview.onrender.com
 
-### 5.2 Build Debug APK
-```bash
-gradle :app:assembleDebug
-```
-The APK is generated at:
-`app/build/outputs/apk/debug/app-debug.apk`
+The production Supabase workflow requires `main`, typed input `DEPLOY` and approval from the protected `supabase-production` GitHub environment. Required GitHub environment entries: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` secrets and `ADMIN_ORIGIN` variable. The private signing key is created directly in Supabase, never in GitHub.
 
-### 5.3 Offline and Demo Mode
-If the Supabase backend is pending deployment, users can tap **"Launch Verified Offline Toolkit"** on the sign-in screen to instantly test and run pre-signed verified recipes (YouTube Quick Repair, DNS Repair, Facebook Troubleshooter, Wi-Fi Troubleshooter, Play Store Repair).
+## Verification
+
+- Admin Panel: `npm run check:scaffold`, `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build`.
+- Android: unit tests, emulator Compose UI tests, source/APK privileged-secret scans.
+- Supabase: Deno type-check and canonical contract tests.
+- Before release: test a real owner account, invited member, registered device, matching RSA keys and physical Android device. CI success alone is not production acceptance.
