@@ -26,6 +26,9 @@ jobs:
       url: https://supabase.com/dashboard/project/shwqsljicmhflnvjqjah/functions
     env:
       PROJECT_REF: shwqsljicmhflnvjqjah
+    defaults:
+      run:
+        working-directory: admin-panel
 
     steps:
       - name: Checkout main
