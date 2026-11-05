@@ -88,7 +88,7 @@ data class GetSignedToolRequest(
 data class SignedRecipeResponse(
     @Json(name = "signed_payload") val signedPayload: String,
     val signature: String,
-    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String,
     val version: Int
 )
 
