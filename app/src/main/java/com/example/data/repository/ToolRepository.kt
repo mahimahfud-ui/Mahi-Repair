@@ -18,6 +18,8 @@ import com.example.security.RecipeContractVerifier
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -31,6 +33,8 @@ class ToolRepository(
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
     private val recipeSlugsByToolId = ConcurrentHashMap<String, String>()
+    private val syncMutex = Mutex()
+    private val deviceRegistrationMutex = Mutex()
 
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
 
@@ -42,26 +46,31 @@ class ToolRepository(
      * Device identifiers are issued by Supabase. A random local UUID is never an
      * acceptable substitute because it would bypass server-side device ownership checks.
      */
-    private suspend fun ensureRegisteredDeviceId(accessToken: String): String {
-        val savedId = preferencesManager.deviceIdFlow.first()
-        if (!savedId.isNullOrBlank()) return savedId
+    private suspend fun ensureRegisteredDeviceId(accessToken: String): String =
+        deviceRegistrationMutex.withLock {
+            val savedId = preferencesManager.deviceIdFlow.first()
+            if (!savedId.isNullOrBlank()) {
+                UUID.fromString(savedId)
+                return@withLock savedId
+            }
 
-        val request = RegisterDeviceRequest(
-            deviceId = savedId,
-            deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}".take(100),
-            appVersion = BuildConfig.VERSION_NAME,
-            androidVersion = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString(),
-            androidApi = Build.VERSION.SDK_INT
-        )
-        val result = supabaseClient.registerDevice(request, accessToken)
-        val deviceId = result.getOrElse { cause ->
-            throw IllegalStateException("This device could not be authorized by the repair service.", cause)
-        }.takeIf { it.isNotBlank() }
-            ?: throw IllegalStateException("The repair service returned an invalid device identity.")
+            val request = RegisterDeviceRequest(
+                deviceId = null,
+                deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}".take(60),
+                appVersion = BuildConfig.VERSION_NAME,
+                androidVersion = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString(),
+                androidApi = Build.VERSION.SDK_INT
+            )
+            val result = supabaseClient.registerDevice(request, accessToken)
+            val deviceId = result.getOrElse { cause ->
+                throw IllegalStateException("This device could not be authorized by the repair service.", cause)
+            }.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("The repair service returned an invalid device identity.")
 
-        preferencesManager.saveDeviceId(deviceId)
-        return deviceId
-    }
+            UUID.fromString(deviceId)
+            preferencesManager.saveDeviceId(deviceId)
+            deviceId
+        }
 
     private fun verifySignatureAlgorithm(algorithm: String) {
         if (algorithm != "RSA-SHA256") {
