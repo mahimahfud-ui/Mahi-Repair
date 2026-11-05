@@ -50,7 +50,7 @@ jobs:
           deno check "${functions[@]}"
 
       - name: Type-check shared Edge Function modules and contract tests
-        run: deno check admin-panel/supabase/functions/_shared/http.ts admin-panel/supabase/functions/_shared/recipe.ts admin-panel/supabase/functions/_shared/sign.ts admin-panel/supabase/functions/_shared/recipe_test.ts
+        run: deno check admin-panel/supabase/functions/_shared/http.ts admin-panel/supabase/functions/_shared/recipe.ts admin-panel/supabase/functions/_shared/sign.ts admin-panel/supabase/functions/_shared/run-report.ts admin-panel/supabase/functions/_shared/recipe_test.ts admin-panel/supabase/functions/_shared/run_report_test.ts
 
       - name: Run canonical Run Repair contract test
-        run: deno test --allow-read=contract-tests admin-panel/supabase/functions/_shared/recipe_test.ts
+        run: deno test --allow-read=contract-tests admin-panel/supabase/functions/_shared/recipe_test.ts admin-panel/supabase/functions/_shared/run_report_test.ts
