@@ -43,9 +43,9 @@ jobs:
         id: install
         run: npm ci --no-audit --no-fund --no-progress
 
-      - name: Block high and critical dependency vulnerabilities
+      - name: Block moderate, high and critical dependency vulnerabilities
         id: dependency-audit
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate
 
       - name: Run scaffold and security-integrity checks
         id: scaffold
@@ -93,7 +93,7 @@ jobs:
             echo "- **Overall:** ${JOB_RESULT}"
             echo "- **npm setup:** ${NPM_RESULT}"
             echo "- **Dependency installation:** ${INSTALL_RESULT}"
-            echo "- **High/critical dependency audit:** ${DEPENDENCY_AUDIT_RESULT}"
+            echo "- **Moderate/high/critical dependency audit:** ${DEPENDENCY_AUDIT_RESULT}"
             echo "- **Scaffold/security audit:** ${SCAFFOLD_RESULT}"
             echo "- **TypeScript:** ${TYPECHECK_RESULT}"
             echo "- **ESLint:** ${LINT_RESULT}"
