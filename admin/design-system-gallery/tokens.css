@@ -1,0 +1,42 @@
+/* Mahi Repair Cloud Admin: design tokens. Dark only. */
+:root {
+  color-scheme: dark;
+  /* Surfaces: cool graphite, one step off the Android app so dense data reads clearly */
+  --bg: #07080A;
+  --bg-sidebar: #0B0C0F;
+  --surface: #0F1115;
+  --surface-2: #14171C;
+  --surface-3: #1A1E25;
+  --border: rgba(255,255,255,.07);
+  --border-strong: rgba(255,255,255,.14);
+  /* Text */
+  --text: #F2F3F5;
+  --text-2: #9AA0AB;
+  --text-3: #6B7280;
+  /* Brand + status */
+  --accent: #E5484D;
+  --accent-fill: #D7383F;
+  --accent-fill-hover: #E0434A;
+  --accent-soft: rgba(229,72,77,.14);
+  --success: #35C98B;  --success-soft: rgba(53,201,139,.14);
+  --warning: #E9AB4B;  --warning-soft: rgba(233,171,75,.14);
+  --danger:  #EF5B63;  --danger-soft:  rgba(239,91,99,.14);
+  --info:    #5B9DF5;  --info-soft:    rgba(91,157,245,.14);
+  /* Type */
+  --font-sans: "Instrument Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 12px; --text-sm: 13px; --text-base: 14px; --text-lg: 16px; --text-xl: 20px; --text-2xl: 28px;
+  /* Space (4px grid) */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  /* Radius: controls 8, cards 14, overlays 20 */
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 14px; --radius-xl: 20px; --radius-pill: 999px;
+  /* Elevation */
+  --shadow-1: 0 1px 0 rgba(255,255,255,.04) inset, 0 1px 2px rgba(0,0,0,.4);
+  --shadow-2: 0 8px 24px rgba(0,0,0,.45), 0 0 0 1px var(--border);
+  --shadow-3: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px var(--border-strong);
+  /* Motion */
+  --ease: cubic-bezier(.2,0,0,1);
+  --dur-1: 120ms; --dur-2: 200ms; --dur-3: 320ms;
+  /* Layout */
+  --sidebar-w: 248px; --topbar-h: 56px; --page-max: 1240px;
+}

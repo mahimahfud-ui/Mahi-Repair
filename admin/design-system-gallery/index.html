@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mahi Cloud Admin: design system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="components.css">
+</head>
+<body>
+<div class="m-scrim" data-toggle-nav></div>
+<div class="m-app">
+  <aside class="m-sidebar">
+    <div class="m-brand"><span class="m-brand-mark"></span>Mahi Repair</div>
+    <nav class="m-nav" aria-label="Main">
+      <a href="#overview" aria-current="page">Overview</a>
+      <a href="#tools">Tools</a>
+      <div class="m-nav-group">Build</div>
+      <a href="#studio">Script Studio</a>
+      <a href="#json">Tool definition</a>
+      <a href="#lab">Test Lab</a>
+      <a href="#publish">Publish</a>
+      <div class="m-nav-group">Account</div>
+      <a href="#overlays">Members</a>
+    </nav>
+  </aside>
+
+  <div class="m-main">
+    <header class="m-topbar">
+      <button class="m-btn m-btn--ghost m-menu-btn" data-toggle-nav aria-label="Open navigation">Menu</button>
+      <button class="m-search" type="button"><span>Search tools and scripts</span><span class="m-kbd">Ctrl K</span></button>
+      <span class="m-grow"></span>
+      <button class="m-btn" data-toast="Saved|Draft saved to your workspace.">Save draft</button>
+      <button class="m-btn m-btn--primary" data-open="publish-modal">Publish</button>
+    </header>
+
+    <main class="m-page">
+      <section class="m-section" id="overview">
+        <div class="m-section-head"><div><h1>Overview</h1><p class="m-muted">Sample content. Every value below is placeholder text for the component gallery.</p></div></div>
+        <div class="m-grid">
+          <div class="m-card m-stat"><span class="m-muted">Published tools</span><span class="m-stat-value">24</span><span class="m-stat-note">3 updated this week</span></div>
+          <div class="m-card m-stat"><span class="m-muted">Drafts</span><span class="m-stat-value">5</span><span class="m-stat-note">2 waiting for a test run</span></div>
+          <div class="m-card m-stat"><span class="m-muted">Active devices</span><span class="m-stat-value">18</span><span class="m-stat-note">Last sync 4 minutes ago</span></div>
+          <div class="m-card m-stat"><span class="m-muted">Failed runs</span><span class="m-stat-value">2</span><span class="m-stat-note"><span class="m-badge m-badge--danger">Needs a look</span></span></div>
+        </div>
+      </section>
+
+      <section class="m-section" id="tools">
+        <div class="m-section-head"><h2>Tools</h2><div class="m-row"><div class="m-tabs" role="tablist" aria-label="Filter"><button role="tab" aria-selected="true">All</button><button role="tab" aria-selected="false">Published</button><button role="tab" aria-selected="false">Drafts</button></div><button class="m-btn" data-open="tool-drawer">Open drawer</button></div></div>
+        <div class="m-table-wrap"><table class="m-table">
+          <thead><tr><th>Tool</th><th>Category</th><th>Status</th><th>Version</th><th class="m-num">Runs (7 days)</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div class="m-cell-title">YouTube Quick Repair</div><div class="m-cell-sub">Checks DNS and HTTPS, then opens settings</div></td><td>Network</td><td><span class="m-badge m-badge--success">Published</span></td><td class="m-mono">1.4.0</td><td class="m-num">128</td><td><button class="m-btn m-btn--ghost m-btn--sm">Edit</button></td></tr>
+            <tr><td><div class="m-cell-title">Storage Cleaner</div><div class="m-cell-sub">Clears cache after confirmation</div></td><td>Storage</td><td><span class="m-badge m-badge--info">In testing</span></td><td class="m-mono">0.9.2</td><td class="m-num">12</td><td><button class="m-btn m-btn--ghost m-btn--sm">Edit</button></td></tr>
+            <tr><td><div class="m-cell-title">Battery Check</div><div class="m-cell-sub">Reads battery health</div></td><td>Power</td><td><span class="m-badge">Draft</span></td><td class="m-mono">0.1.0</td><td class="m-num">0</td><td><button class="m-btn m-btn--ghost m-btn--sm">Edit</button></td></tr>
+            <tr><td><div class="m-cell-title">Wi-Fi Reset</div><div class="m-cell-sub">Last test run did not pass</div></td><td>Network</td><td><span class="m-badge m-badge--danger">Failed test</span></td><td class="m-mono">1.1.0</td><td class="m-num">7</td><td><button class="m-btn m-btn--ghost m-btn--sm">Edit</button></td></tr>
+          </tbody></table></div>
+      </section>
+
+      <section class="m-section" id="studio">
+        <div class="m-section-head"><div><h2>Script Studio</h2><p class="m-muted">File tree, editor and inspector layout.</p></div></div>
+        <div class="m-card m-studio">
+          <div class="m-tree" aria-label="Files"><button aria-current="true">main</button><button>checks</button><button>actions</button><button>tool.json</button></div>
+          <div class="m-editor">
+            <div class="m-editor-bar"><strong>main</strong><span class="m-badge m-badge--warning">Unsaved changes</span></div>
+<pre class="m-code"><span class="c">// Sample snippet. Replace with your real script language.</span>
+<span class="k">step</span>(<span class="s">"Checking internet connection"</span>)
+<span class="k">step</span>(<span class="s">"Testing HTTPS connectivity"</span>, { timeout: <span class="n">8000</span> })
+<span class="k">verify</span>(<span class="s">"connection restored"</span>)</pre>
+          </div>
+          <aside class="m-inspector">
+            <div class="m-field"><label for="i-name">Display name</label><input id="i-name" class="m-input" value="YouTube Quick Repair"></div>
+            <div class="m-field"><label for="i-cat">Category</label><select id="i-cat" class="m-select"><option>Network</option><option>Storage</option><option>Power</option></select></div>
+            <p class="m-hint">Shown to users on the tool card.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="m-section" id="json">
+        <div class="m-section-head"><div><h2>Tool definition</h2><p class="m-muted">Line numbers and live JSON validation.</p></div></div>
+        <div class="m-json">
+<pre class="m-json-gutter" id="gutter" aria-hidden="true"></pre>
+<textarea id="json-input" spellcheck="false" aria-label="Tool definition JSON">{
+  "name": "YouTube Quick Repair",
+  "category": "Network",
+  "steps": [
+    "Checking internet connection",
+    "Testing HTTPS connectivity"
+  ]
+}</textarea>
+          <div class="m-json-status ok" id="json-status" role="status"></div>
+        </div>
+      </section>
+
+      <section class="m-section" id="lab">
+        <div class="m-section-head"><div><h2>Test Lab</h2><p class="m-muted">Run configuration, step results and log output.</p></div><button class="m-btn m-btn--primary">Run test</button></div>
+        <div class="m-lab">
+          <div class="m-card m-card-pad" style="display:flex;flex-direction:column;gap:16px">
+            <div class="m-field"><label for="l-dev">Test device</label><select id="l-dev" class="m-select"><option>Pixel (sample)</option><option>Galaxy (sample)</option></select></div>
+            <div class="m-field"><label for="l-ver">Version</label><select id="l-ver" class="m-select"><option>Draft (unsaved)</option><option>1.4.0</option></select></div>
+          </div>
+          <div class="m-card m-card-pad" style="display:flex;flex-direction:column;gap:16px">
+            <ul class="m-steps">
+              <li><span class="m-dot m-dot--done"></span><span>Checking internet connection</span><span class="m-badge m-badge--success">Passed</span></li>
+              <li><span class="m-dot m-dot--run"></span><span>Testing HTTPS connectivity</span><span class="m-badge m-badge--info">Running</span></li>
+              <li><span class="m-dot"></span><span>Verify repair</span><span class="m-badge">Pending</span></li>
+            </ul>
+<pre class="m-log"><span class="ok">12:00:01</span> Checking internet connection: passed
+12:00:03 Testing HTTPS connectivity: started
+<span class="err">12:00:08</span> Sample error line shown in the failed style</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="m-section" id="publish">
+        <div class="m-section-head"><h2>Publishing workflow</h2></div>
+        <div class="m-card m-card-pad" style="display:flex;flex-direction:column;gap:24px">
+          <ol class="m-flow" aria-label="Publishing steps">
+            <li data-state="done">Draft<small>Saved</small></li>
+            <li data-state="done">Validate<small>Definition is valid</small></li>
+            <li data-state="current">Test<small>1 of 2 runs passed</small></li>
+            <li data-state="todo">Publish<small>Not started</small></li>
+          </ol>
+          <ul class="m-checks">
+            <li><span class="m-badge m-badge--success">Done</span>Definition is valid JSON</li>
+            <li><span class="m-badge m-badge--warning">Open</span>Run a test on at least one device</li>
+          </ul>
+          <div class="m-row"><button class="m-btn m-btn--primary" data-open="publish-modal">Publish tool</button><span class="m-hint">Rename these steps to match your real pipeline.</span></div>
+        </div>
+      </section>
+
+      <section class="m-section" id="overlays">
+        <div class="m-section-head"><h2>Loading, empty and notifications</h2></div>
+        <div class="m-grid">
+          <div class="m-card m-card-pad" style="display:flex;flex-direction:column;gap:12px" aria-busy="true" aria-label="Loading"><div class="m-skel" style="height:16px;width:45%"></div><div class="m-skel" style="height:12px"></div><div class="m-skel" style="height:12px;width:70%"></div></div>
+          <div class="m-card m-empty"><h3>No scripts yet</h3><p>Create a script to start building a repair tool.</p><button class="m-btn m-btn--primary">New script</button></div>
+          <div class="m-card m-card-pad" style="display:flex;flex-direction:column;gap:12px"><div class="m-row"><button class="m-btn" data-toast="Published|YouTube Quick Repair is live.">Success toast</button><button class="m-btn m-btn--danger" data-toast="Publish failed|Fix the definition errors and try again.">Error toast</button></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<dialog class="m-modal" id="publish-modal" aria-labelledby="pm-title">
+  <div class="m-dialog-body"><h3 id="pm-title">Publish this tool?</h3><p class="m-muted">Users receive it on their next sync. You can unpublish it at any time.</p></div>
+  <form method="dialog" class="m-dialog-foot"><button class="m-btn" value="cancel">Cancel</button><button class="m-btn m-btn--primary" value="ok" data-toast="Published|The tool is now live.">Publish</button></form>
+</dialog>
+
+<dialog class="m-drawer" id="tool-drawer" aria-labelledby="td-title">
+  <div class="m-dialog-body"><h3 id="td-title">YouTube Quick Repair</h3>
+    <div class="m-field"><label for="d-desc">Description</label><textarea id="d-desc" class="m-textarea" style="height:96px;padding:10px 12px">Checks DNS and HTTPS, then opens settings.</textarea></div>
+    <p class="m-hint">Version 1.4.0</p></div>
+  <form method="dialog" class="m-dialog-foot"><button class="m-btn" value="close">Close</button><button class="m-btn m-btn--primary" value="save">Save changes</button></form>
+</dialog>
+
+<div class="m-toasts" role="status" aria-live="polite" id="toasts"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-open],[data-toggle-nav],[data-toast]');
+  if (!t) return;
+  if (t.dataset.toggleNav !== undefined) document.body.toggleAttribute('data-nav-open');
+  if (t.dataset.open) $('#' + t.dataset.open).showModal();
+  if (t.dataset.toast) {
+    const [title, body] = t.dataset.toast.split('|');
+    const el = document.createElement('div');
+    el.className = 'm-toast';
+    el.innerHTML = '<div><strong></strong><span class="m-muted"></span></div>';
+    el.querySelector('strong').textContent = title;
+    el.querySelector('span').textContent = body;
+    $('#toasts').append(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+});
+document.querySelectorAll('.m-tabs').forEach((tabs) => tabs.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  tabs.querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', x === b));
+}));
+const ta = $('#json-input'), gutter = $('#gutter'), status = $('#json-status');
+function syncJson() {
+  gutter.textContent = Array.from({ length: ta.value.split('\n').length }, (_, i) => i + 1).join('\n');
+  try { JSON.parse(ta.value); status.className = 'm-json-status ok'; status.textContent = 'Valid JSON'; }
+  catch (err) { status.className = 'm-json-status bad'; status.textContent = err.message; }
+}
+ta.addEventListener('input', syncJson);
+ta.addEventListener('scroll', () => { gutter.scrollTop = ta.scrollTop; });
+syncJson();
+</script>
+</body>
+</html>
