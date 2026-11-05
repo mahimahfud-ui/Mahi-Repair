@@ -580,13 +580,13 @@ private fun FinishedReportSection(
             RepairRunResult.SUCCESS -> Quad(
                 MahiSuccessGreen,
                 MahiSuccessDim,
-                "REPAIR SUCCESSFUL",
+                "REPAIR COMPLETED",
                 Icons.Default.CheckCircle
             )
             RepairRunResult.PARTIAL -> Quad(
                 MahiWarningAmber,
                 MahiWarningDim,
-                "PARTIALLY RESOLVED",
+                "PARTIAL RESULTS",
                 Icons.Default.Warning
             )
             RepairRunResult.FAILED -> Quad(
