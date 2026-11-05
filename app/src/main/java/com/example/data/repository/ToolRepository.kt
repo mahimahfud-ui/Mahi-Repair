@@ -98,7 +98,7 @@ class ToolRepository(
      * Refresh session, register/heartbeat the server-issued device, and verify every
      * signed release before it is written to the local catalog. No bundled fallback exists.
      */
-    suspend fun syncTools(): Result<Int> {
+    suspend fun syncTools(): Result<Int> = syncMutex.withLock {
         if (!supabaseClient.isConfigured()) {
             return Result.failure(IllegalStateException("The repair service is not configured."))
         }
@@ -167,7 +167,7 @@ class ToolRepository(
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely synchronize repair tools.", error))
         }
-    }
+        }
 
     /**
      * Always fetch a current signed release from the server at execution time.
