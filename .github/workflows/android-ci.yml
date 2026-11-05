@@ -63,6 +63,25 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
 
+      - name: Scan Android source for embedded privileged secrets
+        run: |
+          if grep -RInE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' app/src; then
+            echo "::error::Privileged key material detected in Android source."
+            exit 1
+          fi
+
+      - name: Inspect debug APK for private signing keys and service-role credentials
+        run: |
+          apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          unpacked="$(mktemp -d)"
+          unzip -q "$apk" -d "$unpacked"
+          if grep -RIlE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' "$unpacked"; then
+            echo "::error::Privileged key material detected in the generated APK."
+            exit 1
+          fi
+          echo "No private signing key or service-role credential markers found in the debug APK."
+
       - name: Upload Android unit-test reports
         if: always()
         uses: actions/upload-artifact@v7
