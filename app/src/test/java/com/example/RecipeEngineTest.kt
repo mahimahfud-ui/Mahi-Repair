@@ -97,15 +97,30 @@ class RecipeEngineTest {
     @Test
     fun conditionsCanReferenceOnlyPrecedingSteps() {
         val conditional = validRecipeJson.replace(
-            "\"requiresConfirmation\": false",
-            "\"requiresConfirmation\": false, \"condition\": {\"previousStep\": \"check-internet\", \"equals\": \"success\"}"
-        ).replace(
-            "\"steps\": [",
-            "\"steps\": ["
+            """
+              ]
+            }
+            """.trimIndent(),
+            """
+                ,
+                {
+                  "id": "verify-internet",
+                  "action": "VERIFY_INTERNET",
+                  "params": {},
+                  "risk": "read_only",
+                  "requiresConfirmation": false,
+                  "condition": {
+                    "previousStep": "check-internet",
+                    "equals": "success"
+                  }
+                }
+              ]
+            }
+            """.trimIndent()
         )
         val parsed = engine.parseRecipeJson(conditional)
         assertTrue(parsed.isSuccess)
-        assertEquals("check-internet", parsed.getOrThrow().steps.first().condition?.previousStep)
+        assertEquals("check-internet", parsed.getOrThrow().steps[1].condition?.previousStep)
     }
 
     @Test
