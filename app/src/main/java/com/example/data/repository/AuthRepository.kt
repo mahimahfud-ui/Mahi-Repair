@@ -13,7 +13,10 @@ class AuthRepository(
     private val preferencesManager: PreferencesManager,
     private val supabaseClient: SupabaseClient
 ) {
-    private val refreshMutex = Mutex()
+    private companion object {
+        // Shared across app and WorkManager repository instances within the process.
+        val refreshMutex = Mutex()
+    }
 
     val sessionFlow: Flow<UserSession> = preferencesManager.sessionFlow
 
@@ -32,7 +35,6 @@ class AuthRepository(
         return if (result.isSuccess) {
             Result.success("Access code sent to $cleanEmail. Check your inbox.")
         } else {
-            val error = result.exceptionOrNull()?.message ?: "Failed to send code"
             Result.failure(IllegalStateException("Unable to send the access code. Check the address and try again.", result.exceptionOrNull()))
         }
     }
