@@ -4,16 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
-import com.example.data.local.RepairHistoryEntity
 import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
-import com.example.domain.models.RepairRunReport
 import com.example.domain.models.RepairTool
-import com.example.domain.models.ToolCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,34 +19,27 @@ import kotlinx.coroutines.sync.Mutex
 
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
-    val tools: List<RepairTool> = emptyList(),
-    val filteredTools: List<RepairTool> = emptyList(),
-    val searchQuery: String = "",
-    val selectedCategory: ToolCategory = ToolCategory.ALL,
-    val lastSyncTime: Long = 0L,
-    val isSyncing: Boolean = false,
-    val syncStatusMessage: String? = null,
+    val primaryTool: RepairTool? = null,
+    val isPrimaryToolLoading: Boolean = true,
+    val canRetryAvailability: Boolean = false,
+    val isPreparingRepair: Boolean = false,
+    val repairStatusMessage: String? = null,
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
-    val showHistoryDialog: Boolean = false,
-    val historyList: List<RepairHistoryEntity> = emptyList(),
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
     val otpSentForEmail: String? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
     private val app = application as MahiRepairApplication
     private val authRepo = app.authRepository
     private val toolRepo = app.toolRepository
-    private val historyRepo = app.historyRepository
     private val engine = app.recipeExecutionEngine
 
-    private val _searchQuery = MutableStateFlow("")
-    private val _selectedCategory = MutableStateFlow(ToolCategory.ALL)
-    private val _isSyncing = MutableStateFlow(false)
-    private val _syncStatusMessage = MutableStateFlow<String?>(null)
-    private val _showHistoryDialog = MutableStateFlow(false)
+    private val _isPrimaryToolLoading = MutableStateFlow(true)
+    private val _canRetryAvailability = MutableStateFlow(false)
+    private val _isPreparingRepair = MutableStateFlow(false)
+    private val _repairStatusMessage = MutableStateFlow<String?>(null)
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
@@ -56,55 +47,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val uiState: StateFlow<MainUiState> = combine(
         authRepo.sessionFlow,
-        toolRepo.toolsFlow,
-        _searchQuery,
-        _selectedCategory,
-        toolRepo.lastSyncFlow,
-        _isSyncing,
-        _syncStatusMessage,
+        toolRepo.primaryRepairToolFlow,
+        _isPrimaryToolLoading,
+        _canRetryAvailability,
+        _isPreparingRepair,
+        _repairStatusMessage,
         engine.engineState,
-        _showHistoryDialog,
         _authStatusMessage,
         _isAuthLoading,
         _otpSentForEmail
-    ) { params ->
-        val session = params[0] as UserSession
-        @Suppress("UNCHECKED_CAST")
-        val allTools = params[1] as List<RepairTool>
-        val query = params[2] as String
-        val category = params[3] as ToolCategory
-        val lastSync = params[4] as Long
-        val syncing = params[5] as Boolean
-        val syncMsg = params[6] as String?
-        val execState = params[7] as ExecutionEvent
-        val showHistory = params[8] as Boolean
-        val authMsg = params[9] as String?
-        val authLoading = params[10] as Boolean
-        val otpEmail = params[11] as String?
-
-        val filtered = allTools.filter { tool ->
-            val matchesCategory = category == ToolCategory.ALL || tool.category == category
-            val matchesQuery = query.isBlank() ||
-                    tool.name.contains(query, ignoreCase = true) ||
-                    tool.description.contains(query, ignoreCase = true) ||
-                    tool.problemDescription.contains(query, ignoreCase = true)
-            matchesCategory && matchesQuery
-        }
-
+    ) { values ->
         MainUiState(
-            session = session,
-            tools = allTools,
-            filteredTools = filtered,
-            searchQuery = query,
-            selectedCategory = category,
-            lastSyncTime = lastSync,
-            isSyncing = syncing,
-            syncStatusMessage = syncMsg,
-            executionState = execState,
-            showHistoryDialog = showHistory,
-            authStatusMessage = authMsg,
-            isAuthLoading = authLoading,
-            otpSentForEmail = otpEmail
+            session = values[0] as UserSession,
+            primaryTool = values[1] as RepairTool?,
+            isPrimaryToolLoading = values[2] as Boolean,
+            canRetryAvailability = values[3] as Boolean,
+            isPreparingRepair = values[4] as Boolean,
+            repairStatusMessage = values[5] as String?,
+            executionState = values[6] as ExecutionEvent,
+            authStatusMessage = values[7] as String?,
+            isAuthLoading = values[8] as Boolean,
+            otpSentForEmail = values[9] as String?
         )
     }.stateIn(
         viewModelScope,
@@ -114,59 +77,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            toolRepo.syncTools()
-        }
-    }
-
-    fun onSearchQueryChange(query: String) {
-        _searchQuery.value = query
-    }
-
-    fun onSelectCategory(category: ToolCategory) {
-        _selectedCategory.value = category
-    }
-
-    fun onSync() {
-        viewModelScope.launch {
-            _isSyncing.value = true
-            _syncStatusMessage.value = "Synchronizing recipes with Mahi Cloud..."
-            val result = toolRepo.syncTools()
-            _isSyncing.value = false
-            if (result.isSuccess) {
-                _syncStatusMessage.value = "Synchronized ${result.getOrThrow()} repair tools."
-            } else {
-                _syncStatusMessage.value = result.exceptionOrNull()?.message ?: "Sync completed."
+            authRepo.sessionFlow.collectLatest { session ->
+                if (session.isAuthenticated) {
+                    refreshPrimaryRepair()
+                } else {
+                    _isPrimaryToolLoading.value = false
+                    _canRetryAvailability.value = false
+                    _repairStatusMessage.value = null
+                }
             }
         }
     }
 
-    fun onRunTool(tool: RepairTool) {
+    fun onRetryAvailability() {
+        if (_isPrimaryToolLoading.value || _isPreparingRepair.value) return
+        viewModelScope.launch { refreshPrimaryRepair() }
+    }
+
+    private suspend fun refreshPrimaryRepair() {
+        _isPrimaryToolLoading.value = true
+        _canRetryAvailability.value = false
+        _repairStatusMessage.value = null
+
+        val result = toolRepo.syncTools()
+        _isPrimaryToolLoading.value = false
+
+        if (result.isSuccess) {
+            val available = result.getOrThrow() > 0
+            _canRetryAvailability.value = false
+            _repairStatusMessage.value = if (available) {
+                "Your repair is ready."
+            } else {
+                "Run Repair is not available yet."
+            }
+        } else {
+            _canRetryAvailability.value = true
+            _repairStatusMessage.value =
+                "We couldn't check repair availability. Check your connection and try again."
+        }
+    }
+
+    fun onRunRepair() {
+        if (_isPrimaryToolLoading.value || _isPreparingRepair.value) return
         if (!executionMutex.tryLock()) return
+
         viewModelScope.launch {
+            _isPreparingRepair.value = true
+            _repairStatusMessage.value = "Preparing your repair..."
+
             try {
-                val payloadResult = toolRepo.getSignedPayloadAndSignature(tool.id)
-                if (payloadResult.isFailure) {
-                    _syncStatusMessage.value = payloadResult.exceptionOrNull()?.message ?: "Repair could not be authorized."
-                    return@launch
+                val tool = toolRepo.primaryRepairToolFlow.first()
+                    ?: throw IllegalStateException("The primary repair is not currently available.")
+
+                val currentSession = authRepo.getValidSession().getOrElse { cause ->
+                    throw IllegalStateException("Your session has expired. Please sign in again.", cause)
+                }
+                if (currentSession.email.isBlank()) {
+                    throw IllegalStateException("Your session has expired. Please sign in again.")
                 }
 
-                val currentEmail = uiState.value.session.email
-                if (currentEmail.isBlank()) {
-                    _syncStatusMessage.value = "Please sign in again before running a repair."
-                    return@launch
+                val payload = toolRepo.getSignedPayloadAndSignature(tool.id).getOrElse { cause ->
+                    throw IllegalStateException("The repair is not currently authorized for this device.", cause)
                 }
 
-                val (signedPayload, signature) = payloadResult.getOrThrow()
                 val report = engine.executeRecipe(
                     tool = tool,
-                    rawSignedPayload = signedPayload,
-                    signatureBase64 = signature,
-                    userEmail = currentEmail
+                    rawSignedPayload = payload.first,
+                    signatureBase64 = payload.second,
+                    userEmail = currentSession.email
                 )
-                toolRepo.recordRepairRun(report)
-            } catch (_: Exception) {
-                _syncStatusMessage.value = "The repair could not be completed. Try again."
+
+                val uploadResult = toolRepo.recordRepairRun(report)
+                _repairStatusMessage.value = if (uploadResult.isSuccess) {
+                    null
+                } else {
+                    "The repair run finished, but its report could not be sent. Check your connection."
+                }
+            } catch (error: Exception) {
+                _canRetryAvailability.value = true
+                _repairStatusMessage.value = when {
+                    error.message?.contains("session", ignoreCase = true) == true ->
+                        "Your session expired. Please sign in again."
+                    else -> "The repair could not be started. Check your connection and try again."
+                }
             } finally {
+                _isPreparingRepair.value = false
                 executionMutex.unlock()
             }
         }
@@ -179,12 +174,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onDismissExecution() {
         engine.reset()
     }
-
-    fun setShowHistoryDialog(show: Boolean) {
-        _showHistoryDialog.value = show
-    }
-
-    fun getHistoryFlow() = historyRepo.getHistoryFlow(uiState.value.session.email)
 
     fun onRequestEmailOtp(email: String) {
         viewModelScope.launch {
@@ -211,23 +200,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (result.isSuccess) {
                 _authStatusMessage.value = "Welcome to Mahi Repair!"
                 _otpSentForEmail.value = null
-                toolRepo.syncTools()
             } else {
                 _authStatusMessage.value = result.exceptionOrNull()?.message ?: "Verification failed"
             }
         }
-    }
-
-    fun onSignOut() {
-        viewModelScope.launch {
-            authRepo.signOut()
-            _otpSentForEmail.value = null
-            _authStatusMessage.value = "Signed out successfully."
-        }
-    }
-
-    fun onClearStatusMessage() {
-        _syncStatusMessage.value = null
-        _authStatusMessage.value = null
     }
 }
