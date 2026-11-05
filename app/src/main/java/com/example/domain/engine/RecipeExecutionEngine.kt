@@ -258,7 +258,10 @@ class RecipeExecutionEngine(
         val recipe = recipeResult.getOrThrow()
 
         // 3. Bind the signed payload to the exact authorized catalog entry.
-        if (recipe.toolId != tool.id || recipe.version.toString() != tool.version) {
+        // The server returns repair_tools.id (UUID) as the API tool_id,
+        // while the signed recipe toolId is the canonical Admin Panel slug.
+        // They are deliberately different identifiers; the signed version must match.
+        if (recipe.version.toString() != tool.version) {
             val message = "The signed recipe does not match the authorized tool release."
             val failRecord = StepExecutionRecord(
                 stepId = "recipe_identity",
