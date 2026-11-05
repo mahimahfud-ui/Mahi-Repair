@@ -130,14 +130,14 @@ fun ExecutionDialog(
                         }
                         Column {
                             Text(
-                                text = "Mahi Repair Engine",
+                                text = "Mahi Repair",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = MahiTextPrimary
                                 )
                             )
                             Text(
-                                text = "Verified Native Execution",
+                                text = "Guided repair, step by step",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = MahiTextMuted,
                                     fontSize = 11.sp
@@ -206,14 +206,14 @@ private fun VerifyingSignatureSection(toolName: String) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Verifying Digital Signature...",
+            text = "Preparing repair...",
             color = MahiTextPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Validating RSA-SHA256 signature for '$toolName' against the Owner's public key.",
+            text = "Checking the repair instructions for this device.",
             color = MahiTextSecondary,
             fontSize = 13.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -243,7 +243,7 @@ private fun SignatureFailedSection(reason: String, onDismiss: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = "Signature Verification Failed",
+            text = "Repair could not start",
             color = MahiRedPrimary,
             fontWeight = FontWeight.Bold,
             fontSize = 17.sp
@@ -287,7 +287,7 @@ private fun IncompatibleSection(req: Int, cur: Int, onDismiss: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This repair recipe requires Android API $req+, but your device is running API $cur.",
+            text = "This repair needs a newer version of Android and cannot run on this device.",
             color = MahiTextSecondary,
             fontSize = 13.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -592,7 +592,7 @@ private fun FinishedReportSection(
             RepairRunResult.FAILED -> Quad(
                 MahiRedPrimary,
                 MahiRedDim,
-                "DIAGNOSTIC DETECTED ISSUE",
+                "REPAIR NOT COMPLETED",
                 Icons.Default.Error
             )
             RepairRunResult.CANCELLED -> Quad(
@@ -641,7 +641,7 @@ private fun FinishedReportSection(
 
         // Final Diagnosis
         Text(
-            text = "Final Diagnosis & Verdict",
+            text = "Repair result",
             color = MahiTextPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 14.sp
