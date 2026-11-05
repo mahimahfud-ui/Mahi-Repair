@@ -147,7 +147,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val (signedPayload, signature) = payloadResult.getOrThrow()
-            val currentEmail = uiState.value.session.email.ifBlank { "friend@mahirepair.local" }
+            val currentEmail = uiState.value.session.email
+            if (currentEmail.isBlank()) {
+                _syncStatusMessage.value = "Please sign in again before running a repair."
+                return@launch
+            }
 
             val report = engine.executeRecipe(
                 tool = tool,
@@ -172,7 +176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _showHistoryDialog.value = show
     }
 
-    fun getHistoryFlow() = historyRepo.getHistoryFlow(uiState.value.session.email.ifBlank { "friend@mahirepair.local" })
+    fun getHistoryFlow() = historyRepo.getHistoryFlow(uiState.value.session.email)
 
     fun onRequestEmailOtp(email: String) {
         viewModelScope.launch {
