@@ -30,13 +30,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.domain.engine.ExecutionEvent
 import com.example.ui.MainUiState
 import com.example.ui.components.ExecutionDialog
 import com.example.ui.theme.MahiBlack
-import com.example.ui.theme.MahiCardStroke
 import com.example.ui.theme.MahiRedPrimary
-import com.example.ui.theme.MahiSurfaceDark
 import com.example.ui.theme.MahiTextMuted
 import com.example.ui.theme.MahiTextPrimary
 import com.example.ui.theme.MahiTextSecondary
