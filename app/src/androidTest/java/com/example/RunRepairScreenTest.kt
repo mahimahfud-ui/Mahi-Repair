@@ -31,7 +31,7 @@ class RunRepairScreenTest {
         id = "server-tool-id",
         name = "Run Repair",
         description = "Owner-published repair workflow",
-        category = ToolCategory.CONNECTIVITY,
+        category = ToolCategory.GENERAL,
         version = "1",
         problemDescription = "Primary repair workflow"
     )
