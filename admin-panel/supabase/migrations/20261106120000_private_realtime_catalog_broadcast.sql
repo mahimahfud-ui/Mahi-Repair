@@ -16,14 +16,10 @@ CREATE POLICY "mahi repair member device broadcasts"
     AND EXISTS (
       SELECT 1
       FROM public.devices d
-      JOIN public.profiles p ON p.id = d.user_id
       WHERE d.user_id = (SELECT auth.uid())
         AND d.id::text = split_part(realtime.topic(), ':device:', 2)
         AND realtime.topic() =
           'mahi-repair:member:' || d.user_id::text || ':device:' || d.id::text
-        AND d.revoked_at IS NULL
-        AND p.role = 'member'
-        AND p.status = 'active'
     )
   );
 
@@ -230,4 +226,4 @@ CREATE TRIGGER devices_private_access_broadcast
   EXECUTE FUNCTION private.broadcast_repair_device_access_changed();
 
 COMMENT ON POLICY "mahi repair member device broadcasts" ON realtime.messages IS
-  'Allows an active member to receive private Broadcast events only on their own active registered-device topic.';
+  'Allows an authenticated user to receive only opaque private Broadcast events on their own registered-device topic, including access-revocation notifications. It grants no repair recipe or Edge Function authorization.';
