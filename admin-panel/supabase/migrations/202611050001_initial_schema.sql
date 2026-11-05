@@ -204,6 +204,22 @@ create policy "owner reads runs" on public.repair_runs for select to authenticat
 create policy "owner reads device tool syncs" on public.device_tool_syncs for select to authenticated using (private.is_owner());
 create policy "owner reads audit" on public.admin_audit_logs for select to authenticated using (private.is_owner());
 create policy "owner reads recipe test history" on public.recipe_test_history for select to authenticated using (private.is_owner());
+-- The Admin Panel uses its authenticated Supabase session for owner-only reads.
+-- Supabase changed new-project defaults so table grants are opt-in; RLS alone does not
+-- grant Data API access. These grants expose only SELECT and every row remains RLS-gated.
+grant usage on schema public to authenticated, service_role;
+grant select on table
+  public.profiles,
+  public.devices,
+  public.repair_tools,
+  public.repair_tool_versions,
+  public.repair_tool_access,
+  public.repair_runs,
+  public.device_tool_syncs,
+  public.admin_audit_logs,
+  public.recipe_test_history
+to authenticated;
+
 -- Strip write grants as well as write policies from browser roles.
 revoke insert, update, delete, truncate, references, trigger on all tables in schema public from anon, authenticated;
 -- No authenticated write policies are defined. Device writes, assignments, repair-run
