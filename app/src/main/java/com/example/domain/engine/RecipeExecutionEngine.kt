@@ -14,7 +14,8 @@ import com.example.domain.models.StepCondition
 import com.example.domain.models.StepExecutionRecord
 import com.example.domain.models.StepRisk
 import com.example.domain.models.StepStatus
-import com.example.security.RsaSignatureVerifier
+import com.example.security.RecipeContractVerifier
+import com.example.BuildConfig
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,16 +71,13 @@ class RecipeExecutionEngine(
      */
     fun parseRecipeJson(jsonString: String): Result<RepairRecipe> {
         return try {
-            val root = JSONObject(jsonString)
-            val schemaVersion = root.optInt("schemaVersion", 1)
-            val toolId = if (root.has("toolId")) root.getString("toolId") else root.getString("tool_id")
-            val title = if (root.has("title")) root.getString("title") else root.optString("name", toolId)
-            val version = if (root.has("version")) {
-                val v = root.get("version")
-                if (v is Number) v.toInt() else v.toString().filter { it.isDigit() }.toIntOrNull() ?: 1
-            } else 1
-            val category = root.optString("category", "network")
-            val minAndroidApi = if (root.has("minAndroidApi")) root.getInt("minAndroidApi") else root.optInt("required_android_sdk", 23)
+            val root = RecipeContractVerifier.validateSchema(jsonString)
+            val schemaVersion = root.getInt("schemaVersion")
+            val toolId = root.getString("toolId")
+            val title = root.getString("title")
+            val version = root.getInt("version")
+            val category = root.getString("category")
+            val minAndroidApi = root.optInt("minAndroidApi", 23)
             val minAppVersion = root.optString("minAppVersion", "1.0.0")
             val estimatedSeconds = root.optInt("estimatedSeconds", 60)
             val changelog = if (root.has("changelog")) root.optString("changelog") else null
@@ -102,14 +100,13 @@ class RecipeExecutionEngine(
                     )
 
                 val riskStr = stepObj.optString("risk", "read_only")
-                val risk = StepRisk.fromId(riskStr) ?: StepRisk.READ_ONLY
-                val requiresConfirmation = stepObj.optBoolean("requiresConfirmation", risk != StepRisk.READ_ONLY)
+                val risk = StepRisk.fromId(riskStr)
+                    ?: return Result.failure(IllegalArgumentException("Unsupported step risk: '$riskStr'"))
+                val requiresConfirmation = stepObj.getBoolean("requiresConfirmation")
 
                 val paramsMap = mutableMapOf<String, Any?>()
                 val paramsSource = when {
-                    stepObj.has("params") -> stepObj.getJSONObject("params")
-                    stepObj.has("parameters") -> stepObj.getJSONObject("parameters")
-                    else -> null
+                    else -> stepObj.getJSONObject("params")
                 }
                 if (paramsSource != null) {
                     val keys = paramsSource.keys()
@@ -194,11 +191,11 @@ class RecipeExecutionEngine(
 
         // 1. Signature Verification
         _engineState.value = ExecutionEvent.VerifyingSignature(tool.name)
-        val isVerified = if (!publicKeyPem.isNullOrBlank()) {
-            RsaSignatureVerifier.verify(rawSignedPayload, signatureBase64, publicKeyPem)
-        } else {
-            RsaSignatureVerifier.verify(rawSignedPayload, signatureBase64)
-        }
+        val verificationKey = publicKeyPem?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.RECIPE_SIGNING_PUBLIC_KEY_PEM
+        val isVerified = runCatching {
+            RecipeContractVerifier.verifyAndParse(rawSignedPayload, signatureBase64, verificationKey)
+        }.isSuccess
 
         if (!isVerified) {
             val failRecord = StepExecutionRecord(
@@ -260,7 +257,36 @@ class RecipeExecutionEngine(
 
         val recipe = recipeResult.getOrThrow()
 
-        // 3. Android SDK Compatibility
+        // 3. Bind the signed payload to the exact authorized catalog entry.
+        if (recipe.toolId != tool.id || recipe.version.toString() != tool.version) {
+            val message = "The signed recipe does not match the authorized tool release."
+            val failRecord = StepExecutionRecord(
+                stepId = "recipe_identity",
+                actionName = "VALIDATE_RECIPE_IDENTITY",
+                title = "Validate Repair Release",
+                status = StepStatus.FAILED,
+                message = message,
+                durationMs = System.currentTimeMillis() - startTime
+            )
+            val report = RepairRunReport(
+                runId = runId,
+                toolId = tool.id,
+                toolName = tool.name,
+                toolVersion = tool.version,
+                userEmail = userEmail,
+                deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                androidSdk = Build.VERSION.SDK_INT,
+                startTime = startTime,
+                endTime = System.currentTimeMillis(),
+                result = RepairRunResult.FAILED,
+                stepRecords = listOf(failRecord),
+                finalDiagnosis = message
+            )
+            _engineState.value = ExecutionEvent.Finished(report)
+            return report
+        }
+
+        // 4. Android SDK Compatibility
         if (Build.VERSION.SDK_INT < recipe.minAndroidApi) {
             val msg = "Device running Android API ${Build.VERSION.SDK_INT}, but recipe requires API ${recipe.minAndroidApi}+."
             val failRecord = StepExecutionRecord(
