@@ -33,34 +33,18 @@ class RecipeEngineTest {
     private lateinit var engine: RecipeExecutionEngine
     private lateinit var testKeyPair: KeyPair
 
-    private val validRecipeJson = """
-        {
-          "schemaVersion": 1,
-          "toolId": "demo-network-check",
-          "title": "Demo network check",
-          "version": 1,
-          "category": "network",
-          "minAndroidApi": 23,
-          "minAppVersion": "1.0.0",
-          "estimatedSeconds": 20,
-          "steps": [
-            {
-              "id": "check-internet",
-              "action": "CHECK_INTERNET",
-              "params": {},
-              "risk": "read_only",
-              "requiresConfirmation": false
-            }
-          ]
-        }
-    """.trimIndent()
+    private val validRecipeJson: String by lazy {
+        requireNotNull(javaClass.getResourceAsStream("/repair-recipe-v1.json"))
+            .bufferedReader().use { it.readText() }
+    }
+
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
         actionRegistry = ActionRegistry(context)
         engine = RecipeExecutionEngine(actionRegistry)
-        testKeyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        testKeyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(3072) }.generateKeyPair()
     }
 
     @Test
@@ -90,7 +74,7 @@ class RecipeEngineTest {
     fun validCanonicalRecipeParses() {
         val result = engine.parseRecipeJson(validRecipeJson)
         assertTrue(result.isSuccess)
-        assertEquals("demo-network-check", result.getOrThrow().toolId)
+        assertEquals("run-repair", result.getOrThrow().toolId)
         assertEquals(ActionType.CHECK_INTERNET, result.getOrThrow().steps.first().action)
     }
 
@@ -172,6 +156,20 @@ class RecipeEngineTest {
         )
         assertTrue(runCatching {
             RecipeContractVerifier.verifyAndParse(validRecipeJson.replace("Demo", "Altered"), signature, publicPem)
+        }.isFailure)
+    }
+
+    @Test
+    fun rsaVerificationRejectsWrongPublicKeyAndUnsupportedAlgorithm() {
+        val payload = validRecipeJson.toByteArray(Charsets.UTF_8)
+        val signature = signForTesting(payload, testKeyPair)
+        val wrongKeyPair = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(3072)
+        }.generateKeyPair()
+
+        assertFalse(RsaSignatureVerifier.verifySignature(payload, signature, wrongKeyPair.public))
+        assertTrue(runCatching {
+            RecipeContractVerifier.requireSupportedSignatureAlgorithm("RS256")
         }.isFailure)
     }
 
