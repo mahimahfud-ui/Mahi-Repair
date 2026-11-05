@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigInteger
 import java.util.UUID
 
 sealed interface ExecutionEvent {
@@ -58,6 +59,20 @@ class RecipeExecutionEngine(
 
     // Suspends execution waiting for user confirmation or guide acknowledgement
     private var pendingUserResponse: CompletableDeferred<Boolean>? = null
+
+    private fun isAppVersionSupported(currentVersion: String, requiredVersion: String): Boolean {
+        val current = currentVersion.split('.')
+        val required = requiredVersion.split('.')
+        if (current.isEmpty() || required.isEmpty()) return false
+        val count = maxOf(current.size, required.size)
+        for (index in 0 until count) {
+            val currentPart = current.getOrNull(index)?.toBigIntegerOrNull() ?: BigInteger.ZERO
+            val requiredPart = required.getOrNull(index)?.toBigIntegerOrNull() ?: BigInteger.ZERO
+            val comparison = currentPart.compareTo(requiredPart)
+            if (comparison != 0) return comparison > 0
+        }
+        return true
+    }
 
     /**
      * Resolves pending user confirmation or interactive guide.
@@ -287,7 +302,36 @@ class RecipeExecutionEngine(
             return report
         }
 
-        // 4. Android SDK Compatibility
+        // 4. App version compatibility
+        if (!isAppVersionSupported(BuildConfig.VERSION_NAME, recipe.minAppVersion)) {
+            val message = "Update Mahi Repair to a newer version before running this repair."
+            val failRecord = StepExecutionRecord(
+                stepId = "app_version_check",
+                actionName = "APP_VERSION_COMPATIBILITY",
+                title = "App update required",
+                status = StepStatus.FAILED,
+                message = message,
+                durationMs = System.currentTimeMillis() - startTime
+            )
+            val report = RepairRunReport(
+                runId = runId,
+                toolId = tool.id,
+                toolName = tool.name,
+                toolVersion = tool.version,
+                userEmail = userEmail,
+                deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                androidSdk = Build.VERSION.SDK_INT,
+                startTime = startTime,
+                endTime = System.currentTimeMillis(),
+                result = RepairRunResult.FAILED,
+                stepRecords = listOf(failRecord),
+                finalDiagnosis = message
+            )
+            _engineState.value = ExecutionEvent.Finished(report)
+            return report
+        }
+
+        // 5. Android SDK compatibility
         if (Build.VERSION.SDK_INT < recipe.minAndroidApi) {
             val msg = "This repair requires a newer version of Android and cannot run on this device."
             val failRecord = StepExecutionRecord(
