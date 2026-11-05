@@ -1,0 +1,96 @@
+name: Admin Panel CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-panel-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admin-panel:
+    name: TypeScript, ESLint, Vitest and Next.js build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: admin-panel
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install Admin Panel dependencies
+        id: install
+        run: npm install --no-audit --no-fund --no-progress
+
+      - name: Run scaffold and security-integrity checks
+        id: scaffold
+        run: npm run check:scaffold
+
+      - name: TypeScript check
+        id: typecheck
+        run: npm run typecheck
+
+      - name: ESLint
+        id: lint
+        run: npm run lint
+
+      - name: Vitest unit tests
+        id: tests
+        run: npm run test
+
+      - name: Next.js production build
+        id: next-build
+        env:
+          # Public placeholders only: no real Supabase project credentials are used in CI.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_only
+          NEXT_PUBLIC_APP_URL: https://ci.example.invalid
+        run: npm run build
+
+      - name: Publish Admin Panel CI result
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+          INSTALL_RESULT: ${{ steps.install.outcome }}
+          SCAFFOLD_RESULT: ${{ steps.scaffold.outcome }}
+          TYPECHECK_RESULT: ${{ steps.typecheck.outcome }}
+          LINT_RESULT: ${{ steps.lint.outcome }}
+          TEST_RESULT: ${{ steps.tests.outcome }}
+          BUILD_RESULT: ${{ steps.next-build.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "## Admin Panel CI"
+            echo ""
+            echo "- **Overall:** ${JOB_RESULT}"
+            echo "- **Dependency installation:** ${INSTALL_RESULT}"
+            echo "- **Scaffold/security audit:** ${SCAFFOLD_RESULT}"
+            echo "- **TypeScript:** ${TYPECHECK_RESULT}"
+            echo "- **ESLint:** ${LINT_RESULT}"
+            echo "- **Vitest:** ${TEST_RESULT}"
+            echo "- **Next.js production build:** ${BUILD_RESULT}"
+            echo "- **Commit:** ${COMMIT_SHA}"
+            echo "- **Run:** [Open full logs]($RUN_URL)"
+            echo ""
+            if [ "${JOB_RESULT}" = "success" ]; then
+              echo "All Admin Panel CI checks passed."
+            else
+              echo "One or more checks failed. The step results above identify the first failing command; open the run for full logs."
+              echo "::error title=Admin Panel CI failed::Check the failed TypeScript, ESLint, Vitest, scaffold audit or Next.js build step."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
