@@ -44,12 +44,7 @@ fun MahiRepairApp(
         AuthScreen(
             state = state,
             onRequestOtp = { viewModel.onRequestEmailOtp(it) },
-            onVerifyOtp = { viewModel.onVerifyEmailOtp(it) },
-            onContinueOffline = {
-                // Allows invited family or friends to explore verified offline toolkit
-                viewModel.onRequestEmailOtp("family@mahirepair.local")
-                viewModel.onVerifyEmailOtp("123456")
-            }
+            onVerifyOtp = { viewModel.onVerifyEmailOtp(it) }
         )
     } else {
         MainScreen(
