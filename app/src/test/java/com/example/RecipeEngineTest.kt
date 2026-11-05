@@ -110,8 +110,8 @@ class RecipeEngineTest {
     @Test
     fun canonicalContractRejectsUnknownPropertiesAndMalformedActions() {
         val extraRootProperty = validRecipeJson.replace(
-            "\"title\": \"Demo network check\"",
-            "\"title\": \"Demo network check\", \"unexpected\": true"
+            "\"title\": \"Run Repair\"",
+            "\"title\": \"Run Repair\", \"unexpected\": true"
         )
         assertTrue(runCatching { RecipeContractVerifier.validateSchema(extraRootProperty) }.isFailure)
 
@@ -176,8 +176,8 @@ class RecipeEngineTest {
     @Test
     fun invalidSignatureStopsExecution() = runBlocking {
         val tool = RepairTool(
-            id = "demo-network-check",
-            name = "Demo network check",
+            id = "run-repair",
+            name = "Run Repair",
             description = "Test",
             category = ToolCategory.GENERAL,
             version = "1",
