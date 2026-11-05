@@ -41,6 +41,8 @@ class ToolRepository(
      */
     private suspend fun ensureRegisteredDeviceId(accessToken: String): String {
         val savedId = preferencesManager.deviceIdFlow.first()
+        if (!savedId.isNullOrBlank()) return savedId
+
         val request = RegisterDeviceRequest(
             deviceId = savedId,
             deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}".take(100),
