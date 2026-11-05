@@ -84,9 +84,7 @@ class ToolRepository(
         }
 
     private fun verifySignatureAlgorithm(algorithm: String) {
-        if (algorithm != "RSA-SHA256") {
-            throw IllegalArgumentException("The repair release uses an unsupported signature algorithm.")
-        }
+        RecipeContractVerifier.requireSupportedSignatureAlgorithm(algorithm)
     }
 
     private fun verifiedPayload(
