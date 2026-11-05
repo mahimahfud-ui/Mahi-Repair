@@ -140,7 +140,7 @@ class RecipeEngineTest {
         val signature = signForTesting(payload, testKeyPair)
         assertTrue(RsaSignatureVerifier.verifySignature(payload, signature, testKeyPair.public))
 
-        val tampered = validRecipeJson.replace("Demo network check", "Tampered").toByteArray(Charsets.UTF_8)
+        val tampered = validRecipeJson.replace("Run Repair", "Tampered").toByteArray(Charsets.UTF_8)
         assertFalse(RsaSignatureVerifier.verifySignature(tampered, signature, testKeyPair.public))
     }
 
@@ -151,11 +151,11 @@ class RecipeEngineTest {
             Base64.encodeToString(testKeyPair.public.encoded, Base64.NO_WRAP) +
             "\n-----END PUBLIC KEY-----"
         assertEquals(
-            "demo-network-check",
+            "run-repair",
             RecipeContractVerifier.verifyAndParse(validRecipeJson, signature, publicPem).getString("toolId")
         )
         assertTrue(runCatching {
-            RecipeContractVerifier.verifyAndParse(validRecipeJson.replace("Demo", "Altered"), signature, publicPem)
+            RecipeContractVerifier.verifyAndParse(validRecipeJson.replace("Run", "Altered"), signature, publicPem)
         }.isFailure)
     }
 
