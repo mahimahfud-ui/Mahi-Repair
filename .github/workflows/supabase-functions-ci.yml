@@ -53,4 +53,4 @@ jobs:
         run: deno check admin-panel/supabase/functions/_shared/http.ts admin-panel/supabase/functions/_shared/recipe.ts admin-panel/supabase/functions/_shared/sign.ts admin-panel/supabase/functions/_shared/recipe_test.ts
 
       - name: Run canonical Run Repair contract test
-        run: deno test admin-panel/supabase/functions/_shared/recipe_test.ts
+        run: deno test --allow-read=contract-tests admin-panel/supabase/functions/_shared/recipe_test.ts
