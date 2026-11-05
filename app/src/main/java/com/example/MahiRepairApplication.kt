@@ -35,7 +35,7 @@ class MahiRepairApplication : Application() {
         preferencesManager = PreferencesManager(this)
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
-        toolRepository = ToolRepository(database, preferencesManager, supabaseClient)
+        toolRepository = ToolRepository(database, preferencesManager, supabaseClient, authRepository)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)
