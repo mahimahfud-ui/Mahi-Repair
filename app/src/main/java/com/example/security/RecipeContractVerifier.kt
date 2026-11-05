@@ -54,7 +54,7 @@ object RecipeContractVerifier {
     fun validateSchema(signedPayload: String): JSONObject {
         val recipe = JSONObject(signedPayload)
         requireOnlyKeys(recipe, setOf("schemaVersion", "toolId", "title", "version", "category", "minAndroidApi", "minAppVersion", "estimatedSeconds", "changelog", "steps"))
-        require(recipe.has("schemaVersion") && recipe.optInt("schemaVersion", -1) == 1) { "Unsupported recipe schema" }
+        require(recipe.has("schemaVersion") && isIntegerInRange(recipe, "schemaVersion", 1..1)) { "Unsupported recipe schema" }
         require(recipe.has("toolId") && recipe.opt("toolId") is String) { "Missing or invalid tool ID" }
         require(recipe.has("title") && recipe.opt("title") is String) { "Missing or invalid recipe title" }
         require(recipe.has("version") && recipe.opt("version") is Number) { "Missing or invalid recipe version" }
@@ -64,13 +64,14 @@ object RecipeContractVerifier {
         if (recipe.has("minAppVersion")) require(recipe.opt("minAppVersion") is String) { "Invalid app version requirement" }
         if (recipe.has("estimatedSeconds")) require(recipe.opt("estimatedSeconds") is Number) { "Invalid execution estimate" }
         if (recipe.has("changelog")) require(recipe.opt("changelog") is String) { "Invalid changelog" }
-        require(recipe.optString("toolId").matches(Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$"))) { "Invalid tool ID" }
+        val toolId = recipe.getString("toolId")
+        require(toolId.length in 3..80 && toolId.matches(Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$"))) { "Invalid tool ID" }
         require(recipe.optString("title").isNotBlank() && recipe.optString("title").length <= 100) { "Invalid recipe title" }
-        require(recipe.optInt("version", 0) > 0) { "Invalid recipe version" }
+        require(isIntegerInRange(recipe, "version", 1..Int.MAX_VALUE)) { "Invalid recipe version" }
         require(recipe.optString("category") in setOf("network", "apps", "storage", "connectivity", "system", "guides")) { "Invalid category" }
-        require(recipe.optInt("minAndroidApi", 23) in 23..100) { "Invalid Android API requirement" }
+        require(if (recipe.has("minAndroidApi")) isIntegerInRange(recipe, "minAndroidApi", 23..100) else true) { "Invalid Android API requirement" }
         require(recipe.optString("minAppVersion", "1.0.0").matches(Regex("^\\d+(?:\\.\\d+){0,3}$"))) { "Invalid app version requirement" }
-        require(recipe.optInt("estimatedSeconds", 60) in 1..3600) { "Invalid execution estimate" }
+        require(if (recipe.has("estimatedSeconds")) isIntegerInRange(recipe, "estimatedSeconds", 1..3600) else true) { "Invalid execution estimate" }
         require(recipe.optString("changelog", "").length <= 2000) { "Invalid changelog" }
 
         val steps = recipe.optJSONArray("steps") ?: error("Missing recipe steps")
@@ -98,9 +99,11 @@ object RecipeContractVerifier {
             if (step.has("condition")) {
                 val condition = step.getJSONObject("condition")
                 requireOnlyKeys(condition, setOf("previousStep", "equals"))
-                val previousId = condition.optString("previousStep")
+                require(condition.has("previousStep") && condition.opt("previousStep") is String) { "Invalid condition step reference" }
+                require(condition.has("equals") && condition.opt("equals") is String) { "Invalid condition outcome" }
+                val previousId = condition.getString("previousStep")
                 require(previousId in precedingIds) { "Condition must reference a preceding step" }
-                require(condition.optString("equals") in setOf("success", "failure")) { "Invalid condition outcome" }
+                require(condition.getString("equals") in setOf("success", "failure")) { "Invalid condition outcome" }
             }
         }
         return recipe
@@ -112,7 +115,8 @@ object RecipeContractVerifier {
             required.forEach { require(p.has(it)) { "Missing $it for $action" } }
         }
         fun text(name: String, max: Int, min: Int = 1): String {
-            val value = p.optString(name, "")
+            require(p.has(name) && p.opt(name) is String) { "Invalid $name for $action" }
+            val value = p.getString(name)
             require(value.length in min..max) { "Invalid $name for $action" }
             return value
         }
@@ -128,18 +132,18 @@ object RecipeContractVerifier {
                     val path = text("path", 512)
                     require(path.startsWith("/") && !path.startsWith("//") && !path.contains('\r') && !path.contains('\n')) { "Invalid HTTPS path" }
                 }
-                if (p.has("timeoutMs")) require(p.optInt("timeoutMs", -1) in 1000..10000) { "Invalid timeout" }
+                if (p.has("timeoutMs")) require(isIntegerInRange(p, "timeoutMs", 1000..10000)) { "Invalid timeout" }
             }
             "CHECK_APP_INSTALLED", "OPEN_APP", "OPEN_APP_DETAILS" -> {
                 keys(setOf("packageName"), setOf("packageName")); packageName()
             }
             "CHECK_STORAGE" -> {
                 keys(setOf("minimumAvailableMb"))
-                if (p.has("minimumAvailableMb")) require(p.optInt("minimumAvailableMb", -1) in 1..1_000_000) { "Invalid storage threshold" }
+                if (p.has("minimumAvailableMb")) require(isIntegerInRange(p, "minimumAvailableMb", 1..1_000_000)) { "Invalid storage threshold" }
             }
             "OPEN_ANDROID_SETTINGS" -> {
                 keys(setOf("screen"), setOf("screen"))
-                require(p.optString("screen") in setOf("wifi", "internet", "bluetooth", "display", "sound", "app_notifications", "date_time", "storage")) { "Unsupported settings screen" }
+                require(text("screen", 32) in setOf("wifi", "internet", "bluetooth", "display", "sound", "app_notifications", "date_time", "storage")) { "Unsupported settings screen" }
             }
             "SHOW_GUIDE" -> {
                 keys(setOf("title", "instructions"), setOf("title", "instructions")); text("title", 100)
@@ -153,10 +157,16 @@ object RecipeContractVerifier {
             }
             "REQUEST_OWN_APP_PERMISSION" -> {
                 keys(setOf("permission"), setOf("permission"))
-                require(p.optString("permission") in setOf("POST_NOTIFICATIONS", "CAMERA", "ACCESS_FINE_LOCATION", "READ_MEDIA_IMAGES")) { "Unsupported app permission" }
+                require(text("permission", 40) in setOf("POST_NOTIFICATIONS", "CAMERA", "ACCESS_FINE_LOCATION", "READ_MEDIA_IMAGES")) { "Unsupported app permission" }
             }
             else -> error("Unsupported action: $action")
         }
+    }
+
+    private fun isIntegerInRange(json: JSONObject, key: String, range: IntRange): Boolean {
+        val value = json.opt(key) as? Number ?: return false
+        val numeric = value.toDouble()
+        return numeric.isFinite() && numeric % 1.0 == 0.0 && numeric >= range.first && numeric <= range.last
     }
 
     private fun requireOnlyKeys(json: JSONObject, allowed: Set<String>) {
