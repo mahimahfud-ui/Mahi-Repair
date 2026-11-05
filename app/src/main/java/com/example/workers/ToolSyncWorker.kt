@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.example.data.local.AppDatabase
 import com.example.data.local.PreferencesManager
 import com.example.data.remote.SupabaseClient
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.ToolRepository
 
 class ToolSyncWorker(
@@ -18,7 +19,8 @@ class ToolSyncWorker(
             val db = AppDatabase.getInstance(applicationContext)
             val prefs = PreferencesManager(applicationContext)
             val client = SupabaseClient()
-            val repository = ToolRepository(db, prefs, client)
+            val authRepository = AuthRepository(prefs, client)
+            val repository = ToolRepository(db, prefs, client, authRepository)
 
             val syncResult = repository.syncTools()
             if (syncResult.isSuccess) {
