@@ -52,8 +52,8 @@ Deno.serve(async (req) => {
     if (deviceError || !device || device.revoked_at) throw Object.assign(new Error('Active registered device required'), { status: 403 });
     if (device.app_version !== value.app_version) throw Object.assign(new Error('Refresh device registration before submitting this run.'), { status: 409 });
 
-    const { data: tool, error: toolError } = await admin.from('repair_tools').select('id,status,audience').eq('id', value.tool_id).single();
-    if (toolError || !tool || tool.status !== 'PUBLISHED') throw Object.assign(new Error('Tool is not currently published'), { status: 403 });
+    const { data: tool, error: toolError } = await admin.from('repair_tools').select('id,slug,status,audience').eq('id', value.tool_id).single();
+    if (toolError || !tool || tool.status !== 'PUBLISHED' || tool.slug !== 'run-repair') throw Object.assign(new Error('The primary repair is not currently published'), { status: 403 });
     if (tool.audience === 'selected_members') {
       const { data: access } = await admin.from('repair_tool_access').select('id').eq('tool_id', value.tool_id).eq('member_id', user.id).maybeSingle();
       if (!access) throw Object.assign(new Error('No access to tool'), { status: 403 });
