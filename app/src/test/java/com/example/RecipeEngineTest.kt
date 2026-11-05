@@ -139,6 +139,18 @@ class RecipeEngineTest {
     }
 
     @Test
+    fun canonicalSchemaRejectsFractionalVersionsAndLongAppVersions() {
+        val fractionalVersion = validRecipeJson.replace("\"version\": 1", "\"version\": 1.5")
+        assertTrue(RecipeContractVerifier.runCatchingValidation(fractionalVersion).isFailure)
+
+        val longAppVersion = validRecipeJson.replace(
+            "\"minAppVersion\": \"1.0.0\"",
+            "\"minAppVersion\": \"1234567890123456789012345678901\""
+        )
+        assertTrue(runCatching { RecipeContractVerifier.validateSchema(longAppVersion) }.isFailure)
+    }
+
+    @Test
     fun rsaSignatureVerifiesOnlyForExactPayloadBytes() {
         val payload = validRecipeJson.toByteArray(Charsets.UTF_8)
         val signature = signForTesting(payload, testKeyPair)
@@ -180,7 +192,7 @@ class RecipeEngineTest {
             userEmail = "user@test.com"
         )
         assertEquals(RepairRunResult.FAILED, report.result)
-        assertTrue(report.finalDiagnosis.contains("Security Error", ignoreCase = true))
+        assertTrue(report.finalDiagnosis.contains("could not be verified", ignoreCase = true))
     }
 
     private fun signForTesting(payload: ByteArray, keyPair: KeyPair): String {
