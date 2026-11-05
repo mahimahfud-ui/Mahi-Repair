@@ -271,7 +271,7 @@ fun AuthScreen(
 
                         Button(
                             onClick = { onVerifyOtp(otpInput) },
-                            enabled = otpInput.length >= 4 && !state.isAuthLoading,
+                            enabled = otpInput.length == 6 && !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
                             modifier = Modifier
