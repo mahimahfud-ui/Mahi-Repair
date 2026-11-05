@@ -184,7 +184,7 @@ class ToolRepository(
             val session = authRepository.getValidSession().getOrElse { cause ->
                 throw IllegalStateException("Please sign in again before running a repair.", cause)
             }
-            val deviceId = ensureRegisteredDeviceId(session.token)
+            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val signed = supabaseClient.getSignedRepairTool(toolId, deviceId, session.token).getOrElse { cause ->
                 throw IllegalStateException("This repair is no longer authorized for this device.", cause)
             }
