@@ -150,7 +150,6 @@ class AuthRepository(
             if (current.token.isNotBlank()) supabaseClient.signOut(current.token)
         } finally {
             preferencesManager.clearSession()
-            preferencesManager.clearDeviceId()
         }
     }
 }
