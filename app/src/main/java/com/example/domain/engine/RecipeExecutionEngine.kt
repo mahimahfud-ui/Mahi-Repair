@@ -199,9 +199,9 @@ class RecipeExecutionEngine(
             val failRecord = StepExecutionRecord(
                 stepId = "verify_sig",
                 actionName = "RSA_SIGNATURE_VERIFICATION",
-                title = "Verify Owner Signature",
+                title = "Checking repair",
                 status = StepStatus.FAILED,
-                message = "Digital signature verification failed. Recipe rejected.",
+                message = "This repair could not be verified. No changes were made.",
                 durationMs = System.currentTimeMillis() - startTime
             )
             val report = RepairRunReport(
@@ -216,9 +216,9 @@ class RecipeExecutionEngine(
                 endTime = System.currentTimeMillis(),
                 result = RepairRunResult.FAILED,
                 stepRecords = listOf(failRecord),
-                finalDiagnosis = "Security Error: The recipe signature did not match the Owner's trusted public key. Execution aborted."
+                finalDiagnosis = "This repair could not be verified. No changes were made. Sync the app and try again."
             )
-            _engineState.value = ExecutionEvent.SignatureFailed("Invalid Owner signature.")
+            _engineState.value = ExecutionEvent.SignatureFailed("This repair could not be verified. No changes were made. Sync the app and try again.")
             _engineState.value = ExecutionEvent.Finished(report)
             return report
         }
@@ -226,7 +226,7 @@ class RecipeExecutionEngine(
         // 2. Schema and Parsing
         val recipeResult = parseRecipeJson(rawSignedPayload)
         if (recipeResult.isFailure) {
-            val err = recipeResult.exceptionOrNull()?.message ?: "Invalid recipe schema"
+            val err = "This repair is not compatible with the current app version. Sync the app or try another repair."
             val failRecord = StepExecutionRecord(
                 stepId = "parse_schema",
                 actionName = "VALIDATE_SCHEMA",
@@ -260,7 +260,7 @@ class RecipeExecutionEngine(
         // while the signed recipe toolId is the canonical Admin Panel slug.
         // They are deliberately different identifiers; the signed version must match.
         if (recipe.version.toString() != tool.version) {
-            val message = "The signed recipe does not match the authorized tool release."
+            val message = "This repair release is out of date. Sync the app and try again."
             val failRecord = StepExecutionRecord(
                 stepId = "recipe_identity",
                 actionName = "VALIDATE_RECIPE_IDENTITY",
@@ -289,7 +289,7 @@ class RecipeExecutionEngine(
 
         // 4. Android SDK Compatibility
         if (Build.VERSION.SDK_INT < recipe.minAndroidApi) {
-            val msg = "Device running Android API ${Build.VERSION.SDK_INT}, but recipe requires API ${recipe.minAndroidApi}+."
+            val msg = "This repair requires a newer version of Android and cannot run on this device."
             val failRecord = StepExecutionRecord(
                 stepId = "compat_check",
                 actionName = "COMPATIBILITY_CHECK",
