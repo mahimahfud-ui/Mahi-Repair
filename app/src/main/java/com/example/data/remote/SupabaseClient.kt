@@ -6,6 +6,7 @@ import com.example.data.remote.dto.GetSignedToolRequest
 import com.example.data.remote.dto.GetToolsRequest
 import com.example.data.remote.dto.GetToolsResponse
 import com.example.data.remote.dto.OtpRequest
+import com.example.data.remote.dto.RefreshTokenRequest
 import com.example.data.remote.dto.RegisterDeviceRequest
 import com.example.data.remote.dto.RegisterDeviceResponse
 import com.example.data.remote.dto.RemoteSignedToolDto
@@ -25,8 +26,8 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class SupabaseClient(
-    private var baseUrl: String = BuildConfig.SUPABASE_URL,
-    private var anonKey: String = BuildConfig.SUPABASE_ANON_KEY
+    private val baseUrl: String = BuildConfig.SUPABASE_URL.trimEnd('/'),
+    private val anonKey: String = BuildConfig.SUPABASE_ANON_KEY
 ) {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -41,15 +42,11 @@ class SupabaseClient(
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    fun updateConfig(url: String, key: String) {
-        baseUrl = url.trimEnd('/')
-        anonKey = key.trim()
-    }
-
     fun isConfigured(): Boolean {
-        return baseUrl.isNotBlank() &&
+        return baseUrl.startsWith("https://") &&
                 anonKey.isNotBlank() &&
-                !baseUrl.contains("placeholder.supabase.co")
+                !baseUrl.contains("placeholder.supabase.co") &&
+                !anonKey.contains("placeholder-anon-key")
     }
 
     /**
@@ -116,6 +113,72 @@ class SupabaseClient(
                 } else {
                     Result.failure(IOException("OTP verification failed (HTTP ${it.code}): $resBody"))
                 }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Refresh an expired or near-expiry Supabase session.
+     */
+    suspend fun refreshSession(refreshToken: String): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Repair service is not configured."))
+        }
+        if (refreshToken.isBlank()) {
+            return@withContext Result.failure(InvalidAuthSessionException("Refresh token is missing."))
+        }
+
+        val bodyJson = moshi.adapter(RefreshTokenRequest::class.java)
+            .toJson(RefreshTokenRequest(refreshToken))
+        val request = Request.Builder()
+            .url("$baseUrl/auth/v1/token?grant_type=refresh_token")
+            .addHeader("apikey", anonKey)
+            .addHeader("Content-Type", "application/json")
+            .post(bodyJson.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                val body = it.body?.string().orEmpty()
+                if (it.isSuccessful) {
+                    val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(body)
+                        ?: return@withContext Result.failure(IOException("Empty refreshed session response"))
+                    if (session.accessToken.isNullOrBlank() || session.refreshToken.isNullOrBlank()) {
+                        return@withContext Result.failure(IOException("Refresh response omitted required session tokens"))
+                    }
+                    Result.success(session)
+                } else if (it.code == 400 || it.code == 401) {
+                    Result.failure(InvalidAuthSessionException("Your session has expired. Please sign in again."))
+                } else {
+                    Result.failure(IOException("Session refresh failed (HTTP ${it.code})."))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Revoke the current Supabase session on the server.
+     */
+    suspend fun signOut(accessToken: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!isConfigured() || accessToken.isBlank()) {
+            return@withContext Result.success(Unit)
+        }
+        val request = Request.Builder()
+            .url("$baseUrl/auth/v1/logout")
+            .addHeader("apikey", anonKey)
+            .addHeader("Authorization", "Bearer $accessToken")
+            .post("".toRequestBody(jsonMediaType))
+            .build()
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                if (it.isSuccessful || it.code == 401) Result.success(Unit)
+                else Result.failure(IOException("Server sign-out failed (HTTP ${it.code})."))
             }
         } catch (e: Exception) {
             Result.failure(e)
