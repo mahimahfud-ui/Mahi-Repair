@@ -9,7 +9,7 @@ Two independent GitHub Actions workflows run on every branch push, pull requests
 
 The Android source has Gradle wrapper properties but does not contain the wrapper launcher or wrapper JAR. CI installs Gradle 9.3.1 using the official Gradle setup action instead of calling a missing `./gradlew`.
 
-The workflow installs Android SDK Platform 36 extension 1 and Build Tools 36.0.0, generates a temporary debug keystore on the runner, then runs:
+The build uses Android SDK Platform 36.1 (matching `compileSdk { version = release(36) { minorApiLevel = 1 } }`) and Build Tools 36.0.0. It generates a temporary debug keystore on the runner, then runs:
 
 ```bash
 gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
@@ -19,9 +19,10 @@ On success, the debug APK is available from the run's `mahi-repair-debug-apk` ar
 
 ## Admin Panel workflow
 
-The Admin Panel does not yet have a committed npm lockfile. CI therefore uses `npm install` until a lockfile can be resolved and committed. It runs:
+The Admin Panel does not yet have a committed npm lockfile. CI disables npm cache and upgrades the runner's bundled npm 10 to npm 11 before dependency installation. It runs:
 
 ```bash
+npm install
 npm run check:scaffold
 npm run typecheck
 npm run lint

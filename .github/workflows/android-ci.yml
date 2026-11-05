@@ -38,7 +38,7 @@ jobs:
       - name: Install Android SDK platform and build tools
         id: android-sdk
         run: |
-          sdkmanager "platforms;android-36-ext1" "build-tools;36.0.0"
+          sdkmanager "platforms;android-36.1" "build-tools;36.0.0"
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v6
@@ -99,9 +99,9 @@ jobs:
             echo "- **Run:** [Open full logs]($RUN_URL)"
             echo ""
             if [ "${JOB_RESULT}" = "success" ]; then
-              echo "The Android debug APK is attached to this run as the `mahi-repair-debug-apk` artifact."
+              echo "The Android debug APK is attached to this run as artifact mahi-repair-debug-apk."
             else
-              echo "The build did not complete successfully. Open the run logs and download `android-unit-test-reports` when available."
+              echo "The build did not complete successfully. Open the run logs and download artifact android-unit-test-reports when available."
               echo "::error title=Android CI failed::Check this run's failed step and Android unit-test report artifact."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

@@ -31,6 +31,13 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '22'
+          package-manager-cache: false
+
+      - name: Update npm to stable v11
+        id: npm
+        run: |
+          npm install --global npm@11
+          npm --version
 
       - name: Install Admin Panel dependencies
         id: install
@@ -65,6 +72,7 @@ jobs:
         if: always()
         env:
           JOB_RESULT: ${{ job.status }}
+          NPM_RESULT: ${{ steps.npm.outcome }}
           INSTALL_RESULT: ${{ steps.install.outcome }}
           SCAFFOLD_RESULT: ${{ steps.scaffold.outcome }}
           TYPECHECK_RESULT: ${{ steps.typecheck.outcome }}
@@ -78,6 +86,7 @@ jobs:
             echo "## Admin Panel CI"
             echo ""
             echo "- **Overall:** ${JOB_RESULT}"
+            echo "- **npm setup:** ${NPM_RESULT}"
             echo "- **Dependency installation:** ${INSTALL_RESULT}"
             echo "- **Scaffold/security audit:** ${SCAFFOLD_RESULT}"
             echo "- **TypeScript:** ${TYPECHECK_RESULT}"
