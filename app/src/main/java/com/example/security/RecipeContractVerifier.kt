@@ -70,7 +70,7 @@ object RecipeContractVerifier {
         require(isIntegerInRange(recipe, "version", 1..Int.MAX_VALUE)) { "Invalid recipe version" }
         require(recipe.optString("category") in setOf("network", "apps", "storage", "connectivity", "system", "guides")) { "Invalid category" }
         require(if (recipe.has("minAndroidApi")) isIntegerInRange(recipe, "minAndroidApi", 23..100) else true) { "Invalid Android API requirement" }
-        require(recipe.optString("minAppVersion", "1.0.0").matches(Regex("^\\d+(?:\\.\\d+){0,3}$"))) { "Invalid app version requirement" }
+        require(recipe.optString("minAppVersion", "1.0.0").length <= 30 && recipe.optString("minAppVersion", "1.0.0").matches(Regex("^\\d+(?:\\.\\d+){0,3}$"))) { "Invalid app version requirement" }
         require(if (recipe.has("estimatedSeconds")) isIntegerInRange(recipe, "estimatedSeconds", 1..3600) else true) { "Invalid execution estimate" }
         require(recipe.optString("changelog", "").length <= 2000) { "Invalid changelog" }
 
