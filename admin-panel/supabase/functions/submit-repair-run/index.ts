@@ -14,7 +14,7 @@ const Run = z.object({
     step_id: z.string().min(1).max(80),
     status: z.enum(['SUCCESS', 'FAILED', 'SKIPPED', 'CANCELLED']),
     error_code: ErrorCode.optional(),
-  }).strict()).max(50),
+  }).strict()).min(1).max(50),
   error_code: ErrorCode.optional(),
   app_version: z.string().max(30).regex(/^\d+(?:\.\d+){0,3}$/),
 }).strict().superRefine((value, ctx) => {
@@ -26,6 +26,19 @@ const Run = z.object({
     if (ids.has(step.step_id)) ctx.addIssue({ code: 'custom', path: ['step_results', index, 'step_id'], message: 'Duplicate step result.' });
     ids.add(step.step_id);
   });
+  const statuses = value.step_results.map((step) => step.status);
+  if (value.result === 'SUCCESS' && !statuses.includes('SUCCESS')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A successful run must contain at least one completed recipe step.' });
+  }
+  if (value.result === 'PARTIAL' && (!statuses.includes('FAILED') || !statuses.includes('SUCCESS'))) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A partial run must contain both completed and failed steps.' });
+  }
+  if (value.result === 'FAILED' && !statuses.includes('FAILED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A failed run must contain a failed step or failed precheck.' });
+  }
+  if (value.result === 'CANCELLED' && !statuses.includes('CANCELLED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A cancelled run must contain a cancelled step.' });
+  }
 });
 
 function compareVersions(a: string, b: string): number {
