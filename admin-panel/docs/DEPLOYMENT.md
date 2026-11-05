@@ -18,7 +18,7 @@ cp .env.example .env.local
 Set only these browser-safe values in `.env.local`:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://shwqsljicmhflnvjqjah.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -28,7 +28,7 @@ Do not add `SUPABASE_SERVICE_ROLE_KEY` or `RECIPE_SIGNING_PRIVATE_KEY_PEM` to `.
 ## 3. Apply the database migration
 
 ```bash
-supabase link --project-ref YOUR_PROJECT_REF
+supabase link --project-ref shwqsljicmhflnvjqjah
 supabase db push
 ```
 
@@ -46,7 +46,7 @@ openssl pkey -in recipe-signing-private.pem -pubout -out recipe-signing-public.p
 Store the private key only in Supabase Edge Function secrets. The public key goes in the Android APK as an application resource / pinned constant; never send the private key to Android.
 
 ```bash
-supabase secrets set --project-ref YOUR_PROJECT_REF \
+supabase secrets set --project-ref shwqsljicmhflnvjqjah \
   SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
   SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY \
   SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY \
