@@ -105,10 +105,8 @@ class RecipeExecutionEngine(
                 val requiresConfirmation = stepObj.getBoolean("requiresConfirmation")
 
                 val paramsMap = mutableMapOf<String, Any?>()
-                val paramsSource = when {
-                    else -> stepObj.getJSONObject("params")
-                }
-                if (paramsSource != null) {
+                val paramsSource = stepObj.getJSONObject("params")
+                run {
                     val keys = paramsSource.keys()
                     while (keys.hasNext()) {
                         val key = keys.next()
