@@ -553,7 +553,7 @@ class RecipeExecutionEngine(
 
         // 5. Build Final Diagnosis
         val finalDiagnosis = when (overallResult) {
-            RepairRunResult.SUCCESS -> "All repair and diagnostic steps passed successfully. Device issue resolved."
+            RepairRunResult.SUCCESS -> "All configured checks and guided steps completed successfully."
             RepairRunResult.PARTIAL -> "Some non-critical steps encountered errors, but required diagnostics succeeded."
             RepairRunResult.FAILED -> {
                 val failedStep = stepRecords.firstOrNull { it.status == StepStatus.FAILED }
