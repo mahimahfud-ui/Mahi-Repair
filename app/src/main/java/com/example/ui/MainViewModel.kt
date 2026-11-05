@@ -29,7 +29,6 @@ data class MainUiState(
     val syncStatusMessage: String? = null,
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
     val showHistoryDialog: Boolean = false,
-    val showBackendConfigDialog: Boolean = false,
     val historyList: List<RepairHistoryEntity> = emptyList(),
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
@@ -49,7 +48,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSyncing = MutableStateFlow(false)
     private val _syncStatusMessage = MutableStateFlow<String?>(null)
     private val _showHistoryDialog = MutableStateFlow(false)
-    private val _showBackendConfigDialog = MutableStateFlow(false)
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
@@ -64,7 +62,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _syncStatusMessage,
         engine.engineState,
         _showHistoryDialog,
-        _showBackendConfigDialog,
         _authStatusMessage,
         _isAuthLoading,
         _otpSentForEmail
@@ -79,10 +76,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val syncMsg = params[6] as String?
         val execState = params[7] as ExecutionEvent
         val showHistory = params[8] as Boolean
-        val showConfig = params[9] as Boolean
-        val authMsg = params[10] as String?
-        val authLoading = params[11] as Boolean
-        val otpEmail = params[12] as String?
+        val authMsg = params[9] as String?
+        val authLoading = params[10] as Boolean
+        val otpEmail = params[11] as String?
 
         val filtered = allTools.filter { tool ->
             val matchesCategory = category == ToolCategory.ALL || tool.category == category
@@ -104,7 +100,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             syncStatusMessage = syncMsg,
             executionState = execState,
             showHistoryDialog = showHistory,
-            showBackendConfigDialog = showConfig,
             authStatusMessage = authMsg,
             isAuthLoading = authLoading,
             otpSentForEmail = otpEmail
@@ -177,10 +172,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _showHistoryDialog.value = show
     }
 
-    fun setShowBackendConfigDialog(show: Boolean) {
-        _showBackendConfigDialog.value = show
-    }
-
     fun getHistoryFlow() = historyRepo.getHistoryFlow(uiState.value.session.email.ifBlank { "friend@mahirepair.local" })
 
     fun onRequestEmailOtp(email: String) {
@@ -220,15 +211,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             authRepo.signOut()
             _otpSentForEmail.value = null
             _authStatusMessage.value = "Signed out successfully."
-        }
-    }
-
-    fun onSaveCustomBackend(url: String, key: String) {
-        viewModelScope.launch {
-            app.supabaseClient.updateConfig(url, key)
-            app.preferencesManager.saveCustomBackend(url, key)
-            _showBackendConfigDialog.value = false
-            onSync()
         }
     }
 
