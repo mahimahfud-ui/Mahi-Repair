@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -177,18 +176,6 @@ fun MainScreen(
                         )
                     }
 
-                    // Connection Settings
-                    IconButton(
-                        onClick = { viewModel.setShowBackendConfigDialog(true) },
-                        modifier = Modifier.testTag("backend_config_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Connection",
-                            tint = MahiTextSecondary
-                        )
-                    }
-
                     // Sign Out
                     if (state.session.isAuthenticated) {
                         IconButton(
@@ -226,7 +213,7 @@ fun MainScreen(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { viewModel.setShowBackendConfigDialog(true) }
+                        modifier = Modifier
                     ) {
                         Box(
                             modifier = Modifier
@@ -235,7 +222,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Mahi Cloud Backend",
+                            text = "Repair tools",
                             color = MahiTextSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
@@ -420,11 +407,4 @@ fun MainScreen(
         )
     }
 
-    // Backend Connection Config Dialog Modal
-    if (state.showBackendConfigDialog) {
-        BackendConfigDialog(
-            viewModel = viewModel,
-            onDismiss = { viewModel.setShowBackendConfigDialog(false) }
-        )
-    }
 }
