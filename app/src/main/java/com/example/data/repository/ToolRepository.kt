@@ -16,13 +16,14 @@ import com.example.domain.models.StepStatus
 import com.example.domain.models.ToolCategory
 import com.example.security.RecipeContractVerifier
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 class ToolRepository(
     private val database: AppDatabase,
@@ -32,7 +33,8 @@ class ToolRepository(
 ) {
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
-    private val recipeSlugsByToolId = ConcurrentHashMap<String, String>()
+    private val recipeSlugsByToolId = MutableStateFlow<Map<String, String>>(emptyMap())
+    private companion object { const val PRIMARY_REPAIR_SLUG = "run-repair" }
     private val syncMutex = Mutex()
     private val deviceRegistrationMutex = Mutex()
 
@@ -40,6 +42,13 @@ class ToolRepository(
 
     val toolsFlow: Flow<List<RepairTool>> = toolDao.getEnabledToolsFlow().map { entities ->
         entities.map { it.toDomain() }
+    }
+
+    /** Only the canonical owner-published Run Repair recipe is exposed to the ordinary app. */
+    val primaryRepairToolFlow: Flow<RepairTool?> = combine(
+        toolDao.getEnabledToolsFlow(), recipeSlugsByToolId
+    ) { entities, slugs ->
+        entities.firstOrNull { slugs[it.id] == PRIMARY_REPAIR_SLUG }?.toDomain()
     }
 
     /**
@@ -124,7 +133,7 @@ class ToolRepository(
             val dtos = remoteResult.getOrThrow()
             val now = System.currentTimeMillis()
             val nextRecipeSlugs = mutableMapOf<String, String>()
-            val entities = dtos.map { dto ->
+            val entities = dtos.mapNotNull { dto ->
                 UUID.fromString(dto.toolId)
                 val recipe = verifiedPayload(
                     signedPayload = dto.signedPayload,
@@ -132,7 +141,9 @@ class ToolRepository(
                     signatureAlgorithm = dto.signatureAlgorithm,
                     expectedVersion = dto.version
                 )
-                nextRecipeSlugs[dto.toolId] = recipe.getString("toolId")
+                val recipeSlug = recipe.getString("toolId")
+                if (recipeSlug != PRIMARY_REPAIR_SLUG) return@mapNotNull null
+                nextRecipeSlugs[dto.toolId] = recipeSlug
                 val category = recipe.getString("category")
                 val minAndroidApi = recipe.optInt("minAndroidApi", 23)
                 val minAppVersionText = recipe.optString("minAppVersion", "1.0.0")
@@ -163,8 +174,7 @@ class ToolRepository(
             // Do not replace a verified local catalog unless every remote entry passed verification.
             toolDao.clearAll()
             if (entities.isNotEmpty()) toolDao.insertTools(entities)
-            recipeSlugsByToolId.clear()
-            recipeSlugsByToolId.putAll(nextRecipeSlugs)
+            recipeSlugsByToolId.value = nextRecipeSlugs
             preferencesManager.updateLastSyncTime(now)
             Result.success(entities.size)
         } catch (error: Exception) {
@@ -194,9 +204,9 @@ class ToolRepository(
                 signatureAlgorithm = signed.signatureAlgorithm,
                 expectedVersion = signed.version
             )
-            val expectedSlug = recipeSlugsByToolId[toolId]
+            val expectedSlug = recipeSlugsByToolId.value[toolId]
                 ?: throw IllegalStateException("Refresh the repair list before running this repair.")
-            if (recipe.getString("toolId") != expectedSlug) {
+            if (expectedSlug != PRIMARY_REPAIR_SLUG || recipe.getString("toolId") != PRIMARY_REPAIR_SLUG) {
                 throw IllegalArgumentException("The repair release does not match the selected repair.")
             }
             Result.success(signed.signedPayload to signed.signature)
@@ -205,26 +215,27 @@ class ToolRepository(
         }
     }
 
-    suspend fun recordRepairRun(report: RepairRunReport) {
-        val entity = RepairHistoryEntity(
-            id = report.runId,
-            toolId = report.toolId,
-            toolName = report.toolName,
-            toolVersion = report.toolVersion,
-            timestamp = report.endTime,
-            durationMs = report.endTime - report.startTime,
-            result = report.result.name,
-            diagnosis = report.finalDiagnosis,
-            userEmail = report.userEmail
-        )
-        historyDao.insertRecord(entity)
+    suspend fun recordRepairRun(report: RepairRunReport): Result<Unit> {
+        return try {
+            val entity = RepairHistoryEntity(
+                id = report.runId,
+                toolId = report.toolId,
+                toolName = report.toolName,
+                toolVersion = report.toolVersion,
+                timestamp = report.endTime,
+                durationMs = report.endTime - report.startTime,
+                result = report.result.name,
+                diagnosis = report.finalDiagnosis,
+                userEmail = report.userEmail
+            )
+            historyDao.insertRecord(entity)
 
-        if (!supabaseClient.isConfigured()) return
-        val sessionResult = authRepository.getValidSession()
-        if (sessionResult.isFailure) return
-
-        runCatching {
-            val session = sessionResult.getOrThrow()
+            if (!supabaseClient.isConfigured()) {
+                throw IllegalStateException("The repair report cannot be sent right now.")
+            }
+            val session = authRepository.getValidSession().getOrElse { cause ->
+                throw IllegalStateException("The session expired before the report could be sent.", cause)
+            }
             val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val stepResults = report.stepRecords.map { record ->
                 val status = when (record.status) {
@@ -253,6 +264,9 @@ class ToolRepository(
                 appVersion = BuildConfig.VERSION_NAME
             )
             supabaseClient.submitRepairRun(request, session.token).getOrThrow()
+            Result.success(Unit)
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
