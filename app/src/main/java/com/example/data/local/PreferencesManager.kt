@@ -91,15 +91,24 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SESSION_EXPIRES_AT = longPreferencesKey("session_expires_at")
         private val KEY_LAST_SYNC = longPreferencesKey("last_sync_timestamp")
         private val KEY_DEVICE_ID = stringPreferencesKey("registered_device_id")
+        private val KEY_DEVICE_OWNER_EMAIL = stringPreferencesKey("registered_device_owner_email")
     }
 
     val deviceIdFlow: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[KEY_DEVICE_ID]?.takeIf { it.isNotBlank() }
     }
 
-    suspend fun saveDeviceId(deviceId: String) {
+    suspend fun saveDeviceId(deviceId: String, ownerEmail: String) {
         require(deviceId.isNotBlank()) { "Server-issued device ID is required" }
-        context.dataStore.edit { prefs -> prefs[KEY_DEVICE_ID] = deviceId.trim() }
+        require(ownerEmail.isNotBlank()) { "Device owner email is required" }
+        context.dataStore.edit { prefs ->
+            prefs[KEY_DEVICE_ID] = deviceId.trim()
+            prefs[KEY_DEVICE_OWNER_EMAIL] = ownerEmail.trim().lowercase()
+        }
+    }
+
+    val deviceOwnerEmailFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DEVICE_OWNER_EMAIL]
     }
 
     suspend fun clearDeviceId() {
