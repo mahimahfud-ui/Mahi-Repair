@@ -46,13 +46,15 @@ class ToolRepository(
      * Device identifiers are issued by Supabase. A random local UUID is never an
      * acceptable substitute because it would bypass server-side device ownership checks.
      */
-    private suspend fun ensureRegisteredDeviceId(accessToken: String): String =
+    private suspend fun ensureRegisteredDeviceId(accessToken: String, ownerEmail: String): String =
         deviceRegistrationMutex.withLock {
             val savedId = preferencesManager.deviceIdFlow.first()
-            if (!savedId.isNullOrBlank()) {
+            val savedOwner = preferencesManager.deviceOwnerEmailFlow.first()
+            if (!savedId.isNullOrBlank() && savedOwner.equals(ownerEmail, ignoreCase = true)) {
                 UUID.fromString(savedId)
                 return@withLock savedId
             }
+            if (!savedId.isNullOrBlank()) preferencesManager.clearDeviceId()
 
             val request = RegisterDeviceRequest(
                 deviceId = null,
@@ -68,7 +70,7 @@ class ToolRepository(
                 ?: throw IllegalStateException("The repair service returned an invalid device identity.")
 
             UUID.fromString(deviceId)
-            preferencesManager.saveDeviceId(deviceId)
+            preferencesManager.saveDeviceId(deviceId, ownerEmail)
             deviceId
         }
 
@@ -112,7 +114,7 @@ class ToolRepository(
 
         try {
             val session = sessionResult.getOrThrow()
-            val deviceId = ensureRegisteredDeviceId(session.token)
+            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val remoteResult = supabaseClient.getMyRepairTools(deviceId, session.token)
             if (remoteResult.isFailure) {
                 throw remoteResult.exceptionOrNull()
