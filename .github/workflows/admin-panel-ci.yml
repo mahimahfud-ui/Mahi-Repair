@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: admin-panel-ci-${{ github.ref }}
+    group: admin-panel-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
