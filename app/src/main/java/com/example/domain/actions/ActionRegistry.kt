@@ -2,6 +2,7 @@ package com.example.domain.actions
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -36,32 +37,101 @@ enum class UserActionType {
 }
 
 /**
- * Registry of allowlisted native repair actions.
- * Any unallowlisted action or unsafe script is rejected with an error.
+ * Registry of allowlisted native repair actions conforming to repair-recipe-v1.
+ * Any unallowlisted action or unsafe script is strictly rejected.
  */
 class ActionRegistry(private val context: Context) {
 
+    private fun getStringParam(params: Map<String, Any?>, vararg keys: String): String? {
+        for (k in keys) {
+            val v = params[k]
+            if (v is String && v.isNotBlank()) return v.trim()
+        }
+        return null
+    }
+
+    private fun getIntParam(params: Map<String, Any?>, vararg keys: String): Int? {
+        for (k in keys) {
+            val v = params[k]
+            if (v is Number) return v.toInt()
+            if (v is String) v.toIntOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    private fun getLongParam(params: Map<String, Any?>, vararg keys: String): Long? {
+        for (k in keys) {
+            val v = params[k]
+            if (v is Number) return v.toLong()
+            if (v is String) v.toLongOrNull()?.let { return it }
+        }
+        return null
+    }
+
     /**
      * Validates that the step contains a known allowlisted action
-     * and that all required parameters are present.
+     * and that all required parameters are present and conform to constraints.
      */
     fun validateStep(step: RecipeStep): Result<Unit> {
         val action = step.action
+        val p = step.params
         return when (action) {
             ActionType.CHECK_APP_INSTALLED,
             ActionType.OPEN_APP,
             ActionType.OPEN_APP_DETAILS -> {
-                val pkg = step.parameters["package_name"] as? String
+                val pkg = getStringParam(p, "packageName", "package_name")
                 if (pkg.isNullOrBlank()) {
-                    Result.failure(IllegalArgumentException("Action ${action.identifier} requires non-empty 'package_name'"))
+                    Result.failure(IllegalArgumentException("Action ${action.identifier} requires non-empty 'packageName'"))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            ActionType.DNS_LOOKUP,
+            ActionType.VERIFY_DNS -> {
+                val host = getStringParam(p, "host", "hostname", "domain")
+                if (host.isNullOrBlank()) {
+                    Result.failure(IllegalArgumentException("Action ${action.identifier} requires non-empty 'host'"))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            ActionType.HTTPS_PROBE -> {
+                val host = getStringParam(p, "host", "url")
+                if (host.isNullOrBlank()) {
+                    Result.failure(IllegalArgumentException("Action HTTPS_PROBE requires non-empty 'host'"))
                 } else {
                     Result.success(Unit)
                 }
             }
             ActionType.SHOW_GUIDE -> {
-                val title = step.parameters["guide_title"] as? String ?: step.name
+                val title = getStringParam(p, "title", "guide_title") ?: step.name
                 if (title.isBlank()) {
-                    Result.failure(IllegalArgumentException("Action SHOW_GUIDE requires 'guide_title' or step name"))
+                    Result.failure(IllegalArgumentException("Action SHOW_GUIDE requires 'title' or step name"))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            ActionType.OPEN_ANDROID_SETTINGS -> {
+                val screen = getStringParam(p, "screen", "setting_type")
+                if (screen.isNullOrBlank()) {
+                    Result.failure(IllegalArgumentException("Action OPEN_ANDROID_SETTINGS requires 'screen'"))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            ActionType.ASK_USER_CONFIRMATION -> {
+                val title = getStringParam(p, "title") ?: step.name
+                val message = getStringParam(p, "message")
+                if (title.isBlank() || message.isNullOrBlank()) {
+                    Result.failure(IllegalArgumentException("Action ASK_USER_CONFIRMATION requires 'title' and 'message'"))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            ActionType.REQUEST_OWN_APP_PERMISSION -> {
+                val permission = getStringParam(p, "permission")
+                if (permission.isNullOrBlank()) {
+                    Result.failure(IllegalArgumentException("Action REQUEST_OWN_APP_PERMISSION requires 'permission'"))
                 } else {
                     Result.success(Unit)
                 }
@@ -77,18 +147,18 @@ class ActionRegistry(private val context: Context) {
         try {
             when (step.action) {
                 ActionType.CHECK_INTERNET -> executeCheckInternet()
-                ActionType.DNS_LOOKUP -> executeDnsLookup(step.parameters)
-                ActionType.HTTPS_PROBE -> executeHttpsProbe(step.parameters)
-                ActionType.CHECK_APP_INSTALLED -> executeCheckAppInstalled(step.parameters)
-                ActionType.CHECK_STORAGE -> executeCheckStorage(step.parameters)
-                ActionType.OPEN_APP -> executeOpenApp(step.parameters)
-                ActionType.OPEN_APP_DETAILS -> executeOpenAppDetails(step.parameters)
-                ActionType.OPEN_ANDROID_SETTINGS -> executeOpenAndroidSettings(step.parameters)
-                ActionType.SHOW_GUIDE -> executeShowGuide(step.parameters, step.name)
-                ActionType.ASK_USER_CONFIRMATION -> executeAskConfirmation(step.parameters, step.name)
-                ActionType.REQUEST_OWN_APP_PERMISSION -> executeRequestPermission(step.parameters)
-                ActionType.VERIFY_INTERNET -> executeVerifyInternet(step.parameters)
-                ActionType.VERIFY_DNS -> executeVerifyDns(step.parameters)
+                ActionType.DNS_LOOKUP -> executeDnsLookup(step.params)
+                ActionType.HTTPS_PROBE -> executeHttpsProbe(step.params)
+                ActionType.CHECK_APP_INSTALLED -> executeCheckAppInstalled(step.params)
+                ActionType.CHECK_STORAGE -> executeCheckStorage(step.params)
+                ActionType.OPEN_APP -> executeOpenApp(step.params)
+                ActionType.OPEN_APP_DETAILS -> executeOpenAppDetails(step.params)
+                ActionType.OPEN_ANDROID_SETTINGS -> executeOpenAndroidSettings(step.params)
+                ActionType.SHOW_GUIDE -> executeShowGuide(step.params, step.name)
+                ActionType.ASK_USER_CONFIRMATION -> executeAskConfirmation(step.params, step.name)
+                ActionType.REQUEST_OWN_APP_PERMISSION -> executeRequestPermission(step.params)
+                ActionType.VERIFY_INTERNET -> executeVerifyInternet(step.params)
+                ActionType.VERIFY_DNS -> executeVerifyDns(step.params)
             }
         } catch (e: Exception) {
             ActionResult(
@@ -158,18 +228,18 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 2: DNS_LOOKUP ---
     private fun executeDnsLookup(params: Map<String, Any?>): ActionResult {
-        val hostname = (params["hostname"] as? String)?.trim() ?: "google.com"
+        val host = getStringParam(params, "host", "hostname") ?: "google.com"
         val startTime = System.currentTimeMillis()
         return try {
-            val addresses = InetAddress.getAllByName(hostname)
+            val addresses = InetAddress.getAllByName(host)
             val duration = System.currentTimeMillis() - startTime
             val ipList = addresses.joinToString(", ") { it.hostAddress ?: "" }
 
             ActionResult(
                 status = StepStatus.COMPLETED,
-                message = "Resolved $hostname in ${duration}ms ($ipList)",
+                message = "Resolved $host in ${duration}ms ($ipList)",
                 details = mapOf(
-                    "hostname" to hostname,
+                    "host" to host,
                     "ips" to ipList,
                     "durationMs" to duration.toString()
                 )
@@ -178,9 +248,9 @@ class ActionRegistry(private val context: Context) {
             val duration = System.currentTimeMillis() - startTime
             ActionResult(
                 status = StepStatus.FAILED,
-                message = "DNS resolution failed for $hostname (${e.localizedMessage})",
+                message = "DNS resolution failed for $host (${e.localizedMessage})",
                 details = mapOf(
-                    "hostname" to hostname,
+                    "host" to host,
                     "durationMs" to duration.toString(),
                     "error" to (e.message ?: "Unknown DNS error")
                 )
@@ -190,8 +260,14 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 3: HTTPS_PROBE ---
     private fun executeHttpsProbe(params: Map<String, Any?>): ActionResult {
-        val targetUrl = (params["url"] as? String)?.trim() ?: "https://www.google.com/generate_204"
-        val timeoutMs = (params["timeout_ms"] as? Number)?.toInt() ?: 6000
+        val targetUrl = if (params.containsKey("url")) {
+            params["url"] as? String ?: "https://www.google.com/generate_204"
+        } else {
+            val host = getStringParam(params, "host") ?: "www.google.com"
+            val path = getStringParam(params, "path") ?: "/generate_204"
+            "https://$host$path"
+        }
+        val timeoutMs = getIntParam(params, "timeoutMs", "timeout_ms") ?: 6000
         val startTime = System.currentTimeMillis()
 
         var connection: HttpURLConnection? = null
@@ -246,12 +322,12 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 4: CHECK_APP_INSTALLED ---
     private fun executeCheckAppInstalled(params: Map<String, Any?>): ActionResult {
-        val packageName = (params["package_name"] as? String)?.trim()
-            ?: return ActionResult(StepStatus.FAILED, "Missing package_name parameter")
+        val packageName = getStringParam(params, "packageName", "package_name")
+            ?: return ActionResult(StepStatus.FAILED, "Missing packageName parameter")
 
         return try {
             val pm = context.packageManager
-            val packageInfo = pm.getPackageInfo(packageName, 0)
+            val packageInfo: PackageInfo = pm.getPackageInfo(packageName, 0)
             val appName = packageInfo.applicationInfo?.loadLabel(pm)?.toString() ?: packageName
             val versionName = packageInfo.versionName ?: "unknown"
 
@@ -284,7 +360,7 @@ class ActionRegistry(private val context: Context) {
             val totalMb = bytesTotal / (1024 * 1024)
             val percentFree = ((bytesAvailable.toDouble() / bytesTotal.toDouble()) * 100).toInt()
 
-            val minFreeMb = (params["min_free_mb"] as? Number)?.toLong() ?: 500L
+            val minFreeMb = getLongParam(params, "minimumAvailableMb", "min_free_mb") ?: 500L
 
             if (freeMb < minFreeMb) {
                 ActionResult(
@@ -318,8 +394,8 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 6: OPEN_APP ---
     private fun executeOpenApp(params: Map<String, Any?>): ActionResult {
-        val packageName = (params["package_name"] as? String)?.trim()
-            ?: return ActionResult(StepStatus.FAILED, "Missing package_name parameter")
+        val packageName = getStringParam(params, "packageName", "package_name")
+            ?: return ActionResult(StepStatus.FAILED, "Missing packageName parameter")
 
         val pm = context.packageManager
         val launchIntent = pm.getLaunchIntentForPackage(packageName)
@@ -341,8 +417,8 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 7: OPEN_APP_DETAILS ---
     private fun executeOpenAppDetails(params: Map<String, Any?>): ActionResult {
-        val packageName = (params["package_name"] as? String)?.trim()
-            ?: return ActionResult(StepStatus.FAILED, "Missing package_name parameter")
+        val packageName = getStringParam(params, "packageName", "package_name")
+            ?: return ActionResult(StepStatus.FAILED, "Missing packageName parameter")
 
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", packageName, null)
@@ -350,7 +426,7 @@ class ActionRegistry(private val context: Context) {
         }
         context.startActivity(intent)
 
-        val guideMessage = (params["instruction"] as? String)
+        val guideMessage = getStringParam(params, "instruction")
             ?: "Opened App Info for $packageName. Tap 'Storage & cache' -> 'Clear cache'."
 
         return ActionResult(
@@ -362,14 +438,18 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 8: OPEN_ANDROID_SETTINGS ---
     private fun executeOpenAndroidSettings(params: Map<String, Any?>): ActionResult {
-        val settingType = (params["setting_type"] as? String)?.uppercase() ?: "GENERAL"
-        val intent = when (settingType) {
-            "WIFI" -> Intent(Settings.ACTION_WIFI_SETTINGS)
-            "WIRELESS", "NETWORK" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
-            "DATE" -> Intent(Settings.ACTION_DATE_SETTINGS)
-            "STORAGE" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
-            "APPLICATION", "APPS" -> Intent(Settings.ACTION_APPLICATION_SETTINGS)
-            "DATA_ROAMING" -> Intent(Settings.ACTION_DATA_ROAMING_SETTINGS)
+        val screen = (getStringParam(params, "screen", "setting_type") ?: "general").lowercase()
+        val intent = when (screen) {
+            "wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
+            "internet", "wireless", "network" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
+            "bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            "display" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+            "sound" -> Intent(Settings.ACTION_SOUND_SETTINGS)
+            "app_notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+            "date_time", "date" -> Intent(Settings.ACTION_DATE_SETTINGS)
+            "storage" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
             else -> Intent(Settings.ACTION_SETTINGS)
         }.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -378,16 +458,19 @@ class ActionRegistry(private val context: Context) {
         context.startActivity(intent)
         return ActionResult(
             status = StepStatus.COMPLETED,
-            message = "Navigated to Android $settingType settings.",
-            details = mapOf("settingType" to settingType)
+            message = "Navigated to Android $screen settings.",
+            details = mapOf("screen" to screen)
         )
     }
 
     // --- Action 9: SHOW_GUIDE ---
     private fun executeShowGuide(params: Map<String, Any?>, fallbackTitle: String): ActionResult {
-        val title = (params["guide_title"] as? String) ?: fallbackTitle
-        val description = (params["guide_description"] as? String) ?: ""
-        val steps = (params["guide_steps"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+        val title = getStringParam(params, "title", "guide_title") ?: fallbackTitle
+        val description = getStringParam(params, "description", "guide_description") ?: ""
+        val steps = (params["instructions"] as? List<*>)
+            ?: (params["guide_steps"] as? List<*>)
+            ?: emptyList<Any?>()
+        val stepsList = steps.mapNotNull { it?.toString() }
 
         return ActionResult(
             status = StepStatus.WAITING_USER,
@@ -397,17 +480,17 @@ class ActionRegistry(private val context: Context) {
             userActionPayload = mapOf(
                 "title" to title,
                 "description" to description,
-                "steps" to steps.joinToString("|||")
+                "steps" to stepsList.joinToString("|||")
             )
         )
     }
 
     // --- Action 10: ASK_USER_CONFIRMATION ---
     private fun executeAskConfirmation(params: Map<String, Any?>, fallbackTitle: String): ActionResult {
-        val title = (params["title"] as? String) ?: fallbackTitle
-        val message = (params["message"] as? String)
+        val title = getStringParam(params, "title") ?: fallbackTitle
+        val message = getStringParam(params, "message")
             ?: "Do you want to proceed with this diagnostic step?"
-        val explanation = (params["explanation"] as? String) ?: ""
+        val confirmLabel = getStringParam(params, "confirmLabel") ?: "Continue"
 
         return ActionResult(
             status = StepStatus.WAITING_USER,
@@ -417,37 +500,57 @@ class ActionRegistry(private val context: Context) {
             userActionPayload = mapOf(
                 "title" to title,
                 "message" to message,
-                "explanation" to explanation
+                "confirmLabel" to confirmLabel
             )
         )
     }
 
     // --- Action 11: REQUEST_OWN_APP_PERMISSION ---
     private fun executeRequestPermission(params: Map<String, Any?>): ActionResult {
-        val permission = (params["permission"] as? String)?.trim()
-            ?: "android.permission.ACCESS_NETWORK_STATE"
+        val permissionName = getStringParam(params, "permission") ?: "POST_NOTIFICATIONS"
+        val androidPermission = when (permissionName) {
+            "POST_NOTIFICATIONS" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                android.Manifest.permission.POST_NOTIFICATIONS
+            } else null
+            "CAMERA" -> android.Manifest.permission.CAMERA
+            "ACCESS_FINE_LOCATION" -> android.Manifest.permission.ACCESS_FINE_LOCATION
+            "READ_MEDIA_IMAGES" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                android.Manifest.permission.READ_MEDIA_IMAGES
+            } else {
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+            else -> permissionName
+        }
 
-        val isGranted = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        if (androidPermission == null) {
+            return ActionResult(
+                status = StepStatus.COMPLETED,
+                message = "Permission $permissionName is not required on this Android version.",
+                details = mapOf("permission" to permissionName, "granted" to "true")
+            )
+        }
+
+        val isGranted = ContextCompat.checkSelfPermission(context, androidPermission) == PackageManager.PERMISSION_GRANTED
         return if (isGranted) {
             ActionResult(
                 status = StepStatus.COMPLETED,
-                message = "Permission $permission is granted.",
-                details = mapOf("permission" to permission, "granted" to "true")
+                message = "Permission $permissionName is granted.",
+                details = mapOf("permission" to permissionName, "granted" to "true")
             )
         } else {
             ActionResult(
                 status = StepStatus.WAITING_USER,
-                message = "Permission $permission requires user approval.",
+                message = "Permission $permissionName requires user approval.",
                 requiresUserAction = true,
                 userActionType = UserActionType.PERMISSION,
-                userActionPayload = mapOf("permission" to permission)
+                userActionPayload = mapOf("permission" to permissionName, "androidPermission" to androidPermission)
             )
         }
     }
 
     // --- Action 12: VERIFY_INTERNET ---
     private fun executeVerifyInternet(params: Map<String, Any?>): ActionResult {
-        val testHost = (params["host"] as? String) ?: "clients3.google.com"
+        val testHost = getStringParam(params, "host") ?: "clients3.google.com"
         val startTime = System.currentTimeMillis()
         return try {
             val addresses = InetAddress.getAllByName(testHost)
@@ -489,7 +592,7 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 13: VERIFY_DNS ---
     private fun executeVerifyDns(params: Map<String, Any?>): ActionResult {
-        val targetDomain = (params["domain"] as? String) ?: "dns.google"
+        val targetDomain = getStringParam(params, "host", "domain") ?: "dns.google"
         return try {
             val addresses = InetAddress.getAllByName(targetDomain)
             if (addresses.isNotEmpty()) {
@@ -497,20 +600,20 @@ class ActionRegistry(private val context: Context) {
                 ActionResult(
                     status = StepStatus.COMPLETED,
                     message = "DNS verification confirmed for $targetDomain ($ipSummary).",
-                    details = mapOf("verified" to "true", "domain" to targetDomain, "ips" to ipSummary)
+                    details = mapOf("verified" to "true", "host" to targetDomain, "ips" to ipSummary)
                 )
             } else {
                 ActionResult(
                     status = StepStatus.FAILED,
                     message = "DNS verification failed: no IP resolved for $targetDomain.",
-                    details = mapOf("verified" to "false", "domain" to targetDomain)
+                    details = mapOf("verified" to "false", "host" to targetDomain)
                 )
             }
         } catch (e: Exception) {
             ActionResult(
                 status = StepStatus.FAILED,
                 message = "DNS verification failed for $targetDomain: ${e.localizedMessage}",
-                details = mapOf("verified" to "false", "domain" to targetDomain, "error" to (e.message ?: ""))
+                details = mapOf("verified" to "false", "host" to targetDomain, "error" to (e.message ?: ""))
             )
         }
     }

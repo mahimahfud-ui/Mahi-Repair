@@ -34,54 +34,86 @@ data class AuthUser(
 )
 
 @JsonClass(generateAdapter = true)
-data class RemoteToolDto(
-    val id: String,
-    val name: String,
-    val description: String,
-    val category: String,
-    val version: String,
-    @Json(name = "problem_description") val problemDescription: String,
-    @Json(name = "min_app_version") val minAppVersion: Int = 1,
-    @Json(name = "min_android_sdk") val minAndroidSdk: Int = 26,
-    @Json(name = "is_new") val isNew: Boolean = false,
-    val enabled: Boolean = true,
-    @Json(name = "target_package") val targetPackage: String? = null,
-    @Json(name = "raw_signed_payload") val rawSignedPayload: String? = null,
-    @Json(name = "signature_base64") val signatureBase64: String? = null,
-    @Json(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
+data class RegisterDeviceRequest(
+    @Json(name = "device_id") val deviceId: String? = null,
+    @Json(name = "device_label") val deviceLabel: String? = null,
+    @Json(name = "app_version") val appVersion: String,
+    @Json(name = "android_version") val androidVersion: String,
+    @Json(name = "android_api") val androidApi: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class RegisterDeviceData(
+    @Json(name = "device_id") val deviceId: String,
+    val registered: Boolean
+)
+
+@JsonClass(generateAdapter = true)
+data class RegisterDeviceResponse(
+    val data: RegisterDeviceData
+)
+
+@JsonClass(generateAdapter = true)
+data class GetToolsRequest(
+    @Json(name = "device_id") val deviceId: String
+)
+
+@JsonClass(generateAdapter = true)
+data class RemoteSignedToolDto(
+    @Json(name = "tool_id") val toolId: String,
+    val version: Int,
+    @Json(name = "signed_payload") val signedPayload: String,
+    val signature: String,
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    @Json(name = "published_at") val publishedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class GetToolsResponse(
+    val data: List<RemoteSignedToolDto>
+)
+
+@JsonClass(generateAdapter = true)
+data class GetSignedToolRequest(
+    @Json(name = "tool_id") val toolId: String,
+    @Json(name = "device_id") val deviceId: String
 )
 
 @JsonClass(generateAdapter = true)
 data class SignedRecipeResponse(
-    @Json(name = "tool_id") val toolId: String,
-    @Json(name = "version") val version: String,
     @Json(name = "signed_payload") val signedPayload: String,
-    @Json(name = "signature_base64") val signatureBase64: String,
-    @Json(name = "public_key_fingerprint") val publicKeyFingerprint: String? = null
+    val signature: String,
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    val version: Int
 )
 
 @JsonClass(generateAdapter = true)
-data class RepairRunReportRequest(
-    @Json(name = "run_id") val runId: String,
-    @Json(name = "tool_id") val toolId: String,
-    @Json(name = "tool_name") val toolName: String,
-    @Json(name = "tool_version") val toolVersion: String,
-    @Json(name = "user_email") val userEmail: String,
-    @Json(name = "device_model") val deviceModel: String,
-    @Json(name = "android_sdk") val androidSdk: Int,
-    @Json(name = "start_time") val startTime: Long,
-    @Json(name = "end_time") val endTime: Long,
-    val result: String,
-    @Json(name = "final_diagnosis") val finalDiagnosis: String,
-    @Json(name = "steps") val steps: List<StepReportDto>
-)
-
-@JsonClass(generateAdapter = true)
-data class StepReportDto(
+data class StepRunResultDto(
     @Json(name = "step_id") val stepId: String,
-    val action: String,
-    val title: String,
     val status: String,
-    val message: String,
-    @Json(name = "duration_ms") val durationMs: Long
+    @Json(name = "error_code") val errorCode: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SubmitRunRequest(
+    @Json(name = "device_id") val deviceId: String,
+    @Json(name = "tool_id") val toolId: String,
+    @Json(name = "tool_version") val toolVersion: Int,
+    @Json(name = "started_at") val startedAt: String,
+    @Json(name = "completed_at") val completedAt: String? = null,
+    val result: String,
+    @Json(name = "step_results") val stepResults: List<StepRunResultDto>,
+    @Json(name = "error_code") val errorCode: String? = null,
+    @Json(name = "app_version") val appVersion: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SubmitRunData(
+    @Json(name = "run_id") val runId: String,
+    val accepted: Boolean
+)
+
+@JsonClass(generateAdapter = true)
+data class SubmitRunResponse(
+    val data: SubmitRunData
 )

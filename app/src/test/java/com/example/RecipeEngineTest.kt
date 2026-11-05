@@ -94,9 +94,53 @@ class RecipeEngineTest {
 
         assertTrue(result.isSuccess)
         val recipe = result.getOrThrow()
-        assertEquals("tool_youtube_repair", recipe.toolId)
+        assertEquals("tool-youtube-repair", recipe.toolId)
         assertTrue(recipe.steps.isNotEmpty())
         assertEquals(ActionType.CHECK_INTERNET, recipe.steps[0].action)
+    }
+
+    @Test
+    fun `test step condition parsing and evaluation`() {
+        val conditionJson = """
+        {
+          "schemaVersion": 1,
+          "toolId": "tool-conditional-check",
+          "title": "Conditional Diagnostics",
+          "version": 1,
+          "category": "network",
+          "minAndroidApi": 26,
+          "steps": [
+            {
+              "id": "step-net",
+              "action": "CHECK_INTERNET",
+              "params": {},
+              "risk": "read_only",
+              "requiresConfirmation": false
+            },
+            {
+              "id": "step-probe",
+              "action": "HTTPS_PROBE",
+              "params": {
+                "host": "www.google.com"
+              },
+              "risk": "read_only",
+              "requiresConfirmation": false,
+              "condition": {
+                "previousStep": "step-net",
+                "equals": "success"
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val parsed = engine.parseRecipeJson(conditionJson)
+        assertTrue(parsed.isSuccess)
+        val recipe = parsed.getOrThrow()
+        assertEquals(2, recipe.steps.size)
+        assertNotNull(recipe.steps[1].condition)
+        assertEquals("step-net", recipe.steps[1].condition?.previousStep)
+        assertEquals("success", recipe.steps[1].condition?.equals)
     }
 
     @Test
@@ -143,10 +187,10 @@ class RecipeEngineTest {
         assertTrue(tools.size >= 5)
 
         val toolIds = tools.map { it.id }
-        assertTrue(toolIds.contains("tool_youtube_repair"))
-        assertTrue(toolIds.contains("tool_dns_repair"))
-        assertTrue(toolIds.contains("tool_fb_repair"))
-        assertTrue(toolIds.contains("tool_wifi_repair"))
-        assertTrue(toolIds.contains("tool_play_store_repair"))
+        assertTrue(toolIds.contains("tool-youtube-repair"))
+        assertTrue(toolIds.contains("tool-dns-repair"))
+        assertTrue(toolIds.contains("tool-fb-repair"))
+        assertTrue(toolIds.contains("tool-wifi-repair"))
+        assertTrue(toolIds.contains("tool-play-store-repair"))
     }
 }

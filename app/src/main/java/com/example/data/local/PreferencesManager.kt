@@ -30,6 +30,17 @@ class PreferencesManager(private val context: Context) {
         private val KEY_CUSTOM_SUPABASE_URL = stringPreferencesKey("custom_supabase_url")
         private val KEY_CUSTOM_SUPABASE_ANON_KEY = stringPreferencesKey("custom_supabase_anon_key")
         private val KEY_USE_LOCAL_TOOLKIT = booleanPreferencesKey("use_local_toolkit")
+        private val KEY_DEVICE_ID = stringPreferencesKey("registered_device_id")
+    }
+
+    val deviceIdFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DEVICE_ID]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun saveDeviceId(deviceId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_DEVICE_ID] = deviceId.trim()
+        }
     }
 
     val sessionFlow: Flow<UserSession> = context.dataStore.data.map { prefs ->

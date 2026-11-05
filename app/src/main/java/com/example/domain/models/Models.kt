@@ -26,6 +26,23 @@ enum class ActionType(val identifier: String) {
     }
 }
 
+enum class StepRisk(val id: String) {
+    READ_ONLY("read_only"),
+    GUIDED("guided"),
+    PERMISSION("permission");
+
+    companion object {
+        fun fromId(id: String): StepRisk? {
+            return entries.firstOrNull { it.id.equals(id, ignoreCase = true) }
+        }
+    }
+}
+
+data class StepCondition(
+    val previousStep: String,
+    val equals: String
+)
+
 enum class StepStatus {
     PENDING,
     RUNNING,
@@ -43,33 +60,81 @@ enum class RepairRunResult {
     CANCELLED
 }
 
-enum class ToolCategory(val title: String) {
-    ALL("All"),
-    NETWORK("Network"),
-    SOCIAL("Social Apps"),
-    SYSTEM("System & Storage"),
-    MEDIA("Media & Streaming"),
-    GENERAL("General")
+enum class ToolCategory(val title: String, val slug: String) {
+    ALL("All", "all"),
+    NETWORK("Network", "network"),
+    APPS("Apps", "apps"),
+    STORAGE("Storage", "storage"),
+    CONNECTIVITY("Connectivity", "connectivity"),
+    SYSTEM("System & Storage", "system"),
+    GUIDES("Guides", "guides"),
+    MEDIA("Media & Streaming", "apps"),
+    SOCIAL("Social Apps", "apps"),
+    GENERAL("General", "apps");
+
+    companion object {
+        fun fromCategory(value: String): ToolCategory {
+            return entries.firstOrNull {
+                it.slug.equals(value, ignoreCase = true) || it.title.equals(value, ignoreCase = true) || it.name.equals(value, ignoreCase = true)
+            } ?: GENERAL
+        }
+    }
 }
 
 data class RecipeStep(
     val id: String,
     val action: ActionType,
-    val name: String,
-    val description: String = "",
-    val parameters: Map<String, Any?> = emptyMap(),
-    val isRequired: Boolean = true,
-    val stopOnFailure: Boolean = true
-)
+    val params: Map<String, Any?> = emptyMap(),
+    val risk: StepRisk = StepRisk.READ_ONLY,
+    val requiresConfirmation: Boolean = false,
+    val condition: StepCondition? = null
+) {
+    val name: String
+        get() = when (action) {
+            ActionType.CHECK_INTERNET -> "Check Internet Connection"
+            ActionType.DNS_LOOKUP -> "Resolve ${params["host"] ?: params["hostname"] ?: "DNS"}"
+            ActionType.HTTPS_PROBE -> "Probe ${params["host"] ?: params["url"] ?: "Server"}"
+            ActionType.CHECK_APP_INSTALLED -> "Check App Installed (${params["packageName"] ?: params["package_name"] ?: ""})"
+            ActionType.CHECK_STORAGE -> "Check Storage (${params["minimumAvailableMb"] ?: params["min_free_mb"] ?: 500} MB)"
+            ActionType.OPEN_APP -> "Launch ${params["packageName"] ?: params["package_name"] ?: "App"}"
+            ActionType.OPEN_APP_DETAILS -> "App Settings (${params["packageName"] ?: params["package_name"] ?: "App"})"
+            ActionType.OPEN_ANDROID_SETTINGS -> "Open ${params["screen"] ?: params["setting_type"] ?: "Android"} Settings"
+            ActionType.SHOW_GUIDE -> (params["title"] as? String) ?: (params["guide_title"] as? String) ?: "Troubleshooting Guide"
+            ActionType.ASK_USER_CONFIRMATION -> (params["title"] as? String) ?: "User Confirmation"
+            ActionType.REQUEST_OWN_APP_PERMISSION -> "Permission: ${params["permission"] ?: ""}"
+            ActionType.VERIFY_INTERNET -> "Verify Internet Connectivity"
+            ActionType.VERIFY_DNS -> "Verify DNS Resolution (${params["host"] ?: params["domain"] ?: "DNS"})"
+        }
+
+    val description: String
+        get() = when (action) {
+            ActionType.SHOW_GUIDE -> (params["description"] as? String) ?: (params["guide_description"] as? String) ?: "Follow on-screen instructions"
+            ActionType.ASK_USER_CONFIRMATION -> (params["message"] as? String) ?: "Confirm to proceed"
+            ActionType.HTTPS_PROBE -> "Test connection latency to ${params["host"] ?: ""}"
+            ActionType.DNS_LOOKUP -> "Verify domain resolution for ${params["host"] ?: ""}"
+            else -> "Execute native allowlisted diagnostic action"
+        }
+
+    val parameters: Map<String, Any?> get() = params
+    val isRequired: Boolean get() = risk != StepRisk.GUIDED || action == ActionType.SHOW_GUIDE
+    val stopOnFailure: Boolean get() = action == ActionType.CHECK_INTERNET || action == ActionType.VERIFY_INTERNET
+}
 
 data class RepairRecipe(
-    val recipeId: String,
+    val schemaVersion: Int = 1,
     val toolId: String,
-    val version: String,
-    val targetPackage: String? = null,
-    val requiredAndroidSdk: Int = 26,
+    val title: String,
+    val version: Int,
+    val category: String,
+    val minAndroidApi: Int = 23,
+    val minAppVersion: String = "1.0.0",
+    val estimatedSeconds: Int = 60,
+    val changelog: String? = null,
     val steps: List<RecipeStep> = emptyList()
-)
+) {
+    val recipeId: String get() = toolId
+    val requiredAndroidSdk: Int get() = minAndroidApi
+}
 
 data class RepairTool(
     val id: String,
@@ -79,7 +144,7 @@ data class RepairTool(
     val version: String,
     val problemDescription: String,
     val minAppVersion: Int = 1,
-    val minAndroidSdk: Int = 26,
+    val minAndroidSdk: Int = 23,
     val isNew: Boolean = false,
     val enabled: Boolean = true,
     val targetPackage: String? = null,

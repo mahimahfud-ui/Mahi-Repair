@@ -41,7 +41,7 @@ jobs:
 
       - name: Install Admin Panel dependencies
         id: install
-        run: npm install --no-audit --no-fund --no-progress
+        run: npm ci --no-audit --no-fund --no-progress
 
       - name: Run scaffold and security-integrity checks
         id: scaffold

@@ -10,7 +10,9 @@ import com.example.domain.models.RepairRecipe
 import com.example.domain.models.RepairRunReport
 import com.example.domain.models.RepairRunResult
 import com.example.domain.models.RepairTool
+import com.example.domain.models.StepCondition
 import com.example.domain.models.StepExecutionRecord
+import com.example.domain.models.StepRisk
 import com.example.domain.models.StepStatus
 import com.example.security.RsaSignatureVerifier
 import kotlinx.coroutines.CompletableDeferred
@@ -64,41 +66,56 @@ class RecipeExecutionEngine(
     }
 
     /**
-     * Parses and strictly validates a JSON recipe string.
+     * Parses and strictly validates a canonical repair-recipe-v1 JSON string.
      */
     fun parseRecipeJson(jsonString: String): Result<RepairRecipe> {
         return try {
             val root = JSONObject(jsonString)
-            val recipeId = root.optString("recipe_id", UUID.randomUUID().toString())
-            val toolId = root.getString("tool_id")
-            val version = root.optString("version", "1.0.0")
-            val targetPkg = if (root.has("target_package")) root.optString("target_package").takeIf { it.isNotBlank() } else null
-            val requiredSdk = root.optInt("required_android_sdk", 26)
+            val schemaVersion = root.optInt("schemaVersion", 1)
+            val toolId = if (root.has("toolId")) root.getString("toolId") else root.getString("tool_id")
+            val title = if (root.has("title")) root.getString("title") else root.optString("name", toolId)
+            val version = if (root.has("version")) {
+                val v = root.get("version")
+                if (v is Number) v.toInt() else v.toString().filter { it.isDigit() }.toIntOrNull() ?: 1
+            } else 1
+            val category = root.optString("category", "network")
+            val minAndroidApi = if (root.has("minAndroidApi")) root.getInt("minAndroidApi") else root.optInt("required_android_sdk", 23)
+            val minAppVersion = root.optString("minAppVersion", "1.0.0")
+            val estimatedSeconds = root.optInt("estimatedSeconds", 60)
+            val changelog = if (root.has("changelog")) root.optString("changelog") else null
 
             val stepsJson = root.getJSONArray("steps")
             val stepList = mutableListOf<RecipeStep>()
+            val seenStepIds = mutableSetOf<String>()
 
             for (i in 0 until stepsJson.length()) {
                 val stepObj = stepsJson.getJSONObject(i)
+                val id = stepObj.optString("id", "step_$i")
+                if (!seenStepIds.add(id)) {
+                    return Result.failure(IllegalArgumentException("Duplicate step ID: '$id'"))
+                }
+
                 val actionId = stepObj.getString("action")
                 val actionType = ActionType.fromIdentifier(actionId)
                     ?: return Result.failure(
                         IllegalArgumentException("Unknown or unallowlisted action: '$actionId'. Recipe rejected.")
                     )
 
-                val id = stepObj.optString("id", "step_$i")
-                val name = stepObj.getString("name")
-                val description = stepObj.optString("description", "")
-                val isRequired = stepObj.optBoolean("is_required", true)
-                val stopOnFailure = stepObj.optBoolean("stop_on_failure", true)
+                val riskStr = stepObj.optString("risk", "read_only")
+                val risk = StepRisk.fromId(riskStr) ?: StepRisk.READ_ONLY
+                val requiresConfirmation = stepObj.optBoolean("requiresConfirmation", risk != StepRisk.READ_ONLY)
 
                 val paramsMap = mutableMapOf<String, Any?>()
-                if (stepObj.has("parameters")) {
-                    val pObj = stepObj.getJSONObject("parameters")
-                    val keys = pObj.keys()
+                val paramsSource = when {
+                    stepObj.has("params") -> stepObj.getJSONObject("params")
+                    stepObj.has("parameters") -> stepObj.getJSONObject("parameters")
+                    else -> null
+                }
+                if (paramsSource != null) {
+                    val keys = paramsSource.keys()
                     while (keys.hasNext()) {
                         val key = keys.next()
-                        val value = pObj.get(key)
+                        val value = paramsSource.get(key)
                         if (value is JSONArray) {
                             val list = mutableListOf<String>()
                             for (j in 0 until value.length()) {
@@ -111,17 +128,23 @@ class RecipeExecutionEngine(
                     }
                 }
 
+                val condition = if (stepObj.has("condition")) {
+                    val cObj = stepObj.getJSONObject("condition")
+                    val prevStep = cObj.getString("previousStep")
+                    val equals = cObj.getString("equals")
+                    StepCondition(prevStep, equals)
+                } else null
+
                 val step = RecipeStep(
                     id = id,
                     action = actionType,
-                    name = name,
-                    description = description,
-                    parameters = paramsMap,
-                    isRequired = isRequired,
-                    stopOnFailure = stopOnFailure
+                    params = paramsMap,
+                    risk = risk,
+                    requiresConfirmation = requiresConfirmation,
+                    condition = condition
                 )
 
-                // Validate step parameters
+                // Validate step parameters against allowlist
                 val validation = actionRegistry.validateStep(step)
                 if (validation.isFailure) {
                     return Result.failure(validation.exceptionOrNull()!!)
@@ -132,11 +155,15 @@ class RecipeExecutionEngine(
 
             Result.success(
                 RepairRecipe(
-                    recipeId = recipeId,
+                    schemaVersion = schemaVersion,
                     toolId = toolId,
+                    title = title,
                     version = version,
-                    targetPackage = targetPkg,
-                    requiredAndroidSdk = requiredSdk,
+                    category = category,
+                    minAndroidApi = minAndroidApi,
+                    minAppVersion = minAppVersion,
+                    estimatedSeconds = estimatedSeconds,
+                    changelog = changelog,
                     steps = stepList
                 )
             )
@@ -234,8 +261,8 @@ class RecipeExecutionEngine(
         val recipe = recipeResult.getOrThrow()
 
         // 3. Android SDK Compatibility
-        if (Build.VERSION.SDK_INT < recipe.requiredAndroidSdk) {
-            val msg = "Device running Android API ${Build.VERSION.SDK_INT}, but recipe requires API ${recipe.requiredAndroidSdk}+."
+        if (Build.VERSION.SDK_INT < recipe.minAndroidApi) {
+            val msg = "Device running Android API ${Build.VERSION.SDK_INT}, but recipe requires API ${recipe.minAndroidApi}+."
             val failRecord = StepExecutionRecord(
                 stepId = "compat_check",
                 actionName = "COMPATIBILITY_CHECK",
@@ -258,7 +285,7 @@ class RecipeExecutionEngine(
                 stepRecords = listOf(failRecord),
                 finalDiagnosis = msg
             )
-            _engineState.value = ExecutionEvent.IncompatibleDevice(recipe.requiredAndroidSdk, Build.VERSION.SDK_INT)
+            _engineState.value = ExecutionEvent.IncompatibleDevice(recipe.minAndroidApi, Build.VERSION.SDK_INT)
             _engineState.value = ExecutionEvent.Finished(report)
             return report
         }
@@ -282,6 +309,26 @@ class RecipeExecutionEngine(
                 continue
             }
 
+            // Check condition if specified
+            if (step.condition != null) {
+                val prevRecord = stepRecords.firstOrNull { it.stepId == step.condition.previousStep }
+                val prevSuccess = prevRecord?.status == StepStatus.COMPLETED
+                val shouldRun = if (step.condition.equals == "success") prevSuccess else !prevSuccess
+                if (!shouldRun) {
+                    stepRecords.add(
+                        StepExecutionRecord(
+                            stepId = step.id,
+                            actionName = step.action.identifier,
+                            title = step.name,
+                            status = StepStatus.SKIPPED,
+                            message = "Skipped: condition on '${step.condition.previousStep}' == ${step.condition.equals} was not met.",
+                            durationMs = 0
+                        )
+                    )
+                    continue
+                }
+            }
+
             _engineState.value = ExecutionEvent.Running(
                 tool = tool,
                 totalSteps = recipe.steps.size,
@@ -291,6 +338,43 @@ class RecipeExecutionEngine(
             )
 
             val stepStart = System.currentTimeMillis()
+
+            // Explicit user confirmation required for guided actions
+            if (step.requiresConfirmation &&
+                step.action != ActionType.ASK_USER_CONFIRMATION &&
+                step.action != ActionType.SHOW_GUIDE &&
+                step.action != ActionType.REQUEST_OWN_APP_PERMISSION
+            ) {
+                val deferred = CompletableDeferred<Boolean>()
+                pendingUserResponse = deferred
+
+                _engineState.value = ExecutionEvent.PromptUserAction(
+                    type = UserActionType.CONFIRMATION,
+                    title = "Confirm: ${step.name}",
+                    message = "This step will perform a guided action: ${step.description}. Proceed?",
+                    payload = mapOf("stepId" to step.id)
+                )
+
+                val userApproved = deferred.await()
+                pendingUserResponse = null
+
+                if (!userApproved) {
+                    stepRecords.add(
+                        StepExecutionRecord(
+                            stepId = step.id,
+                            actionName = step.action.identifier,
+                            title = step.name,
+                            status = StepStatus.CANCELLED,
+                            message = "Cancelled by user.",
+                            durationMs = System.currentTimeMillis() - stepStart
+                        )
+                    )
+                    overallResult = RepairRunResult.CANCELLED
+                    stopPipeline = true
+                    continue
+                }
+            }
+
             val result = actionRegistry.executeAction(step)
 
             if (result.requiresUserAction && result.userActionType != null) {

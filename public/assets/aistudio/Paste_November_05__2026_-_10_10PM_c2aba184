@@ -1,0 +1,1423 @@
+# MAHI REPAIR — MASTER MISSION
+## COMPLETE DEVELOPMENT, SECURITY, BACKEND INTEGRATION, DEPLOYMENT & PRODUCTION READINESS
+
+### ROLE
+
+Act as a Principal Software Architect, Staff Android Engineer, Senior Kotlin Developer, Supabase Backend Architect, PostgreSQL Security Engineer, Next.js Engineer, DevOps Engineer and QA Automation Lead.
+
+You are responsible for completing the existing Mahi Repair ecosystem.
+
+Your mission is to turn the current repository into a genuinely functional, secure and remotely managed Android Repair Platform.
+
+This is NOT a greenfield project.
+
+You must inspect, fix, integrate, test and deploy the existing application wherever the environment and credentials allow.
+
+Do not merely generate another implementation report.
+
+Do not stop after writing code.
+
+Actually execute the available commands, inspect their results, fix failures and verify the complete system.
+
+---
+
+# SECTION 1 — PROJECT IDENTITY
+
+Product name: Mahi Repair
+
+Cloud product: Mahi Repair Cloud
+
+GitHub repository:
+
+https://github.com/mahimahfud-ui/Mahi-Repair
+
+Default branch: main
+
+Repository visibility: PUBLIC — DO NOT CHANGE.
+
+Supabase project name: Mahi-Repair
+
+Supabase project reference:
+
+shwqsljicmhflnvjqjah
+
+Supabase region:
+
+ap-south-1
+
+Supabase URL:
+
+https://shwqsljicmhflnvjqjah.supabase.co
+
+Android application ID:
+
+com.aistudio.mahirepair.qrzntk
+
+Android minimum SDK: 26
+
+Android target SDK: 36
+
+### Product purpose
+
+Mahi Repair is a private Android repair toolkit for the Owner's family and trusted friends.
+
+The Owner independently manages repair tools through a separate web-based Admin Panel.
+
+Members install one Android APK and continuously receive new compatible repair recipes from the central Supabase backend.
+
+Users only need to:
+
+1. Open Mahi Repair.
+2. Find their problem.
+3. Select the appropriate repair button.
+4. Press Run.
+5. Follow any necessary Android permission or Settings instructions.
+6. View the verified repair result.
+
+The application must not require APK reinstallation whenever the Owner publishes a compatible new repair tool.
+
+---
+
+# SECTION 2 — STRICT REPOSITORY STRUCTURE
+
+Inspect the existing GitHub repository and respect its current architecture.
+
+Current important paths:
+
+ANDROID:
+- app/
+- app/src/main/
+- app/src/test/
+- app/src/debug/
+- gradle/
+- settings.gradle.kts
+- app/build.gradle.kts
+
+ADMIN PANEL:
+- admin-panel/src/
+- admin-panel/supabase/
+- admin-panel/schemas/
+- admin-panel/tests/
+- admin-panel/docs/
+
+DESIGN SYSTEM:
+- app/src/main/java/com/mahi/repair/designsystem/
+- admin/design-system-gallery/
+
+CANONICAL SUPABASE BACKEND:
+- admin-panel/supabase/migrations/
+- admin-panel/supabase/functions/
+
+IMPORTANT:
+
+The Admin Panel already has a canonical Supabase migration:
+
+admin-panel/supabase/migrations/202611050001_initial_schema.sql
+
+It also already contains the Edge Function implementations.
+
+Do not create a second, conflicting database migration or duplicate backend implementation in a new root-level supabase directory.
+
+Reconcile any unsynchronized Phase 2 changes with the existing canonical backend.
+
+Preserve all existing working source code.
+
+Do not replace the project with a simplified prototype.
+
+---
+
+# SECTION 3 — BASELINE AUDIT AND CURRENT BUILD ERRORS
+
+Inspect the latest main branch before modifying anything.
+
+Latest reviewed commit:
+
+4c5741acbeb37ce5ea599e88468924abd6af85ff
+
+Current GitHub Actions results:
+
+Admin Panel CI: Previously successful.
+
+Android CI: Failed during Kotlin compilation.
+
+Known compilation errors:
+
+File:
+app/src/main/java/com/mahi/repair/designsystem/components/MahiModifiers.kt
+
+Error:
+Unresolved reference animateFloat.
+
+File:
+app/src/main/java/com/mahi/repair/designsystem/components/RepairProgress.kt
+
+Error:
+Unresolved reference animateFloat.
+
+Fix the missing Compose animation imports, including:
+
+import androidx.compose.animation.core.animateFloat
+
+Resolve all resulting type inference errors.
+
+Do not assume these are the only compilation errors. Run a complete build after fixing them.
+
+### Build verification
+
+Admin Panel:
+
+cd admin-panel
+
+npm run check:scaffold
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+
+Android:
+
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+
+If the Gradle wrapper is missing, create a valid wrapper using the project's compatible Gradle version and commit the wrapper files.
+
+The repository currently lacks a package-lock.json.
+
+Generate and commit a reproducible npm lockfile, then change CI dependency installation to npm ci.
+
+Verify that every GitHub Actions workflow completes successfully.
+
+The Android CI must produce a downloadable debug APK artifact.
+
+---
+
+# SECTION 4 — ANDROID APPLICATION COMPLETION
+
+Inspect the entire current Android application.
+
+Important files:
+
+- SupabaseClient.kt
+- AuthRepository.kt
+- ToolRepository.kt
+- HistoryRepository.kt
+- PreferencesManager.kt
+- DefaultToolCatalog.kt
+- Dto.kt
+- Models.kt
+- ActionRegistry.kt
+- RecipeExecutionEngine.kt
+- RsaSignatureVerifier.kt
+- ToolSyncWorker.kt
+- SyncManager.kt
+- MainViewModel.kt
+- MainActivity.kt
+- MainScreen.kt
+- ExecutionSheet.kt
+- AuthScreen.kt
+
+Do not replace the architecture without a demonstrated technical reason.
+
+### 4.1 Secure configuration
+
+Use the existing environment variable names:
+
+SUPABASE_URL
+
+SUPABASE_ANON_KEY
+
+These are the mobile app's public Supabase connection values.
+
+Use the configured existing values where available.
+
+Never put:
+- Supabase service role key.
+- Database passwords.
+- RSA signing private key.
+- Administrative credentials.
+
+inside the Android APK.
+
+Ensure `.env`, `.env.local`, keystores and private keys are excluded from Git.
+
+### 4.2 Session security
+
+The current PreferencesManager uses ordinary Preferences DataStore for authentication data.
+
+Improve session storage using Android Keystore-backed encryption.
+
+Requirements:
+
+- Store access token securely.
+- Store refresh token securely.
+- Implement token refresh.
+- Handle expired sessions.
+- Handle logout.
+- Clear sessions on revoked access.
+- Exclude authentication tokens from Android backup.
+- Never trust a locally saved role as an authorization source.
+
+Use a server-verified profile and access policy.
+
+### 4.3 Authentication
+
+Implement the actual Supabase invitation and email OTP workflow.
+
+The Owner invites members using the Admin Panel.
+
+Member flow:
+
+1. Enter invited email.
+2. Request an OTP for an existing invited account.
+3. Verify OTP with Supabase Auth.
+4. Retrieve the verified session.
+5. Retrieve active member profile from the backend.
+6. Register the Android device.
+7. Synchronize authorized tools.
+
+The only application roles should be:
+
+- owner
+- member
+
+Family members and friends are both member accounts.
+
+All administrative authorization must be checked server-side.
+
+Do not grant authorization based on client-supplied user metadata.
+
+Verify that Supabase invite email, OTP templates, email confirmation and redirect settings actually support this flow.
+
+Never claim that invitation works until tested with a real test account.
+
+### 4.4 Remove fake production authentication
+
+The current code contains simulated OTP and local fake token behavior.
+
+The simulated `123456` OTP and `local_dev_token_` flow must NEVER be usable in a production release.
+
+If offline demo functionality is retained:
+
+- Make it an explicit, separately labeled mode.
+- Keep it isolated from cloud authentication.
+- Keep local demo tokens out of cloud requests.
+- Use separate demo signing keys.
+- Ensure demo data never appears in the normal production cloud catalog.
+
+The default production application must not authenticate without Supabase verification.
+
+### 4.5 Device registration
+
+Implement the server-issued device registration workflow.
+
+Call:
+
+POST /functions/v1/register-device
+
+Expected request:
+
+{
+  "device_label": "My Android Phone",
+  "app_version": "1.0.0",
+  "android_version": "15",
+  "android_api": 35
+}
+
+Store the returned device UUID securely.
+
+Reuse it for future synchronization and repair execution.
+
+Support:
+- Device registration.
+- Device metadata update.
+- Device revocation.
+- Device restoration.
+- Revoked device rejection.
+
+Collect only the minimum device metadata required for the service.
+
+---
+
+# SECTION 5 — ONE CANONICAL REPAIR RECIPE ENGINE
+
+THIS IS A CRITICAL TASK.
+
+The current Admin Panel and Android Recipe Engine use incompatible JSON structures.
+
+Make the Admin Panel's existing versioned recipe schema the canonical contract:
+
+admin-panel/schemas/repair-recipe-v1.schema.json
+
+Also use:
+
+admin-panel/src/lib/recipe/catalog.ts
+
+as the canonical action catalog and parameter specification.
+
+Update the native Kotlin RecipeExecutionEngine to understand exactly the same schema.
+
+### Canonical recipe structure
+
+{
+  "schemaVersion": 1,
+  "toolId": "youtube-repair",
+  "title": "YouTube Repair",
+  "version": 1,
+  "category": "apps",
+  "minAndroidApi": 26,
+  "minAppVersion": "1.0.0",
+  "estimatedSeconds": 60,
+  "steps": [
+    {
+      "id": "step-1",
+      "action": "CHECK_INTERNET",
+      "params": {},
+      "risk": "read_only",
+      "requiresConfirmation": false
+    },
+    {
+      "id": "step-2",
+      "action": "DNS_LOOKUP",
+      "params": {
+        "host": "youtube.com"
+      },
+      "risk": "read_only",
+      "requiresConfirmation": false
+    }
+  ]
+}
+
+### Required Kotlin implementation
+
+Update:
+
+- RepairRecipe model.
+- RecipeStep model.
+- Recipe JSON parsing.
+- Parameter parsing.
+- Risk validation.
+- Confirmation enforcement.
+- Android compatibility validation.
+- Conditional step evaluation.
+- Execution event reporting.
+
+The existing Kotlin parser expects old field names such as `tool_id`, `required_android_sdk`, `name`, and `parameters`.
+
+Remove this incompatibility.
+
+Never parse a new recipe using an undocumented fallback schema.
+
+### Parameter alignment
+
+Align every action to the canonical Admin Panel schema.
+
+Examples:
+
+DNS_LOOKUP:
+host
+
+HTTPS_PROBE:
+host, path, timeoutMs
+
+OPEN_APP:
+packageName
+
+OPEN_APP_DETAILS:
+packageName
+
+CHECK_STORAGE:
+minimumAvailableMb
+
+OPEN_ANDROID_SETTINGS:
+screen
+
+SHOW_GUIDE:
+title, instructions
+
+ASK_USER_CONFIRMATION:
+title, message, confirmLabel
+
+REQUEST_OWN_APP_PERMISSION:
+permission
+
+Do not silently ignore extra or malformed parameters.
+
+### Step conditions
+
+The Admin Panel schema supports conditions referencing preceding steps.
+
+The Android engine must either:
+
+1. Implement and test the exact documented conditional execution behavior; or
+2. Remove conditional recipes from the v1 contract everywhere until that behavior is supported.
+
+Never accept a condition and silently ignore it.
+
+### Confirmation enforcement
+
+The `requiresConfirmation` property must be enforced natively.
+
+Any guided or permission-related action must display the required user confirmation before execution.
+
+Do not let a signed JSON recipe bypass native confirmation requirements.
+
+---
+
+# SECTION 6 — EXACTLY SUPPORTED NATIVE ACTIONS
+
+The Android application must implement only its explicitly supported actions.
+
+Initial action catalog:
+
+1. CHECK_INTERNET
+2. DNS_LOOKUP
+3. HTTPS_PROBE
+4. CHECK_APP_INSTALLED
+5. CHECK_STORAGE
+6. OPEN_APP
+7. OPEN_APP_DETAILS
+8. OPEN_ANDROID_SETTINGS
+9. SHOW_GUIDE
+10. ASK_USER_CONFIRMATION
+11. REQUEST_OWN_APP_PERMISSION
+12. VERIFY_INTERNET
+13. VERIFY_DNS
+
+Ensure:
+
+- The backend validates the same 13 action IDs.
+- The Kotlin engine implements the same 13 action IDs.
+- Parameter schemas match.
+- Risk levels match.
+- Android SDK requirements match.
+
+Implement strict native validation of every parameter.
+
+### Action safety
+
+- HTTPS_PROBE must use bounded HTTPS connections.
+- Reject unsafe URL schemes.
+- Restrict redirect behavior.
+- Use bounded network timeouts.
+- Validate package names.
+- Validate settings screen identifiers.
+- Restrict permission requests to permissions declared by the repair application.
+- Do not add unnecessary dangerous permissions.
+- Respect Android package visibility restrictions.
+- Respect Android sandbox boundaries.
+
+The existing permission action must actually request a declared runtime permission through the appropriate Android Activity Result API, or be removed from the supported schema until implemented.
+
+Do not use Accessibility Services to automate arbitrary Settings interaction.
+
+Do not use root, ADB or arbitrary shell commands.
+
+Do not download executable scripts or dynamic code.
+
+---
+
+# SECTION 7 — LIVE TOOL CATALOG AND CACHE
+
+The default cloud application must load only published, enabled and authorized tools.
+
+The existing application automatically initializes the bundled default catalog.
+
+Fix this behavior.
+
+Requirements:
+
+- Disable automatic sample catalog initialization in production.
+- Default the local demo toolkit setting to false.
+- Keep sample recipes strictly separated from production tools.
+- Show a real empty state when the cloud returns zero published tools.
+- Implement proper remote catalog replacement.
+- Remove stale or revoked cloud cache entries after a successful authoritative sync.
+- Keep local repair history independent of the cloud tool catalog.
+- Preserve cache when a sync genuinely fails, but show an honest offline state.
+
+Most importantly:
+
+If immediate member/device revocation is required, every production Run operation must perform a fresh authenticated online authorization and signed recipe fetch.
+
+Do not execute a previously cached recipe when the user or device has been revoked.
+
+Offline demo execution may remain separate and clearly labeled.
+
+---
+
+# SECTION 8 — HARMONIZE THE EXACT API CONTRACT
+
+The canonical documentation is:
+
+admin-panel/docs/ANDROID_API_CONTRACT.md
+
+However, inspect the actual Edge Function implementations too.
+
+Make the server, Android DTOs and documentation agree exactly.
+
+Standardize user-facing responses to a consistent JSON envelope:
+
+{
+  "data": {}
+}
+
+Errors:
+
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable explanation"
+  }
+}
+
+All mobile requests must use:
+
+- HTTPS.
+- Supabase public API key in `apikey`.
+- Verified member JWT in `Authorization`.
+- JSON content type for POST.
+
+### 8.1 register-device
+
+POST
+
+Request:
+
+{
+  "device_id": null,
+  "device_label": "My Android Phone",
+  "app_version": "1.0.0",
+  "android_version": "15",
+  "android_api": 35
+}
+
+Response:
+
+{
+  "data": {
+    "device_id": "server-issued-uuid",
+    "registered": true
+  }
+}
+
+### 8.2 get-my-repair-tools
+
+POST
+
+Request:
+
+{
+  "device_id": "registered-device-uuid"
+}
+
+Response:
+
+{
+  "data": [
+    {
+      "id": "tool-uuid",
+      "slug": "youtube-repair",
+      "name": "YouTube Repair",
+      "description": "Diagnose YouTube connectivity problems",
+      "category": "apps",
+      "icon": "youtube",
+      "version": 1,
+      "min_app_version": "1.0.0",
+      "min_android_api": 26,
+      "is_new": false,
+      "enabled": true,
+      "updated_at": "ISO-8601-UTC"
+    }
+  ]
+}
+
+The Edge Function must query actual tool metadata and authorized published versions.
+
+Never fabricate display data.
+
+### 8.3 get-signed-repair-tool
+
+POST
+
+Request:
+
+{
+  "tool_id": "tool-uuid",
+  "device_id": "registered-device-uuid"
+}
+
+Response:
+
+{
+  "data": {
+    "tool_id": "tool-uuid",
+    "version": 1,
+    "signed_payload": "EXACT_CANONICAL_JSON_STRING",
+    "signature_base64": "BASE64_SIGNATURE",
+    "signature_algorithm": "RSA-SHA256",
+    "key_id": "owner-key-1"
+  }
+}
+
+The server must verify:
+- Active member account.
+- Active registered device.
+- Published tool.
+- Valid audience/assignment.
+- Current tool status.
+
+### 8.4 submit-repair-run
+
+POST
+
+Request:
+
+{
+  "device_id": "uuid",
+  "tool_id": "uuid",
+  "tool_version": 1,
+  "started_at": "2026-11-05T10:00:00Z",
+  "completed_at": "2026-11-05T10:00:25Z",
+  "result": "SUCCESS",
+  "step_results": [
+    {
+      "step_id": "step-1",
+      "status": "SUCCESS"
+    }
+  ],
+  "app_version": "1.0.0"
+}
+
+Use bounded status values:
+
+SUCCESS
+PARTIAL
+FAILED
+CANCELLED
+
+Do not transmit unnecessary email, passwords, personal files, messages, photos or unrelated device details.
+
+The server must derive the member ID from the verified JWT.
+
+### 8.5 Strict compatibility tests
+
+Create Kotlin DTO contract tests and Edge Function tests proving that these request and response schemas match.
+
+Do not leave different property names in separate components.
+
+---
+
+# SECTION 9 — RSA DIGITAL SIGNATURE SYSTEM
+
+The signing implementation currently has a configuration and production-key problem.
+
+Standardize it.
+
+The existing Admin Panel signing implementation expects:
+
+RECIPE_SIGNING_PRIVATE_KEY_PEM
+
+Use this exact environment variable.
+
+Do not introduce a second signing-key environment variable such as MAHI_OWNER_PRIVATE_KEY_PEM.
+
+### Algorithm
+
+RSA-SHA256 using RSASSA-PKCS1-v1_5.
+
+Use a single matching RSA-3072 key pair.
+
+Private key:
+- PKCS#8 PEM.
+- Supabase Edge Function secret only.
+- Never committed to Git.
+- Never embedded in the APK.
+- Never printed in logs.
+
+Public key:
+- X.509 format.
+- Embedded in Android application.
+- Public verification key may be included in the public source repository.
+- Include a key ID and fingerprint.
+
+The Android application must verify the exact UTF-8 bytes of `signed_payload` before JSON parsing.
+
+Never reconstruct the JSON before verification.
+
+Never execute unsigned, tampered or unverified recipes.
+
+### CRITICAL
+
+The current DEFAULT_OWNER_PUBLIC_KEY is a placeholder.
+
+Do not reuse it as a production key.
+
+Generate or configure one real matching key pair.
+
+Verify signature interoperability between:
+- Supabase Web Crypto signing.
+- Android Java Cryptography Architecture verification.
+
+Include tests for:
+
+1. Valid signature.
+2. Tampered payload.
+3. Wrong signature.
+4. Wrong public key.
+5. Malformed Base64.
+6. Unsupported key ID.
+
+Provide a secure key-generation and rotation procedure.
+
+If the environment cannot securely create/configure Supabase secrets, provide the exact manual steps without printing private-key material.
+
+---
+
+# SECTION 10 — SUPABASE DATABASE DEPLOYMENT
+
+Use the existing canonical migration:
+
+admin-panel/supabase/migrations/202611050001_initial_schema.sql
+
+Supabase project:
+
+shwqsljicmhflnvjqjah
+
+Before deployment:
+
+1. Inspect existing remote migrations.
+2. Confirm the current database is empty or otherwise reconcile safely.
+3. Inspect the migration for all application tables, constraints, indexes, triggers, RPCs and RLS policies.
+4. Validate the migration.
+5. Correct the local Supabase project reference.
+
+Current config file:
+
+admin-panel/supabase/config.toml
+
+Ensure its project_id matches the actual Supabase project reference:
+
+shwqsljicmhflnvjqjah
+
+Do not create a parallel root migration system.
+
+### Expected schema
+
+- profiles
+- devices
+- repair_tools
+- repair_tool_versions
+- repair_tool_access
+- device_tool_syncs
+- repair_runs
+- admin_audit_logs
+- recipe_test_history
+- rate_limit_buckets
+
+Confirm all policies and service-role boundaries.
+
+The Owner must be the only person allowed to create, edit, publish, disable, assign and delete repair tools.
+
+Members must only retrieve their authorized published tools.
+
+### Apply migration
+
+If Supabase CLI authentication is available:
+
+cd admin-panel
+
+supabase link --project-ref shwqsljicmhflnvjqjah
+
+supabase db push
+
+Then verify:
+- Migration history.
+- Table existence.
+- RLS status.
+- RPC existence.
+- Indexes.
+- Triggers.
+- Grants.
+
+Do not claim deployment if the migration merely exists in GitHub.
+
+Do not perform destructive resets.
+
+---
+
+# SECTION 11 — DEPLOY ALL CANONICAL EDGE FUNCTIONS
+
+Use the existing functions in:
+
+admin-panel/supabase/functions/
+
+Deploy and verify these 15 functions:
+
+1. admin-assign-tool
+2. admin-delete-draft-tool
+3. admin-disable-tool
+4. admin-invite-member
+5. admin-manage-device
+6. admin-manage-member
+7. admin-manage-tool-state
+8. admin-publish-tool
+9. admin-save-validation
+10. admin-upsert-tool
+11. get-admin-analytics
+12. get-my-repair-tools
+13. get-signed-repair-tool
+14. register-device
+15. submit-repair-run
+
+Do not recreate them with different names.
+
+Inspect their existing authorization and validation logic.
+
+Preserve:
+- Owner checks.
+- Member checks.
+- Device validation.
+- Rate limiting.
+- Audit logging.
+- Immutable published versions.
+- Strict recipe validation.
+- Safe publication.
+- Signed recipe delivery.
+
+Required server-side secrets:
+
+SUPABASE_SERVICE_ROLE_KEY
+
+RECIPE_SIGNING_PRIVATE_KEY_PEM
+
+ADMIN_ORIGIN
+
+Set them in the Supabase Edge Function secret store.
+
+Do not place service-role or private signing secrets in:
+- Android .env.
+- Next.js NEXT_PUBLIC variables.
+- Browser code.
+- GitHub source files.
+- Public repository commits.
+
+Deploy functions only after their dependencies and migration exist.
+
+Verify actual deployed function status through the Supabase dashboard or CLI.
+
+---
+
+# SECTION 12 — OWNER ACCOUNT AND MEMBER MANAGEMENT
+
+Complete the initial Owner bootstrap workflow.
+
+The migration creates ordinary users as members by default.
+
+Therefore:
+
+1. Create the Owner's Supabase Auth account.
+2. Bootstrap the correct profile as `owner` through a controlled one-time database operation.
+3. Verify exactly one authorized Owner account.
+4. Verify the Owner can access the separate Admin Panel.
+5. Verify an ordinary member cannot access Owner pages or functions.
+
+Do not create a public owner registration route.
+
+Do not allow a member to upgrade their own role.
+
+### Member invitation
+
+The Owner must be able to invite family and friends.
+
+Support:
+
+- Invite member.
+- Resend invitation where supported.
+- Suspend.
+- Reactivate.
+- Revoke.
+- Assign selected repair tools.
+- Assign all published tools.
+
+Test the actual OTP email and app sign-in workflow.
+
+Configure email templates and SMTP where required.
+
+---
+
+# SECTION 13 — COMPLETE ADMIN PANEL
+
+The current Admin Panel is already implemented in:
+
+admin-panel/
+
+Preserve its existing Next.js architecture, design and functionality.
+
+Finish all real workflows.
+
+Required pages:
+
+- Owner Dashboard.
+- Repair Tool Library.
+- Create Tool.
+- Script Studio.
+- Visual Recipe Builder.
+- JSON Editor.
+- Test Lab.
+- Publishing Center.
+- Members & Devices.
+- Version Control.
+- Repair Logs.
+- Analytics.
+- Security & Settings.
+
+### Functional requirements
+
+- All buttons must have real actions.
+- All forms must validate input.
+- Every successful operation must show a confirmed result.
+- Every failed operation must show a helpful error.
+- Destructive operations require confirmation.
+- All owner actions require server-side authorization.
+- No fake analytics.
+- No simulated deployment success.
+- No fake device execution result.
+
+The Test Lab must clearly separate:
+- Static validation.
+- Recipe simulation.
+- Real Android device testing.
+
+Never label simulation as real-device success.
+
+Connect every production page to real Supabase data and the existing Edge Functions.
+
+---
+
+# SECTION 14 — COMPLETE ANDROID UI INTEGRATION
+
+The repository contains a new Mahi Repair Compose design system.
+
+However, it is not yet fully connected to the existing screen architecture.
+
+Integrate it properly.
+
+Use:
+
+- MahiTheme.
+- RepairToolCard.
+- MahiSearchField.
+- RepairExecutionHeader.
+- RepairStepList.
+- MahiProgressRing.
+- RepairSuccessScreen.
+- RepairPartialScreen.
+- RepairFailedScreen.
+- SyncStatusChip.
+
+### Home
+
+Connect real backend tool data to the actual existing ViewModel.
+
+Show only authorized repair tools.
+
+Support:
+- Search.
+- Loading.
+- Empty state.
+- Offline state.
+- Sync status.
+- New tools.
+- Run action.
+
+Every Run button must invoke the real execution workflow.
+
+### Execution
+
+Show:
+- Real current action.
+- Step progress.
+- User confirmations.
+- Settings navigation.
+- Required permissions.
+- Safe cancellation.
+
+Do not fabricate progress percentages.
+
+### Results
+
+Only show SUCCESS after the actual final verification action succeeds.
+
+Use PARTIAL when the engine reports partial completion.
+
+Use FAILED when verification or a required action fails.
+
+Keep the existing premium dark visual identity.
+
+### Admin UI
+
+Use the existing production Next.js console.
+
+Do not mistake the static design-system gallery for the actual Admin Panel.
+
+---
+
+# SECTION 15 — AUTHORIZATION AND DEVICE REVOCATION
+
+Verify these security scenarios end-to-end:
+
+- Anonymous request rejected.
+- Invalid JWT rejected.
+- Suspended member rejected.
+- Revoked member rejected.
+- Member cannot call admin functions.
+- Member cannot access another member's tools.
+- Revoked device rejected.
+- Disabled tool rejected.
+- Unpublished tool never delivered.
+- Wrong recipe signature rejected.
+- Unknown action rejected.
+
+The Android app must verify fresh online authorization before production repair execution.
+
+Remember: an offline phone cannot receive immediate revocation updates. Never promise that remote revocation is instantaneous while a device is disconnected.
+
+---
+
+# SECTION 16 — CI/CD AND GITHUB
+
+Repository:
+
+https://github.com/mahimahfud-ui/Mahi-Repair
+
+Keep it PUBLIC.
+
+Do not change repository visibility.
+
+### Admin Panel CI
+
+Run:
+
+- npm ci.
+- Scaffold checks.
+- TypeScript.
+- ESLint.
+- Vitest.
+- Next.js production build.
+
+### Android CI
+
+Run:
+
+- Gradle compilation.
+- Unit tests.
+- Recipe engine tests.
+- RSA tests.
+- API contract tests.
+- assembleDebug.
+- APK upload artifact.
+
+### Supabase validation
+
+Add CI validation for:
+- SQL syntax and migration structure.
+- Edge Function TypeScript/Deno checks.
+- Recipe schema tests.
+- Shared action catalog consistency.
+- Secret-leak scanning.
+
+Do not put production Supabase or signing secrets into ordinary build logs.
+
+Update both existing workflows.
+
+Ensure all CI jobs complete successfully on the final commit.
+
+Fix all actual errors rather than suppressing failures.
+
+---
+
+# SECTION 17 — PRODUCTION ENVIRONMENT CONFIGURATION
+
+### Android
+
+Use the existing:
+
+SUPABASE_URL
+
+SUPABASE_ANON_KEY
+
+Keep the configuration compatible with the existing Secrets Gradle Plugin.
+
+Do not commit local `.env`.
+
+### Admin Panel
+
+Use:
+
+NEXT_PUBLIC_SUPABASE_URL
+
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+
+NEXT_PUBLIC_APP_URL
+
+Use the Supabase publishable key for the browser client.
+
+Do not expose service-role keys.
+
+### Supabase Auth
+
+Configure:
+- Production Site URL.
+- Admin Panel redirect URLs.
+- OTP redirect configuration.
+- SMTP.
+- Email verification.
+- Appropriate rate limits.
+- Owner MFA where available.
+
+Configure ADMIN_ORIGIN to exactly match the deployed Admin Panel origin.
+
+### Hosting
+
+Deploy the Admin Panel to the connected Vercel project or another available Next.js host.
+
+Use the existing `admin-panel` directory as the application root.
+
+If deployment credentials or a deployment target are unavailable, prepare the deployment and report the exact remaining setup steps.
+
+Do not invent a live URL.
+
+---
+
+# SECTION 18 — APK BUILD AND RELEASE
+
+First generate a working Debug APK.
+
+Run:
+
+./gradlew :app:assembleDebug
+
+Expected artifact:
+
+app/build/outputs/apk/debug/app-debug.apk
+
+Upload it through GitHub Actions.
+
+Then prepare a signed Release APK.
+
+Important:
+
+A real production release needs the Owner's private Android upload keystore and its credentials.
+
+Never generate a fake production signing identity.
+
+Never commit the keystore or passwords.
+
+Only produce a release APK when a valid Owner-controlled keystore is securely configured.
+
+Document the signing procedure.
+
+Verify APK installation and launch.
+
+---
+
+# SECTION 19 — END-TO-END ACCEPTANCE TEST
+
+This is the final objective.
+
+Perform the complete workflow using a real authorized test member and Android device, where access is available.
+
+### Owner workflow
+
+1. Owner signs into Mahi Repair Cloud.
+2. Owner creates a YouTube diagnostic tool.
+3. Owner adds supported native recipe steps.
+4. Owner validates it.
+5. Owner publishes version 1.
+6. Supabase stores a signed immutable version.
+7. The publishing operation succeeds.
+
+### Member workflow
+
+1. Member receives an invitation.
+2. Member opens the Android app.
+3. Member completes OTP authentication.
+4. App registers the device.
+5. App synchronizes authorized published tools.
+6. YouTube Repair button appears.
+7. Member presses Run.
+8. Android fetches the current authorized signed recipe.
+9. Android verifies RSA signature.
+10. Android validates the recipe and every action.
+11. Native Kotlin actions execute sequentially.
+12. Any necessary user confirmation is displayed.
+13. Final verification executes.
+14. The application shows the actual result.
+15. Repair history is saved locally.
+16. Repair report is submitted to Supabase.
+
+### Live update test
+
+1. Owner updates the tool to version 2.
+2. Owner publishes the new version.
+3. Existing Android installation synchronizes version 2.
+4. The user sees the new tool version without reinstalling the APK.
+
+### Revocation test
+
+1. Owner revokes a member or device.
+2. The server rejects subsequent repair access.
+3. The Android application handles the revoked session properly.
+
+Use real device testing wherever possible.
+
+If only an emulator is available, report emulator testing separately.
+
+---
+
+# SECTION 20 — REGRESSION, SECURITY AND QUALITY CONTROL
+
+Before declaring completion:
+
+- Re-run all builds.
+- Re-run all tests.
+- Re-run recipe validation tests.
+- Re-run signature tests.
+- Re-run API contract tests.
+- Re-run authorization tests.
+- Verify Supabase migration history.
+- Verify actual Edge Function deployment.
+- Verify the Admin Panel's production build.
+- Verify APK installation.
+
+Inspect all changed files.
+
+Do not introduce:
+- Duplicate Supabase migrations.
+- Duplicate APIs.
+- Untracked generated secrets.
+- Fake production accounts.
+- Mock production tool data.
+- Unrestricted code execution.
+- Unverified success states.
+
+Keep all changes minimal and purposeful.
+
+Preserve the existing application identity and design.
+
+---
+
+# SECTION 21 — AUTOMATIC GITHUB SYNC
+
+After the actual code changes and checks are complete:
+
+1. Check git status.
+2. Inspect the final diff.
+3. Confirm no secrets are staged.
+4. Commit the verified implementation.
+5. Push to the existing public main branch.
+6. Wait for GitHub Actions to complete within the current task.
+7. Inspect the actual workflow results.
+8. Resolve any new build failures.
+9. Confirm the final GitHub commit.
+10. Confirm the APK artifact exists.
+
+Never claim a successful push, build or deployment without an actual confirmation.
+
+Do not force-push or delete existing history.
+
+---
+
+# SECTION 22 — FINAL DELIVERABLE AND HONEST STATUS REPORT
+
+Deliver:
+
+1. Fully integrated Android project.
+2. Working Admin Panel.
+3. Canonical Supabase database migration.
+4. All deployed Edge Functions.
+5. Secure Owner bootstrap.
+6. Member invitation and authentication.
+7. Device registration.
+8. Unified API contract.
+9. Unified Recipe DSL.
+10. Matching RSA signing and verification.
+11. Live tool synchronization.
+12. Functional repair execution.
+13. Repair history and backend reporting.
+14. GitHub CI/CD.
+15. Debug APK artifact.
+16. Release-build configuration.
+17. Complete deployment documentation.
+18. Security and testing documentation.
+
+### Final report format
+
+Use this exact status classification:
+
+IMPLEMENTED:
+What code has actually been written.
+
+DEPLOYED:
+What is actually live in Supabase or the hosting provider.
+
+TESTED:
+What commands, tests, API requests, emulators or physical devices were actually used.
+
+UNVERIFIED:
+What could not be tested or deployed.
+
+REMAINING OWNER ACTIONS:
+Only actions that genuinely require the Owner's credentials, approval or device access.
+
+Include:
+- Final GitHub commit SHA.
+- Admin CI workflow result.
+- Android CI workflow result.
+- Debug APK artifact link.
+- Supabase migration status.
+- Deployed function list.
+- Admin Panel live URL, if deployed.
+- End-to-end test result.
+
+Do not claim Production Ready while any critical authentication, signature, API, RLS or repair execution test remains unverified.
+
+### STRICT EXECUTION RULE
+
+Do not stop after the initial audit.
+
+Do not stop after creating source code.
+
+Do not stop after generating the APK if the backend remains disconnected.
+
+Complete every phase that the available environment and permissions allow.
+
+If a deployment is blocked by missing credentials, provide the exact secure configuration procedure rather than inventing success.
+
+Never ask me to paste private signing keys or Service Role credentials into public source files or ordinary chat.
+
+---
+
+# FINAL MISSION
+
+Make Mahi Repair a genuinely functioning personal Android repair ecosystem.
+
+ONE Android APK installation.
+
+ONE separate Owner Admin Panel.
+
+ONE centralized Supabase backend.
+
+ONE consistent signed Repair Recipe system.
+
+The Owner publishes new repair tools remotely.
+
+Family members and friends receive compatible new tools automatically.
+
+They simply open the Android application, select a Repair button and press Run.
+
+The application safely diagnoses, guides, repairs where Android permits, verifies the result and records the actual execution.
+
+Complete the implementation, testing, deployment and GitHub synchronization to the fullest extent possible in the current environment.
+
+START WITH THE EXISTING REPOSITORY NOW.

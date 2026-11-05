@@ -2,13 +2,18 @@ package com.example.data.remote
 
 import com.example.BuildConfig
 import com.example.data.remote.dto.AuthSessionResponse
+import com.example.data.remote.dto.GetSignedToolRequest
+import com.example.data.remote.dto.GetToolsRequest
+import com.example.data.remote.dto.GetToolsResponse
 import com.example.data.remote.dto.OtpRequest
-import com.example.data.remote.dto.RemoteToolDto
-import com.example.data.remote.dto.RepairRunReportRequest
+import com.example.data.remote.dto.RegisterDeviceRequest
+import com.example.data.remote.dto.RegisterDeviceResponse
+import com.example.data.remote.dto.RemoteSignedToolDto
 import com.example.data.remote.dto.SignedRecipeResponse
+import com.example.data.remote.dto.SubmitRunRequest
+import com.example.data.remote.dto.SubmitRunResponse
 import com.example.data.remote.dto.VerifyOtpRequest
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -118,19 +123,23 @@ class SupabaseClient(
     }
 
     /**
-     * Call get-my-repair-tools Edge Function.
+     * Register or heartbeat device with register-device Edge Function.
      */
-    suspend fun getMyRepairTools(authToken: String): Result<List<RemoteToolDto>> = withContext(Dispatchers.IO) {
+    suspend fun registerDevice(req: RegisterDeviceRequest, authToken: String): Result<String> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
         }
 
-        val url = "$baseUrl/functions/v1/get-my-repair-tools"
+        val url = "$baseUrl/functions/v1/register-device"
+        val adapter = moshi.adapter(RegisterDeviceRequest::class.java)
+        val bodyJson = adapter.toJson(req)
+
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", anonKey)
             .addHeader("Authorization", "Bearer $authToken")
-            .get()
+            .addHeader("Content-Type", "application/json")
+            .post(bodyJson.toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -138,10 +147,45 @@ class SupabaseClient(
             response.use {
                 val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
-                    val listType = Types.newParameterizedType(List::class.java, RemoteToolDto::class.java)
-                    val adapter = moshi.adapter<List<RemoteToolDto>>(listType)
-                    val tools = adapter.fromJson(resBody) ?: emptyList()
-                    Result.success(tools)
+                    val parsed = moshi.adapter(RegisterDeviceResponse::class.java).fromJson(resBody)
+                        ?: return@withContext Result.failure(IOException("Empty device registration response"))
+                    Result.success(parsed.data.deviceId)
+                } else {
+                    Result.failure(IOException("Device registration failed (HTTP ${it.code}): $resBody"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Call get-my-repair-tools Edge Function.
+     */
+    suspend fun getMyRepairTools(deviceId: String, authToken: String): Result<List<RemoteSignedToolDto>> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
+        }
+
+        val url = "$baseUrl/functions/v1/get-my-repair-tools"
+        val adapter = moshi.adapter(GetToolsRequest::class.java)
+        val bodyJson = adapter.toJson(GetToolsRequest(deviceId = deviceId))
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", anonKey)
+            .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
+            .post(bodyJson.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                val resBody = it.body?.string() ?: ""
+                if (it.isSuccessful) {
+                    val envelope = moshi.adapter(GetToolsResponse::class.java).fromJson(resBody)
+                    Result.success(envelope?.data ?: emptyList())
                 } else {
                     Result.failure(IOException("Failed to fetch tools (HTTP ${it.code}): $resBody"))
                 }
@@ -154,18 +198,21 @@ class SupabaseClient(
     /**
      * Call get-signed-repair-tool Edge Function.
      */
-    suspend fun getSignedRepairTool(toolId: String, authToken: String): Result<SignedRecipeResponse> = withContext(Dispatchers.IO) {
+    suspend fun getSignedRepairTool(toolId: String, deviceId: String, authToken: String): Result<SignedRecipeResponse> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
         }
 
         val url = "$baseUrl/functions/v1/get-signed-repair-tool"
-        val payload = "{\"tool_id\": \"$toolId\"}"
+        val adapter = moshi.adapter(GetSignedToolRequest::class.java)
+        val bodyJson = adapter.toJson(GetSignedToolRequest(toolId = toolId, deviceId = deviceId))
+
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", anonKey)
             .addHeader("Authorization", "Bearer $authToken")
-            .post(payload.toRequestBody(jsonMediaType))
+            .addHeader("Content-Type", "application/json")
+            .post(bodyJson.toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -188,29 +235,31 @@ class SupabaseClient(
     /**
      * Submit repair run execution report to Supabase backend.
      */
-    suspend fun submitRepairRun(report: RepairRunReportRequest, authToken: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun submitRepairRun(report: SubmitRunRequest, authToken: String): Result<String> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
         }
 
         val url = "$baseUrl/functions/v1/submit-repair-run"
-        val adapter = moshi.adapter(RepairRunReportRequest::class.java)
+        val adapter = moshi.adapter(SubmitRunRequest::class.java)
         val bodyJson = adapter.toJson(report)
 
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", anonKey)
             .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
             .post(bodyJson.toRequestBody(jsonMediaType))
             .build()
 
         try {
             val response = okHttpClient.newCall(request).execute()
             response.use {
+                val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
-                    Result.success(Unit)
+                    val parsed = moshi.adapter(SubmitRunResponse::class.java).fromJson(resBody)
+                    Result.success(parsed?.data?.runId ?: "")
                 } else {
-                    val resBody = it.body?.string() ?: ""
                     Result.failure(IOException("Failed to submit run report (HTTP ${it.code}): $resBody"))
                 }
             }
