@@ -102,6 +102,10 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[KEY_DEVICE_ID] = deviceId.trim() }
     }
 
+    suspend fun clearDeviceId() {
+        context.dataStore.edit { prefs -> prefs.remove(KEY_DEVICE_ID) }
+    }
+
     val sessionFlow: Flow<UserSession> = context.dataStore.data.map { prefs ->
         val email = prefs[KEY_USER_EMAIL] ?: ""
         val accessToken = prefs[KEY_ACCESS_TOKEN_ENCRYPTED]?.let { encrypted ->
