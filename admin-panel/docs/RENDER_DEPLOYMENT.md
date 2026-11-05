@@ -1,70 +1,67 @@
 # Render deployment — Mahi Repair Admin Panel
 
-## Target
+## Current preview service
 
-Deploy only the existing Next.js application in `admin-panel/` as a Render **Web Service**. Do not use a Static Site. The PR branch is a preview/staging deployment, not the production release.
+The Next.js owner console runs as a Render **Node.js Web Service**, not a Static Site.
 
-The repository root contains `render.yaml`. It defines:
+- Service: `mahi-repair-admin-preview`
+- URL: https://mahi-repair-admin-preview.onrender.com
+- Dashboard: https://dashboard.render.com/web/srv-dbmdt10u01pc73a97osg
+- Repository: `mahimahfud-ui/Mahi-Repair`
+- Branch: `security-hardening/run-repair`
+- Plan: Free preview
+- Region: Singapore
+- Runtime: Node.js **22.23.4**
+- Build: `cd admin-panel && npm ci && npm run build`
+- Start: `cd admin-panel && npm start`
 
-- Runtime: Node.js (the app's `.nvmrc` selects Node 22; `package.json` requires Node 20.9+).
-- Root directory: `admin-panel`.
-- Build: `npm ci && npm run build`.
-- Start: `npm start` (the existing `next start` script; Render's assigned `PORT` is used by Next.js).
-- Branch: `security-hardening/run-repair`.
-- Automatic deploy: only after the linked GitHub checks pass.
-- Region: Singapore.
-- Plan: Free for this preview. No paid plan is selected by this configuration.
-
-## Create the preview service
-
-1. In the intended Render workspace, create a Blueprint using this repository and the `security-hardening/run-repair` branch.
-2. Confirm the Blueprint points to the root `render.yaml` and inspect the proposed resource before applying it.
-3. Create the `mahi-repair-admin-preview` Web Service. Do not create a Static Site.
-4. Wait for the first deploy to complete, then copy the service's actual assigned origin from Render. Never infer the URL from the service name.
+The repository `.node-version`, `admin-panel/.nvmrc`, package engine and Render `NODE_VERSION` are all pinned to Node 22.23.4. Production should be a separate service created after review and merge; do not deploy the PR branch to the production hostname.
 
 ## Environment variables
 
-Set these three browser-safe variables on the Render service:
+Only browser-safe values belong in Render:
 
 | Variable | Value |
-| --- | --- |
+|---|---|
+| `NODE_VERSION` | `22.23.4` |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://shwqsljicmhflnvjqjah.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The current project's Supabase publishable key |
-| `NEXT_PUBLIC_APP_URL` | The exact origin assigned by Render, including `https://` and no trailing slash |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Current project's publishable key |
+| `NEXT_PUBLIC_APP_URL` | Exact Render HTTPS origin, no trailing slash |
 
-Set the variables before the production build. Redeploy after changing a value that Next.js embeds into the client bundle.
+Never put a service-role key, database password or recipe-signing private key in Render or in a `NEXT_PUBLIC_*` value.
 
-**Never add** `SUPABASE_SERVICE_ROLE_KEY`, the database password, or `RECIPE_SIGNING_PRIVATE_KEY_PEM` to Render or to any `NEXT_PUBLIC_*` variable. They belong only in the Supabase Edge Function secret store.
+## Supabase Auth and Edge Function origin
 
-## Supabase origin and authentication configuration
+- Set Supabase Auth Site URL to the deployed Admin Panel origin.
+- Add the exact `<origin>/auth/callback` URL to Supabase Auth redirect URLs.
+- Set the custom Edge Function secret `ADMIN_ORIGIN` to that exact origin, without a path or trailing slash.
+- The protected production workflow sets Supabase's `ADMIN_ORIGIN` custom secret from the GitHub `supabase-production` environment variable.
 
-After Render has provided the real URL:
+Supabase automatically injects `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` into Edge Functions. The `SUPABASE_` prefix is reserved; do not create custom secrets with that prefix.
 
-1. Set the Supabase Edge Function secret `ADMIN_ORIGIN` to the exact Render origin. Keep the value to one origin (scheme + host), without a path or trailing slash.
-2. In Supabase Auth URL Configuration, set the Site URL to the deployed origin and add the exact callback URL `<actual-origin>/auth/callback` to the redirect allow list.
-3. Confirm `NEXT_PUBLIC_APP_URL` and `ADMIN_ORIGIN` match the same verified origin.
-4. Do not deploy production Edge Functions or apply production migrations as a side effect of creating the Render preview.
+## Signing key
 
-## Live Android synchronization prerequisites
+Create a matching RSA-3072 key pair on a trusted machine. Add the PKCS#8 private key directly in Supabase Dashboard → Edge Function Secrets as `RECIPE_SIGNING_PRIVATE_KEY_PEM`. Do not store it in Render, GitHub, Android, source control or browser variables. Embed only the matching X.509 public PEM in Android. The checked-in Android public-key value remains a placeholder until the real pair is configured.
 
-The app listens only while foregrounded on an authenticated private Broadcast topic scoped to its member and registered device. It reacts to a minimal event by calling `get-my-repair-tools`; it does not receive recipe JSON over Realtime. Every catalogue entry is signature-verified before it reaches Room, and execution fetches a fresh signed release through `get-signed-repair-tool`.
+## Private Realtime and Android catalogue delivery
 
-Before enabling this branch against a live Supabase project:
+Android subscribes only while foregrounded to a private topic scoped to its authenticated member and registered device. Events contain only an opaque event ID. On an event the app calls `get-my-repair-tools`, verifies each signed canonical payload, and updates Room. App launch, resume, reconnect and WorkManager sync recover missed events.
 
-- Review and apply the migration `20261106120000_private_realtime_catalog_broadcast.sql`.
-- In the Supabase Realtime settings, disable **Allow public access** so clients must use private channels.
-- Deploy the updated `get-my-repair-tools`, `get-signed-repair-tool`, and `submit-repair-run` Edge Functions with JWT verification enabled.
-- Verify the active device/member RLS policy and test publication, update, disable, assignment removal, member suspension, and device revocation.
-- Confirm that a missed event is recovered by the full sync performed after reconnect/foreground and by WorkManager's periodic sync.
+Before production:
 
-The migration and Edge Function changes in this PR are source changes only until a separately reviewed Supabase deployment is completed. Do not use a Render deploy as proof that these backend prerequisites are live.
+1. Review and apply `20261106120000_private_realtime_catalog_broadcast.sql`.
+2. Disable Supabase Realtime **Allow public access**.
+3. Verify `realtime.messages` RLS limits each authenticated session to its own registered-device topic.
+4. Deploy all updated Edge Functions with JWT verification enabled.
+5. Test publish, update, disable, assignment removal, member suspension and device revocation.
+6. Verify a revoked device cannot fetch or execute tools even though it can receive its own opaque revocation signal.
 
-## Preview acceptance check
+The migration and Edge Function changes on this PR branch are not live in production until the protected Supabase workflow succeeds. A Render deploy does not deploy database migrations or Edge Functions.
 
-- Render service type is Web Service, not Static Site.
-- The deployment SHA is the reviewed PR head.
-- `/auth/callback` resolves on the actual Render origin.
-- Owner authentication works against the intended Supabase project after `ADMIN_ORIGIN` and Auth URL settings are updated.
-- No privileged service-role or private signing key is present in Render environment variables or browser-visible bundles.
-- Admin publish/update/disable operations succeed only after the matching Edge Functions and migration are deployed.
-- Android receives only an event notification, then fetches its own authorized, signed catalogue.
+## Preview smoke test
+
+- `/login` displays the owner sign-in page.
+- Unauthenticated requests to `/`, `/tools` and `/publishing` require authentication.
+- The Supabase Auth callback resolves on the actual Render origin.
+- No privileged secrets are present in Render variables or browser-visible bundles.
+- Production publishing is enabled only after the signing secret, migration and updated Edge Functions are configured.
