@@ -115,7 +115,7 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Personal Android Repair Toolkit",
+                text = "Private repair access",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = MahiRedPrimary,
                     fontWeight = FontWeight.Medium,
@@ -283,7 +283,7 @@ fun AuthScreen(
                                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                             } else {
                                 Text(
-                                    text = "VERIFY & LOAD TOOLS",
+                                    text = "VERIFY & CONTINUE",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     letterSpacing = 0.5.sp
