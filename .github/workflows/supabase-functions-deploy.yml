@@ -1,0 +1,73 @@
+name: Deploy Supabase Edge Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: "Type DEPLOY to update the live Mahi-Repair Supabase project"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy all 15 Edge Functions
+    if: github.ref == 'refs/heads/main' && inputs.confirm_production == 'DEPLOY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: supabase-production
+      url: https://supabase.com/dashboard/project/shwqsljicmhflnvjqjah/functions
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+
+      - name: Set up Supabase CLI v2.122.1
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.122.1
+
+      - name: Validate deployment credentials
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || {
+            echo "::error::Add SUPABASE_ACCESS_TOKEN to the supabase-production GitHub environment."
+            exit 1
+          }
+
+      - name: Deploy Edge Functions with JWT verification enabled
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: shwqsljicmhflnvjqjah
+        shell: bash
+        run: |
+          set -euo pipefail
+          functions=(
+            admin-assign-tool
+            admin-delete-draft-tool
+            admin-disable-tool
+            admin-invite-member
+            admin-manage-device
+            admin-manage-member
+            admin-manage-tool-state
+            admin-publish-tool
+            admin-save-validation
+            admin-upsert-tool
+            get-admin-analytics
+            get-my-repair-tools
+            get-signed-repair-tool
+            register-device
+            submit-repair-run
+          )
+          for function in "${functions[@]}"; do
+            echo "::group::Deploying ${function}"
+            supabase functions deploy "${function}" --project-ref "$PROJECT_REF"
+            echo "::endgroup::"
+          done
