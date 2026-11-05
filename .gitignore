@@ -16,3 +16,15 @@
 local.properties
 .env
 debug.keystore
+
+# Keep real environment files and signing/build credentials out of Git.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
