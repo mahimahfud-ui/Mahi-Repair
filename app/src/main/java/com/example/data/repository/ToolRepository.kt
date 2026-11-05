@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class ToolRepository(
     private val database: AppDatabase,
@@ -28,6 +30,7 @@ class ToolRepository(
 ) {
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
+    private val recipeSlugsByToolId = ConcurrentHashMap<String, String>()
 
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
 
@@ -106,13 +109,16 @@ class ToolRepository(
 
             val dtos = remoteResult.getOrThrow()
             val now = System.currentTimeMillis()
+            val nextRecipeSlugs = mutableMapOf<String, String>()
             val entities = dtos.map { dto ->
+                UUID.fromString(dto.toolId)
                 val recipe = verifiedPayload(
                     signedPayload = dto.signedPayload,
                     signature = dto.signature,
                     signatureAlgorithm = dto.signatureAlgorithm,
                     expectedVersion = dto.version
                 )
+                nextRecipeSlugs[dto.toolId] = recipe.getString("toolId")
                 val category = recipe.getString("category")
                 val minAndroidApi = recipe.optInt("minAndroidApi", 23)
                 val minAppVersionText = recipe.optString("minAppVersion", "1.0.0")
@@ -145,6 +151,8 @@ class ToolRepository(
             // Only replace the local catalog after every returned recipe has passed verification.
             toolDao.clearAll()
             if (entities.isNotEmpty()) toolDao.insertTools(entities)
+            recipeSlugsByToolId.clear()
+            recipeSlugsByToolId.putAll(nextRecipeSlugs)
             preferencesManager.updateLastSyncTime(now)
             Result.success(entities.size)
         } catch (error: Exception) {
@@ -168,12 +176,17 @@ class ToolRepository(
             val signed = supabaseClient.getSignedRepairTool(toolId, deviceId, session.token).getOrElse { cause ->
                 throw IllegalStateException("This repair is no longer authorized for this device.", cause)
             }
-            verifiedPayload(
+            val recipe = verifiedPayload(
                 signedPayload = signed.signedPayload,
                 signature = signed.signature,
                 signatureAlgorithm = signed.signatureAlgorithm,
                 expectedVersion = signed.version
             )
+            val expectedSlug = recipeSlugsByToolId[toolId]
+                ?: throw IllegalStateException("Refresh the repair list before running this repair.")
+            if (recipe.getString("toolId") != expectedSlug) {
+                throw IllegalArgumentException("The repair release does not match the selected repair.")
+            }
             Result.success(signed.signedPayload to signed.signature)
         } catch (error: Exception) {
             Result.failure(error)
