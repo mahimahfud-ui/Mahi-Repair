@@ -1,8 +1,8 @@
 package com.example.data.repository
 
 import android.os.Build
+import com.example.BuildConfig
 import com.example.data.local.AppDatabase
-import com.example.data.local.DefaultToolCatalog
 import com.example.data.local.PreferencesManager
 import com.example.data.local.RepairHistoryEntity
 import com.example.data.local.ToolEntity
@@ -14,18 +14,18 @@ import com.example.domain.models.RepairRunReport
 import com.example.domain.models.RepairTool
 import com.example.domain.models.StepStatus
 import com.example.domain.models.ToolCategory
+import com.example.security.RecipeContractVerifier
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import org.json.JSONObject
 import java.time.Instant
 
 class ToolRepository(
     private val database: AppDatabase,
     private val preferencesManager: PreferencesManager,
-    private val supabaseClient: SupabaseClient
+    private val supabaseClient: SupabaseClient,
+    private val authRepository: AuthRepository
 ) {
-
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
 
@@ -35,127 +35,150 @@ class ToolRepository(
         entities.map { it.toDomain() }
     }
 
-    suspend fun initializeCatalogIfEmpty() {
-        val existing = toolDao.getEnabledToolsFlow().first()
-        if (existing.isEmpty()) {
-            val defaults = DefaultToolCatalog.getInitialTools()
-            toolDao.insertTools(defaults)
-            preferencesManager.updateLastSyncTime()
-        }
-    }
-
-    private suspend fun ensureRegisteredDeviceId(authToken: String): String {
+    /**
+     * Device identifiers are issued by Supabase. A random local UUID is never an
+     * acceptable substitute because it would bypass server-side device ownership checks.
+     */
+    private suspend fun ensureRegisteredDeviceId(accessToken: String): String {
         val savedId = preferencesManager.deviceIdFlow.first()
-        if (!savedId.isNullOrBlank()) {
-            return savedId
-        }
-
-        val regReq = RegisterDeviceRequest(
-            deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}",
-            appVersion = "1.0.0",
-            androidVersion = Build.VERSION.RELEASE ?: "14",
+        val request = RegisterDeviceRequest(
+            deviceId = savedId,
+            deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}".take(100),
+            appVersion = BuildConfig.VERSION_NAME,
+            androidVersion = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString(),
             androidApi = Build.VERSION.SDK_INT
         )
-        val regRes = supabaseClient.registerDevice(regReq, authToken)
-        val deviceId = regRes.getOrNull() ?: java.util.UUID.randomUUID().toString()
+        val result = supabaseClient.registerDevice(request, accessToken)
+        val deviceId = result.getOrElse { cause ->
+            throw IllegalStateException("This device could not be authorized by the repair service.", cause)
+        }.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("The repair service returned an invalid device identity.")
+
         preferencesManager.saveDeviceId(deviceId)
         return deviceId
     }
 
-    suspend fun syncTools(): Result<Int> {
-        val session = preferencesManager.sessionFlow.first()
-
-        if (supabaseClient.isConfigured()) {
-            if (!session.isAuthenticated) {
-                return Result.failure(IllegalStateException("User is not signed in."))
-            }
-
-            val deviceId = try {
-                ensureRegisteredDeviceId(session.token)
-            } catch (e: Exception) {
-                return Result.failure(Exception("Device registration failed: ${e.message}"))
-            }
-
-            val remoteResult = supabaseClient.getMyRepairTools(deviceId, session.token)
-            return if (remoteResult.isSuccess) {
-                val dtos = remoteResult.getOrThrow()
-                val entities = dtos.map { dto ->
-                    var title = dto.toolId
-                    var categoryStr = "Apps"
-                    var description = "Verified repair tool"
-                    var problemDesc = "Troubleshooting and recovery tool"
-                    var minSdk = 26
-                    var minApp = 1
-                    var targetPackage: String? = null
-
-                    try {
-                        val parsed = JSONObject(dto.signedPayload)
-                        title = parsed.optString("title", dto.toolId)
-                        val cat = parsed.optString("category", "apps")
-                        categoryStr = ToolCategory.fromCategory(cat).title
-                        description = parsed.optString("changelog", "Mahi Repair cloud verified release.")
-                        problemDesc = "Resolves issues configured by recipe."
-                        minSdk = parsed.optInt("minAndroidApi", 26)
-                        val appVer = parsed.optString("minAppVersion", "1.0.0")
-                        minApp = appVer.filter { it.isDigit() }.toIntOrNull() ?: 1
-                    } catch (_: Exception) {
-                        // Keep safe fallback metadata
-                    }
-
-                    ToolEntity(
-                        id = dto.toolId,
-                        name = title,
-                        description = description,
-                        category = categoryStr,
-                        version = dto.version.toString(),
-                        problemDescription = problemDesc,
-                        minAppVersion = minApp,
-                        minAndroidSdk = minSdk,
-                        isNew = true,
-                        enabled = true,
-                        targetPackage = targetPackage,
-                        rawSignedPayload = dto.signedPayload,
-                        signatureBase64 = dto.signature,
-                        lastUpdated = System.currentTimeMillis()
-                    )
-                }
-                toolDao.insertTools(entities)
-                preferencesManager.updateLastSyncTime()
-                Result.success(entities.size)
-            } else {
-                val err = remoteResult.exceptionOrNull()?.message ?: "Failed to sync"
-                Result.failure(Exception("Cloud sync failed: $err. Showing local cached tools."))
-            }
-        } else {
-            // Local verified sync
-            initializeCatalogIfEmpty()
-            preferencesManager.updateLastSyncTime()
-            val count = toolDao.getEnabledToolsFlow().first().size
-            return Result.success(count)
+    private fun verifySignatureAlgorithm(algorithm: String) {
+        if (algorithm != "RSA-SHA256") {
+            throw IllegalArgumentException("The repair release uses an unsupported signature algorithm.")
         }
     }
 
-    suspend fun getSignedPayloadAndSignature(toolId: String): Result<Pair<String, String>> {
-        val cached = toolDao.getToolById(toolId)
-        if (cached != null && cached.rawSignedPayload.isNotBlank() && cached.signatureBase64.isNotBlank()) {
-            return Result.success(Pair(cached.rawSignedPayload, cached.signatureBase64))
+    private fun verifiedPayload(
+        signedPayload: String,
+        signature: String,
+        signatureAlgorithm: String,
+        expectedVersion: Int
+    ): org.json.JSONObject {
+        verifySignatureAlgorithm(signatureAlgorithm)
+        val publicKey = BuildConfig.RECIPE_SIGNING_PUBLIC_KEY_PEM
+        val recipe = RecipeContractVerifier.verifyAndParse(signedPayload, signature, publicKey)
+        val payloadVersion = recipe.getInt("version")
+        if (payloadVersion != expectedVersion) {
+            throw IllegalArgumentException("The signed repair release version does not match the server authorization.")
+        }
+        return recipe
+    }
+
+    /**
+     * Refresh session, register/heartbeat the server-issued device, and verify every
+     * signed release before it is written to the local catalog. No bundled fallback exists.
+     */
+    suspend fun syncTools(): Result<Int> {
+        if (!supabaseClient.isConfigured()) {
+            return Result.failure(IllegalStateException("The repair service is not configured."))
         }
 
-        val session = preferencesManager.sessionFlow.first()
-        if (supabaseClient.isConfigured() && session.isAuthenticated) {
-            val deviceId = preferencesManager.deviceIdFlow.first() ?: ensureRegisteredDeviceId(session.token)
-            val remoteResult = supabaseClient.getSignedRepairTool(toolId, deviceId, session.token)
-            if (remoteResult.isSuccess) {
-                val signed = remoteResult.getOrThrow()
-                return Result.success(Pair(signed.signedPayload, signed.signature))
+        val sessionResult = authRepository.getValidSession()
+        if (sessionResult.isFailure) {
+            return Result.failure(sessionResult.exceptionOrNull() ?: IllegalStateException("Please sign in."))
+        }
+
+        return try {
+            val session = sessionResult.getOrThrow()
+            val deviceId = ensureRegisteredDeviceId(session.token)
+            val remoteResult = supabaseClient.getMyRepairTools(deviceId, session.token)
+            if (remoteResult.isFailure) {
+                throw remoteResult.exceptionOrNull() ?: IllegalStateException("Repair catalog synchronization failed.")
             }
-        }
 
-        return Result.failure(IllegalStateException("No signed recipe available for tool '$toolId'."))
+            val dtos = remoteResult.getOrThrow()
+            val now = System.currentTimeMillis()
+            val entities = dtos.map { dto ->
+                val recipe = verifiedPayload(
+                    signedPayload = dto.signedPayload,
+                    signature = dto.signature,
+                    signatureAlgorithm = dto.signatureAlgorithm,
+                    expectedVersion = dto.version
+                )
+                val category = recipe.getString("category")
+                val minAndroidApi = recipe.optInt("minAndroidApi", 23)
+                val minAppVersionText = recipe.optString("minAppVersion", "1.0.0")
+                val minAppVersion = minAppVersionText.substringBefore('.').toIntOrNull() ?: 1
+                val title = recipe.getString("title")
+                val changelog = recipe.optString("changelog", "").ifBlank {
+                    "Verified repair instructions."
+                }
+
+                ToolEntity(
+                    id = dto.toolId,
+                    name = title,
+                    description = changelog,
+                    category = ToolCategory.fromCategory(category).title,
+                    version = dto.version.toString(),
+                    problemDescription = "Guided repair for $title.",
+                    minAppVersion = minAppVersion,
+                    minAndroidSdk = minAndroidApi,
+                    isNew = true,
+                    enabled = true,
+                    targetPackage = null,
+                    // The signature is verified at sync and fetched/verified again at execution.
+                    // Do not treat cached payloads as current authorization.
+                    rawSignedPayload = "",
+                    signatureBase64 = "",
+                    lastUpdated = now
+                )
+            }
+
+            // Only replace the local catalog after every returned recipe has passed verification.
+            toolDao.clearAll()
+            if (entities.isNotEmpty()) toolDao.insertTools(entities)
+            preferencesManager.updateLastSyncTime(now)
+            Result.success(entities.size)
+        } catch (error: Exception) {
+            Result.failure(IllegalStateException("Could not securely synchronize repair tools.", error))
+        }
+    }
+
+    /**
+     * Always fetch a current signed release from the server at execution time.
+     * A cached payload cannot prove that the member or device is still authorized.
+     */
+    suspend fun getSignedPayloadAndSignature(toolId: String): Result<Pair<String, String>> {
+        return try {
+            if (!supabaseClient.isConfigured()) {
+                throw IllegalStateException("The repair service is not configured.")
+            }
+            val session = authRepository.getValidSession().getOrElse { cause ->
+                throw IllegalStateException("Please sign in again before running a repair.", cause)
+            }
+            val deviceId = ensureRegisteredDeviceId(session.token)
+            val signed = supabaseClient.getSignedRepairTool(toolId, deviceId, session.token).getOrElse { cause ->
+                throw IllegalStateException("This repair is no longer authorized for this device.", cause)
+            }
+            verifiedPayload(
+                signedPayload = signed.signedPayload,
+                signature = signed.signature,
+                signatureAlgorithm = signed.signatureAlgorithm,
+                expectedVersion = signed.version
+            )
+            Result.success(signed.signedPayload to signed.signature)
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
     }
 
     suspend fun recordRepairRun(report: RepairRunReport) {
-        // 1. Save locally to Room audit log
         val entity = RepairHistoryEntity(
             id = report.runId,
             toolId = report.toolId,
@@ -169,55 +192,49 @@ class ToolRepository(
         )
         historyDao.insertRecord(entity)
 
-        // 2. Submit to Supabase if configured and user is signed in
-        val session = preferencesManager.sessionFlow.first()
-        if (supabaseClient.isConfigured() && session.isAuthenticated) {
-            try {
-                val deviceId = preferencesManager.deviceIdFlow.first() ?: ensureRegisteredDeviceId(session.token)
-                val isoStarted = Instant.ofEpochMilli(report.startTime).toString()
-                val isoCompleted = Instant.ofEpochMilli(report.endTime).toString()
-                val toolVer = report.toolVersion.filter { it.isDigit() }.toIntOrNull() ?: 1
+        if (!supabaseClient.isConfigured()) return
+        val sessionResult = authRepository.getValidSession()
+        if (sessionResult.isFailure) return
 
-                val stepResults = report.stepRecords.map {
-                    val statusStr = when (it.status) {
-                        StepStatus.COMPLETED -> "SUCCESS"
-                        StepStatus.SKIPPED -> "SKIPPED"
-                        StepStatus.CANCELLED -> "CANCELLED"
-                        else -> "FAILED"
-                    }
-                    StepRunResultDto(
-                        stepId = it.stepId,
-                        status = statusStr,
-                        errorCode = if (statusStr == "FAILED") "ERR_STEP_FAILED" else null
-                    )
+        runCatching {
+            val session = sessionResult.getOrThrow()
+            val deviceId = ensureRegisteredDeviceId(session.token)
+            val stepResults = report.stepRecords.map { record ->
+                val status = when (record.status) {
+                    StepStatus.COMPLETED -> "SUCCESS"
+                    StepStatus.SKIPPED -> "SKIPPED"
+                    StepStatus.CANCELLED -> "CANCELLED"
+                    else -> "FAILED"
                 }
-
-                val req = SubmitRunRequest(
-                    deviceId = deviceId,
-                    toolId = report.toolId,
-                    toolVersion = toolVer,
-                    startedAt = isoStarted,
-                    completedAt = isoCompleted,
-                    result = report.result.name,
-                    stepResults = stepResults,
-                    errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
-                    appVersion = "1.0.0"
+                StepRunResultDto(
+                    stepId = record.stepId,
+                    status = status,
+                    errorCode = if (status == "FAILED") "ERR_STEP_FAILED" else null
                 )
-                supabaseClient.submitRepairRun(req, session.token)
-            } catch (_: Exception) {
-                // Network report submission failures do not disrupt local audit log
             }
+            val version = report.toolVersion.toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid repair version in execution report.")
+            val request = SubmitRunRequest(
+                deviceId = deviceId,
+                toolId = report.toolId,
+                toolVersion = version,
+                startedAt = Instant.ofEpochMilli(report.startTime).toString(),
+                completedAt = Instant.ofEpochMilli(report.endTime).toString(),
+                result = report.result.name,
+                stepResults = stepResults,
+                errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
+                appVersion = BuildConfig.VERSION_NAME
+            )
+            supabaseClient.submitRepairRun(request, session.token).getOrThrow()
         }
     }
 
     private fun ToolEntity.toDomain(): RepairTool {
-        val cat = ToolCategory.fromCategory(category)
-
         return RepairTool(
             id = id,
             name = name,
             description = description,
-            category = cat,
+            category = ToolCategory.fromCategory(category),
             version = version,
             problemDescription = problemDescription,
             minAppVersion = minAppVersion,
