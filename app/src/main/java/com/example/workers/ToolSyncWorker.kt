@@ -16,11 +16,8 @@ class ToolSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val db = AppDatabase.getInstance(applicationContext)
-            val prefs = PreferencesManager(applicationContext)
-            val client = SupabaseClient()
-            val authRepository = AuthRepository(prefs, client)
-            val repository = ToolRepository(db, prefs, client, authRepository)
+            val app = applicationContext as com.example.MahiRepairApplication
+            val repository = app.toolRepository
 
             val syncResult = repository.syncTools()
             if (syncResult.isSuccess) {
