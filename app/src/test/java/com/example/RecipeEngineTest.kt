@@ -141,7 +141,7 @@ class RecipeEngineTest {
     @Test
     fun canonicalSchemaRejectsFractionalVersionsAndLongAppVersions() {
         val fractionalVersion = validRecipeJson.replace("\"version\": 1", "\"version\": 1.5")
-        assertTrue(RecipeContractVerifier.runCatchingValidation(fractionalVersion).isFailure)
+        assertTrue(runCatching { RecipeContractVerifier.validateSchema(fractionalVersion) }.isFailure)
 
         val longAppVersion = validRecipeJson.replace(
             "\"minAppVersion\": \"1.0.0\"",
