@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { RepairRecipeSchema } from '../src/lib/recipe/catalog';
 import { canonicalJson } from '../src/lib/recipe/canonical';
