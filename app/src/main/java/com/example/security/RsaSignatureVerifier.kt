@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
 import java.security.PublicKey
 import java.security.Signature
+import java.security.interfaces.RSAKey
 import java.security.spec.X509EncodedKeySpec
 
 /**
@@ -33,7 +34,11 @@ object RsaSignatureVerifier {
         val decoded = Base64.decode(cleanKey, Base64.DEFAULT)
         val keySpec = X509EncodedKeySpec(decoded)
         val keyFactory = KeyFactory.getInstance(KEY_ALGORITHM)
-        return keyFactory.generatePublic(keySpec)
+        val publicKey = keyFactory.generatePublic(keySpec)
+        require((publicKey as? RSAKey)?.modulus?.bitLength() == 3072) {
+            "The repair signing key must be RSA-3072"
+        }
+        return publicKey
     }
 
     /**
