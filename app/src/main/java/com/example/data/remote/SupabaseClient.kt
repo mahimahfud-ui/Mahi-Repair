@@ -25,6 +25,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+class InvalidAuthSessionException(message: String) : IOException(message)
+
 class SupabaseClient(
     private val baseUrl: String = BuildConfig.SUPABASE_URL.trimEnd('/'),
     private val anonKey: String = BuildConfig.SUPABASE_ANON_KEY
