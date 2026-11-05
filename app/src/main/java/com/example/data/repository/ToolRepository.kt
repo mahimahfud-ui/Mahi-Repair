@@ -225,7 +225,7 @@ class ToolRepository(
 
         runCatching {
             val session = sessionResult.getOrThrow()
-            val deviceId = ensureRegisteredDeviceId(session.token)
+            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val stepResults = report.stepRecords.map { record ->
                 val status = when (record.status) {
                     StepStatus.COMPLETED -> "SUCCESS"
