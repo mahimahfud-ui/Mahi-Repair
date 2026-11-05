@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.tryLock
 
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
@@ -51,6 +53,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
+    private val executionMutex = Mutex()
 
     val uiState: StateFlow<MainUiState> = combine(
         authRepo.sessionFlow,
@@ -139,28 +142,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onRunTool(tool: RepairTool) {
+        if (!executionMutex.tryLock()) return
         viewModelScope.launch {
-            val payloadResult = toolRepo.getSignedPayloadAndSignature(tool.id)
-            if (payloadResult.isFailure) {
-                _syncStatusMessage.value = payloadResult.exceptionOrNull()?.message ?: "Recipe not found."
-                return@launch
+            try {
+                val payloadResult = toolRepo.getSignedPayloadAndSignature(tool.id)
+                if (payloadResult.isFailure) {
+                    _syncStatusMessage.value = payloadResult.exceptionOrNull()?.message ?: "Repair could not be authorized."
+                    return@launch
+                }
+
+                val currentEmail = uiState.value.session.email
+                if (currentEmail.isBlank()) {
+                    _syncStatusMessage.value = "Please sign in again before running a repair."
+                    return@launch
+                }
+
+                val (signedPayload, signature) = payloadResult.getOrThrow()
+                val report = engine.executeRecipe(
+                    tool = tool,
+                    rawSignedPayload = signedPayload,
+                    signatureBase64 = signature,
+                    userEmail = currentEmail
+                )
+                toolRepo.recordRepairRun(report)
+            } finally {
+                executionMutex.unlock()
             }
-
-            val (signedPayload, signature) = payloadResult.getOrThrow()
-            val currentEmail = uiState.value.session.email
-            if (currentEmail.isBlank()) {
-                _syncStatusMessage.value = "Please sign in again before running a repair."
-                return@launch
-            }
-
-            val report = engine.executeRecipe(
-                tool = tool,
-                rawSignedPayload = signedPayload,
-                signatureBase64 = signature,
-                userEmail = currentEmail
-            )
-
-            toolRepo.recordRepairRun(report)
         }
     }
 
