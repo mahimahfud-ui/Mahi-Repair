@@ -97,3 +97,18 @@ Set the same three public environment variables in the web host. Deploy the Next
 5. Fetch via a member test account; verify the signature inside a debug Android build before enabling recipe execution.
 
 No real-device test is implied by the Test Lab simulation.
+
+
+## 8. GitHub Actions deployment
+
+The repository includes a manual-only production Edge Function deployment workflow.
+
+1. In GitHub, create an environment named `supabase-production`.
+2. Add a required reviewer to that environment so a production deployment cannot run without approval.
+3. Add the Supabase personal access token as the environment secret `SUPABASE_ACCESS_TOKEN`.
+4. Merge the reviewed changes to `main`.
+5. Open Actions → Deploy Supabase Edge Functions, select the `main` branch, and enter `DEPLOY` in the confirmation input.
+
+The workflow deploys the 15 Edge Functions to project `shwqsljicmhflnvjqjah` and leaves JWT verification enabled. It does not apply database migrations or change Edge Function secrets. Migration changes and secret rotations remain separate, explicitly reviewed operations.
+
+The workflow pins Supabase CLI `2.122.1`. Supabase CLI v3 changed hosted-command defaults and confirmation behavior; do not replace the pin with `latest` without adapting and verifying the deployment commands first.
