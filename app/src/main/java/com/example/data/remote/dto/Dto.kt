@@ -69,7 +69,7 @@ data class RemoteSignedToolDto(
     val version: Int,
     @Json(name = "signed_payload") val signedPayload: String,
     val signature: String,
-    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String,
     @Json(name = "published_at") val publishedAt: String? = null
 )
 
