@@ -16,6 +16,7 @@ import com.example.domain.models.ActionType
 import com.example.domain.models.RecipeStep
 import com.example.domain.models.StepStatus
 import com.example.security.RuntimePermissionContract
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -161,6 +162,8 @@ class ActionRegistry(private val context: Context) {
                 ActionType.VERIFY_INTERNET -> executeVerifyInternet(step.params)
                 ActionType.VERIFY_DNS -> executeVerifyDns(step.params)
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             ActionResult(
                 status = StepStatus.FAILED,
