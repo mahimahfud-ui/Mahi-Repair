@@ -46,12 +46,13 @@ The live Supabase project is healthy, has the expected application schema and RL
 - Applied migration history: initial schema, RLS/grants/index hardening, rate-limit access control, private Realtime broadcast, report idempotency/atomic catalogue, transactional admin audit, and atomic member catalogue/device registration.
 - Security-definer application RPCs inspected were executable by `service_role`, not `anon` or `authenticated`.
 - Auth profile counts: one active Owner and one active Member.
+- Current live application data counts: `profiles=2`; `devices=0`, `repair_tools=0`, `repair_tool_versions=0`, `repair_tool_access=0`, `device_tool_syncs=0`, `repair_runs=0`, `admin_audit_logs=0`, and `recipe_test_history=0`. The live backend is connected, but no device or repair catalogue content is populated; a Member will not have a tool list until an Owner configures RSA signing and publishes a real signed recipe.
 
 ## CI references
 
-- Android current candidate run: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42271769257
-- Admin Panel current candidate run: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42271769418
-- Supabase Edge Functions CI on unchanged backend source: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42264240682
+- Android current candidate run: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42273255692
+- Admin Panel current candidate run: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42273255288
+- Supabase Edge Functions CI on unchanged backend source: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42273255674
 - Earlier Android Compose failure used to identify the duplicate-text assertion: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42264240707
 
 ## External gates
