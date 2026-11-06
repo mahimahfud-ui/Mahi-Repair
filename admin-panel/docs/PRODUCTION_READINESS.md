@@ -1,6 +1,6 @@
 # Mahi Repair — production readiness
 
-This checklist separates code/CI evidence from checks that must be performed against the actual production Render, Supabase and Android environments. A passing CI workflow is not a production acceptance test.
+This checklist separates code/CI evidence from checks that must be performed against the actual production Cloud Run, Supabase and Android environments. A passing CI workflow is not a production acceptance test.
 
 ## Implemented in the branch and covered by current-head CI
 
@@ -18,7 +18,7 @@ This checklist separates code/CI evidence from checks that must be performed aga
 - [x] Current-head Android unit tests and debug APK assembly.
 - [x] Current-head Android Compose UI emulator tests (API 35).
 - [x] Current-head source and generated-debug-APK privileged-secret marker scans.
-- [x] Current-head Supabase CI: all 15 Edge Function entrypoints/shared modules type-check; canonical recipe/run-report tests pass.
+- [x] Current-head Supabase CI: all 16 Edge Function entrypoints/shared modules type-check; canonical recipe/run-report tests pass.
 - [x] Current-head Admin CI: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build pass.
 - [x] Node.js 22.23.4 pinned across Render, Admin Panel and Admin Panel CI.
 - [x] Protected production workflow source for migration preview/apply and JWT-verified deployment of all 15 Edge Functions.
@@ -35,8 +35,8 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 
 ## Production configuration still required
 
-- [ ] Establish the final production Render Web Service and record its canonical HTTPS URL; the checked-in render.yaml defines only the Free preview service.
-- [ ] Verify production Render TLS/HTTPS, health, owner sign-in and exact environment configuration.
+- [ ] Establish the production Cloud Run service and record its canonical HTTPS URL; the checked-in render.yaml defines only the Free preview service.
+- [ ] Verify production Cloud Run TLS/HTTPS, health, owner sign-in and exact environment configuration.
 - [ ] Generate a real RSA-3072 key pair. Add only the PKCS#8 private key directly to Supabase Edge Function Secrets as RECIPE_SIGNING_PRIVATE_KEY_PEM; configure the matching X.509 public PEM in the Android release build. The checked-in public-key value remains a placeholder.
 - [ ] Configure the protected GitHub supabase-production environment with a required reviewer, secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD, and variable ADMIN_ORIGIN.
 - [ ] Verify the private signing secret exists in Supabase before deployment without logging its value.
@@ -44,7 +44,7 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 - [ ] Verify the owner Auth account and manually bootstrap only that account to owner; new profiles intentionally default to member.
 - [ ] Review and apply 20261106120000_private_realtime_catalog_broadcast.sql using the protected production workflow.
 - [ ] Disable Supabase Realtime Allow public access and verify private realtime.messages RLS against owner/member/own-device/revoked-device cases.
-- [ ] Deploy the PR-branch Edge Function updates with JWT verification enabled through the protected workflow.
+- [ ] Deploy the PR-branch Edge Function updates through the protected workflow; all 15 application functions remain JWT-verified and the signed Auth email hook verifies its Standard Webhooks signature.
 - [ ] Verify production database migration history, function deployment status and RLS policy behavior after deployment.
 
 ## End-to-end acceptance tests still required
@@ -72,7 +72,7 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 - A private Realtime subscription is a notification channel only. Every catalogue fetch and execution must still be authorized by the server for the active member and non-revoked device.
 - Revocation cannot be observed by an offline device until it reconnects. The server must deny the next online fetch/run request.
 - The APK artifact currently available from CI is debug-signed with an ephemeral key. No release signing proof is recorded.
-- The Render Free preview is not the production Admin Panel service.
+- The Cloud Run production service and its runtime settings have not yet been provisioned or smoke-tested.
 - A remote recipe may only combine capabilities already compiled into the installed APK. Adding Kotlin behavior or an Android permission requires an app update.
 
 ## Release decision
