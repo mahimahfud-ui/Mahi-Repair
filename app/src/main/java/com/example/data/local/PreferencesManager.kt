@@ -115,7 +115,10 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun clearDeviceId() {
-        context.dataStore.edit { prefs -> prefs.remove(KEY_DEVICE_ID) }
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_DEVICE_ID)
+            prefs.remove(KEY_DEVICE_OWNER_EMAIL)
+        }
     }
 
     suspend fun wasRuntimePermissionRequested(permissionName: String): Boolean {
