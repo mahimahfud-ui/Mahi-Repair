@@ -92,6 +92,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            toolRepo.accessDeniedMessage.collectLatest { message ->
+                if (!message.isNullOrBlank()) _authStatusMessage.value = message
+            }
+        }
+        viewModelScope.launch {
             authRepo.sessionFlow.collectLatest { session ->
                 if (session.isAuthenticated) {
                     refreshTools()
@@ -184,9 +189,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val uploadResult = toolRepo.recordRepairRun(report)
                 _repairStatusMessage.value = if (uploadResult.isSuccess) {
-                    "Repair completed."
+                    "Repair completed. Report saved on this device and queued for secure upload."
                 } else {
-                    "The repair finished, but its report could not be sent. Check your connection."
+                    "The repair finished, but its report could not be saved locally."
                 }
             } catch (error: Exception) {
                 _canRetryAvailability.value = true
@@ -277,6 +282,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val result = authRepo.verifyEmailOtp(email, otp)
             _isAuthLoading.value = false
             if (result.isSuccess) {
+                toolRepo.clearAccessDeniedMessage()
+                toolRepo.enqueuePendingReportUploads()
                 _authStatusMessage.value = "Welcome to Mahi Repair!"
                 _otpSentForEmail.value = null
             } else {
