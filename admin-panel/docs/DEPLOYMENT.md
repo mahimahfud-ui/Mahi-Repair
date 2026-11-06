@@ -75,7 +75,13 @@ The image can also be built with Docker/Cloud Build and deployed as a prebuilt i
 4. Review Supabase Authentication → Rate Limits and lower the token endpoint limit as appropriate for a single-Owner console.
 5. Set the custom Edge Function secret `ADMIN_ORIGIN` to the exact Admin Panel HTTPS origin.
 
-Supabase Edge Functions automatically receive their reserved runtime variables, including the service-role key. Do not copy those values to Cloud Run. Member invitations remain a separate email feature; configure delivery only if you use that feature.
+Supabase Edge Functions automatically receive their reserved runtime variables, including the service-role key. Do not copy those values to Cloud Run. The Owner PIN sign-in remains password-based and does not send an email. Android member OTP and Admin member invitations use the shared project-level Supabase Auth Send Email Hook; configure its provider secrets and enable it only after the signed hook function is deployed. See [AUTH_EMAIL_DELIVERY.md](AUTH_EMAIL_DELIVERY.md) for Resend/Brevo setup, hook-secret activation and acceptance tests.
+
+## Shared Supabase Auth email delivery
+
+The same Supabase Auth Send Email Hook delivers the Android six-digit Member OTP and Admin Member invitation/Magic Link messages. Resend is primary and Brevo is the fallback. The Owner PIN screen itself uses Supabase password sign-in and does not send an email. Only the `send-auth-email` function accepts the Standard Webhooks JWT exception; it validates the signed hook request itself. All 15 application functions remain JWT-verified.
+
+The protected deploy workflow requires Resend/Brevo provider secret names before deploying the function. After deployment, create the Send Email Hook in Supabase Authentication → Hooks, generate its secret, save it as `SEND_EMAIL_HOOK_SECRET`, then enable the hook. The source `config.toml` setting does not create or enable the hosted Auth Hook. Follow [AUTH_EMAIL_DELIVERY.md](AUTH_EMAIL_DELIVERY.md).
 
 ## Recipe signing key
 
