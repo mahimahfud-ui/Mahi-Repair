@@ -11,7 +11,16 @@ CREATE POLICY "mahi repair member device broadcasts"
   FOR SELECT
   TO authenticated
   USING (
-    extension = 'broadcast'
+    -- Existing channels retain the evaluated policy cache long enough to receive the
+    -- opaque suspension event. New connections require an active member profile.
+    EXISTS (
+      SELECT 1
+      FROM public.profiles p
+      WHERE p.id = (SELECT auth.uid())
+        AND p.role = 'member'
+        AND p.status = 'active'
+    )
+    AND extension = 'broadcast'
     AND private IS TRUE
     AND EXISTS (
       SELECT 1
@@ -228,3 +237,21 @@ CREATE TRIGGER devices_private_access_broadcast
 
 COMMENT ON POLICY "mahi repair member device broadcasts" ON realtime.messages IS
   'Allows an authenticated user to receive only opaque private Broadcast events on their own registered-device topic, including access-revocation notifications. It grants no repair recipe or Edge Function authorization.';
+
+
+-- SECURITY DEFINER predicates are needed by authenticated RLS policies, but they
+-- must not inherit PUBLIC/anon execution. Trigger handlers are trigger-only.
+REVOKE ALL ON FUNCTION private.is_owner() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.is_active_member() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION private.can_access_tool(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.is_owner() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION private.is_active_member() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION private.can_access_tool(uuid) TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION private.handle_new_user() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.sync_user_email() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.broadcast_repair_device_event(uuid, uuid, text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.broadcast_repair_tool_catalog_changed() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.broadcast_repair_tool_access_changed() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.broadcast_repair_member_access_changed() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.broadcast_repair_device_access_changed() FROM PUBLIC, anon, authenticated, service_role;
