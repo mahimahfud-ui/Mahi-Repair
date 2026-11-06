@@ -16,6 +16,7 @@ import com.example.data.remote.dto.SubmitRunResponse
 import com.example.data.remote.dto.VerifyOtpRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -79,9 +80,11 @@ class SupabaseClient(
                     Result.success(Unit)
                 } else {
                     val errBody = it.body?.string() ?: ""
-                    Result.failure(IOException("Failed to send OTP (HTTP ${it.code}): $errBody"))
+                    Result.failure(IOException("Failed to send OTP (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -115,7 +118,7 @@ class SupabaseClient(
                         ?: return@withContext Result.failure(IOException("Empty session response"))
                     Result.success(session)
                 } else {
-                    Result.failure(IOException("OTP verification failed (HTTP ${it.code}): $resBody"))
+                    Result.failure(IOException("OTP verification failed (HTTP ${it.code})."))
                 }
             }
         } catch (e: Exception) {
