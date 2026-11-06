@@ -4,6 +4,7 @@ import com.example.data.local.PreferencesManager
 import com.example.data.local.UserSession
 import com.example.data.remote.InvalidAuthSessionException
 import com.example.data.remote.SupabaseClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -84,6 +85,8 @@ class AuthRepository(
                     expiresAtMillis = expiresAt
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely store the sign-in session on this device.", error))
         }
@@ -139,6 +142,8 @@ class AuthRepository(
                     expiresAtMillis = expiresAt
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely persist the refreshed session.", error))
         }
