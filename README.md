@@ -19,9 +19,13 @@ Mahi Repair is a private Android repair toolkit for the owner's family and trust
 
 ## One-install catalogue updates
 
-After the APK is installed and the device is authorized, the owner can publish new recipes that combine existing allowlisted native actions. Android receives a private per-device Realtime notification, fetches the currently authorized signed catalogue, verifies each signature and updates Room.
+After the APK is installed and the device is authorized, the owner can publish new recipes that combine existing allowlisted native actions. Android receives a private per-device Realtime notification, fetches the currently authorized signed catalogue, verifies each signature and replaces Room in one transaction. An interrupted sync cannot leave a partially cleared catalogue.
 
 Realtime notifications are active while the app is foregrounded. App launch, foreground/resume, reconnect and periodic WorkManager sync recover missed events. A new native Kotlin feature, Android permission or unsupported OS capability still requires an APK update.
+
+## Repair report delivery
+
+Android commits each repair report and its immutable serialized request to Room before upload. A failed upload remains in a durable outbox. WorkManager retries with network constraints and exponential backoff; a periodic 15-minute worker recovers reports after process death. Each report uses a client-generated UUID as its server idempotency key. Identical retries are acknowledged; conflicting reuse returns HTTP 409.
 
 ## Important paths
 

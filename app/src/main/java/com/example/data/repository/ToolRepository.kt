@@ -5,6 +5,7 @@ import com.example.BuildConfig
 import com.example.data.local.AppDatabase
 import com.example.data.local.PreferencesManager
 import com.example.data.local.RepairHistoryEntity
+import com.example.data.local.RepairReportOutboxEntity
 import com.example.data.local.ToolEntity
 import com.example.data.remote.SupabaseClient
 import com.example.data.remote.dto.RegisterDeviceRequest
@@ -41,7 +42,7 @@ class ToolRepository(
     private val authRepository: AuthRepository
 ) {
     private val toolDao = database.toolDao()
-    private val historyDao = database.repairHistoryDao()
+    private val reportOutboxDao = database.repairReportOutboxDao()
     private val recipeSlugsByToolId = MutableStateFlow<Map<String, String>>(emptyMap())
     private val syncMutex = Mutex()
     private val deviceRegistrationMutex = Mutex()
@@ -172,11 +173,10 @@ class ToolRepository(
                 )
             }
 
-            // Do not replace a verified local catalog unless every remote entry passed verification.
-            // Publish the verified ID-to-slug map before Room notifies UI collectors.
+            // Replace the full, verified catalog atomically. A process death cannot leave
+            // the local catalog partially deleted or partially inserted.
+            toolDao.replaceAll(entities)
             recipeSlugsByToolId.value = nextRecipeSlugs
-            toolDao.clearAll()
-            if (entities.isNotEmpty()) toolDao.insertTools(entities)
             preferencesManager.updateLastSyncTime(now)
             Result.success(entities.size)
         } catch (error: Exception) {
@@ -258,9 +258,20 @@ class ToolRepository(
         }
     }
 
+    /** Persist history and the exact upload body before any network I/O. */
     suspend fun recordRepairRun(report: RepairRunReport): Result<Unit> {
         return try {
-            val entity = RepairHistoryEntity(
+            UUID.fromString(report.runId)
+            val deviceId = preferencesManager.deviceIdFlow.first()
+                ?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("The registered device identity is unavailable.")
+            val deviceOwner = preferencesManager.deviceOwnerEmailFlow.first()
+            require(deviceOwner.equals(report.userEmail, ignoreCase = true)) {
+                "The report does not belong to the current registered member."
+            }
+            UUID.fromString(deviceId)
+
+            val history = RepairHistoryEntity(
                 id = report.runId,
                 toolId = report.toolId,
                 toolName = report.toolName,
@@ -271,15 +282,6 @@ class ToolRepository(
                 diagnosis = report.finalDiagnosis,
                 userEmail = report.userEmail
             )
-            historyDao.insertRecord(entity)
-
-            if (!supabaseClient.isConfigured()) {
-                throw IllegalStateException("The repair report cannot be sent right now.")
-            }
-            val session = authRepository.getValidSession().getOrElse { cause ->
-                throw IllegalStateException("The session expired before the report could be sent.", cause)
-            }
-            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val stepResults = report.stepRecords.map { record ->
                 val status = when (record.status) {
                     StepStatus.COMPLETED -> "SUCCESS"
@@ -296,6 +298,7 @@ class ToolRepository(
             val version = report.toolVersion.toIntOrNull()
                 ?: throw IllegalArgumentException("Invalid repair version in execution report.")
             val request = SubmitRunRequest(
+                runId = report.runId,
                 deviceId = deviceId,
                 toolId = report.toolId,
                 toolVersion = version,
@@ -306,8 +309,69 @@ class ToolRepository(
                 errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
                 appVersion = BuildConfig.VERSION_NAME
             )
-            supabaseClient.submitRepairRun(request, session.token).getOrThrow()
-            Result.success(Unit)
+            val outbox = RepairReportOutboxEntity(
+                id = report.runId,
+                accountEmail = report.userEmail.trim().lowercase(),
+                payloadJson = supabaseClient.encodeSubmitRunRequest(request),
+                createdAt = System.currentTimeMillis()
+            )
+
+            reportOutboxDao.persistRepairRunAndQueue(history, outbox)
+            val upload = flushPendingReports()
+            if (upload.isFailure) {
+                Result.failure(upload.exceptionOrNull() ?: IllegalStateException("The report is queued for retry."))
+            } else if (reportOutboxDao.getById(report.runId) != null) {
+                Result.failure(IllegalStateException("The repair report is queued for background retry."))
+            } else {
+                Result.success(Unit)
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    /**
+     * Deliver queued reports in creation order. Keep items if the signed-in member or
+     * registered device no longer matches the identity that created the report.
+     */
+    suspend fun flushPendingReports(limit: Int = 20): Result<Int> {
+        return try {
+            require(limit in 1..100) { "Invalid report batch size." }
+            val pending = reportOutboxDao.getPending(limit)
+            if (pending.isEmpty()) return Result.success(0)
+            if (!supabaseClient.isConfigured()) {
+                return Result.failure(IllegalStateException("The repair service is not configured."))
+            }
+
+            val session = authRepository.getValidSession().getOrElse { cause ->
+                throw IllegalStateException("Sign in again to upload queued repair reports.", cause)
+            }
+            val deviceId = preferencesManager.deviceIdFlow.first()
+            val deviceOwner = preferencesManager.deviceOwnerEmailFlow.first()
+            if (deviceId.isNullOrBlank() || !deviceOwner.equals(session.email, ignoreCase = true)) {
+                return Result.failure(IllegalStateException("The queued reports belong to a different registered member or device."))
+            }
+
+            var uploaded = 0
+            for (entry in pending) {
+                if (!entry.accountEmail.equals(session.email, ignoreCase = true)) continue
+                val request = supabaseClient.decodeSubmitRunRequest(entry.payloadJson)
+                require(request.runId == entry.id) { "The report ID does not match its outbox key." }
+                if (request.deviceId != deviceId) {
+                    reportOutboxDao.recordAttempt(entry.id, "Registered device identity changed; report retained.")
+                    return Result.failure(IllegalStateException("The queued report belongs to a previous device registration."))
+                }
+
+                val sent = supabaseClient.submitRepairRun(request, session.token)
+                if (sent.isFailure) {
+                    val cause = sent.exceptionOrNull() ?: IllegalStateException("Repair report upload failed.")
+                    reportOutboxDao.recordAttempt(entry.id, cause.message?.take(500))
+                    return Result.failure(cause)
+                }
+                reportOutboxDao.remove(entry.id)
+                uploaded++
+            }
+            Result.success(uploaded)
         } catch (error: Exception) {
             Result.failure(error)
         }

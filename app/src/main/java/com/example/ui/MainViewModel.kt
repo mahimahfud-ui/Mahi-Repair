@@ -8,6 +8,7 @@ import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairTool
 import com.example.domain.models.RepairRunReport
+import com.example.sync.SyncManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -173,6 +174,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 val uploadResult = toolRepo.recordRepairRun(report)
+                // WorkManager retries the durable outbox if the immediate send fails or the process stops.
+                SyncManager.triggerReportUpload(getApplication())
                 _repairStatusMessage.value = if (uploadResult.isSuccess) {
                     "Repair completed."
                 } else {

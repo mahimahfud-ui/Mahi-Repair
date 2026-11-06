@@ -297,6 +297,16 @@ class SupabaseClient(
         }
     }
 
+    /** Serialize once for durable outbox storage and exact retry replay. */
+    fun encodeSubmitRunRequest(report: SubmitRunRequest): String =
+        moshi.adapter(SubmitRunRequest::class.java).toJson(report)
+
+    /** Decode the exact request body persisted by the local report outbox. */
+    fun decodeSubmitRunRequest(payloadJson: String): SubmitRunRequest =
+        requireNotNull(moshi.adapter(SubmitRunRequest::class.java).fromJson(payloadJson)) {
+            "The queued repair report is malformed."
+        }
+
     /**
      * Submit repair run execution report to Supabase backend.
      */
@@ -322,8 +332,10 @@ class SupabaseClient(
             response.use {
                 val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
-                    val parsed = moshi.adapter(SubmitRunResponse::class.java).fromJson(resBody)
-                    Result.success(parsed?.data?.runId ?: "")
+                    val returnedRunId = moshi.adapter(SubmitRunResponse::class.java)
+                        .fromJson(resBody)?.data?.runId
+                    if (returnedRunId == report.runId) Result.success(returnedRunId)
+                    else Result.failure(IOException("The server acknowledged a different repair run ID."))
                 } else {
                     Result.failure(IOException("Failed to submit run report (HTTP ${it.code}): $resBody"))
                 }
