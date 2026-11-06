@@ -82,8 +82,39 @@ Added:
 - `.github/workflows/supabase-database-ci.yml` — starts a Docker-backed local Supabase stack in GitHub Actions, recreates its database from the tracked migration directory, runs pgTAP tests, and stops the stack.
 - `admin-panel/supabase/tests/mahi_repair_database.test.sql` — synthetic Owner/Member RLS checks, direct-write denial, core-table RLS coverage, RPC privilege checks, and report first-submit / exact-retry / changed-fingerprint / single-row tests. Fixtures are rolled back in the test transaction.
 
-This verifies the migration set against a fresh local Supabase database if the workflow passes; it is not proof of a persistent hosted staging environment or live production behavior. The first CI run on this addition is pending.
+This verifies the migration set against a fresh local Supabase database if the workflow passes; it is not proof of a persistent hosted staging environment or live production behavior. Database CI run #42277797821 PASSED on candidate `c9e71c0ebf3c5bace865f28c4bf79363a9519498`: the isolated local stack started, all seven tracked migrations applied on a fresh database, all 17 pgTAP RLS/idempotency checks passed, and the stack shut down cleanly.
 
 ## Persistent staging decision still required
 
 To obtain a persistent hosted staging database, either upgrade the Primary Supabase organization to Pro (branching becomes available) or free a Free-project slot by pausing an existing project. No existing project will be paused/deleted and no subscription will be upgraded without explicit approval.
+
+
+## Database CI result
+
+<badge>not used in source file</badge>
+
+The first fresh-database run passed on integration commit `c9e71c0ebf3c5bace865f28c4bf79363a9519498`:
+
+- Supabase local stack start: passed.
+- Fresh local database reset and all seven tracked migrations: passed.
+- pgTAP suite: all 17 planned checks passed.
+- Local stack shutdown: passed.
+
+The 17 checks cover:
+1. Member reads only their own profile.
+2. Member cannot read the Owner profile.
+3. Member reads only their own device.
+4. Member sees published tools, not draft tools.
+5. Member sees only the accessible signed recipe version.
+6. Member cannot read Owner audit rows.
+7. Member cannot write repair reports directly.
+8. Owner can read both profiles.
+9. Owner can read published and draft tools.
+10. RLS is enabled on all nine core application tables.
+11–13. Report RPC execute grants are denied to anon/authenticated and granted to service_role.
+14. First report submission is accepted as non-duplicate.
+15. Exact retry returns the duplicate receipt.
+16. Reuse of a run ID with a different fingerprint returns conflict.
+17. Exactly one report row is stored after first submit plus retry.
+
+All test data is synthetic and the SQL test ends with ROLLBACK. This result is from an ephemeral GitHub-hosted local Supabase stack, not from a persistent cloud staging project or production.
