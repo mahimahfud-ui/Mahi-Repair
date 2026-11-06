@@ -56,7 +56,9 @@ import com.example.ui.MainUiState
 import com.example.ui.theme.MahiBlack
 import com.example.ui.theme.MahiCardStroke
 import com.example.ui.theme.MahiCardSurface
-import com.example.ui.theme.MahiRedDim
+import com.example.ui.theme.MahiAccentDim
+import com.example.ui.theme.MahiAccent
+import com.example.ui.theme.MahiAccentDim
 import com.example.ui.theme.MahiRedPrimary
 import com.example.ui.theme.MahiTextMuted
 import com.example.ui.theme.MahiTextPrimary
@@ -89,7 +91,7 @@ fun AuthScreen(
             Surface(
                 shape = CircleShape,
                 color = Color(0xFF161820),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, MahiRedPrimary.copy(alpha = 0.6f)),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, MahiAccent.copy(alpha = 0.6f)),
                 modifier = Modifier.size(90.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -117,7 +119,7 @@ fun AuthScreen(
             Text(
                 text = "Private repair access",
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = MahiRedPrimary,
+                    color = MahiAccent,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp
                 )
@@ -194,7 +196,7 @@ fun AuthScreen(
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = MahiTextPrimary,
                                 unfocusedTextColor = MahiTextPrimary,
-                                focusedBorderColor = MahiRedPrimary,
+                                focusedBorderColor = MahiAccent,
                                 unfocusedBorderColor = MahiCardStroke,
                                 focusedContainerColor = Color(0xFF13141B),
                                 unfocusedContainerColor = Color(0xFF13141B)
@@ -210,7 +212,7 @@ fun AuthScreen(
                             onClick = { onRequestOtp(emailInput) },
                             enabled = emailInput.isNotBlank() && !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+                            colors = ButtonDefaults.buttonColors(containerColor = MahiAccent),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
@@ -257,7 +259,7 @@ fun AuthScreen(
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = MahiTextPrimary,
                                 unfocusedTextColor = MahiTextPrimary,
-                                focusedBorderColor = MahiRedPrimary,
+                                focusedBorderColor = MahiAccent,
                                 unfocusedBorderColor = MahiCardStroke,
                                 focusedContainerColor = Color(0xFF13141B),
                                 unfocusedContainerColor = Color(0xFF13141B)
@@ -273,7 +275,7 @@ fun AuthScreen(
                             onClick = { onVerifyOtp(otpInput) },
                             enabled = otpInput.length == 6 && !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+                            colors = ButtonDefaults.buttonColors(containerColor = MahiAccent),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
@@ -308,7 +310,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = state.authStatusMessage ?: "",
-                            color = if (state.authStatusMessage?.contains("error", ignoreCase = true) == true) MahiRedPrimary else MahiTextSecondary,
+                            color = if (listOf("error", "failed", "unable", "denied", "expired").any { state.authStatusMessage?.contains(it, ignoreCase = true) == true }) MahiRedPrimary else MahiTextSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
