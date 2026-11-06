@@ -90,6 +90,9 @@ interface ReportOutboxDao {
 
     @Query("SELECT COUNT(*) FROM pending_reports")
     suspend fun count(): Int
+
+    @Query("SELECT COUNT(*) FROM pending_reports")
+    fun observeCount(): Flow<Int>
 }
 
 @Dao
