@@ -73,14 +73,14 @@ jobs:
       - name: Run Compose UI tests on an Android emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
-          cores: 2
-          ram-size: 2048M
-          heap-size: 512M
-          emulator-boot-timeout: 900
+          cores: 4
+          ram-size: 4096M
+          heap-size: 1024M
+          emulator-boot-timeout: 1200
           disable-animations: true
           disable-spellchecker: true
           script: ./gradlew --no-daemon --stacktrace connectedDebugAndroidTest
