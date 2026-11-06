@@ -37,14 +37,22 @@ The workflow creates only an ephemeral conventional Android **debug** keystore b
 
 ## Supabase CI
 
-- Exact inventory check for all 15 Edge Function directories and their `index.ts` entrypoints.
-- Deno type-check for every entrypoint and shared module.
-- Directory-wide Deno contract test discovery, including recipe and run-report contract tests.
-- Exact expected SQL migration inventory, unique timestamp and non-empty source checks.
-- Validation that the production deploy inventory matches the 15 functions, protected functions do not disable JWT verification, and production approval gates remain in place.
-- Repository-wide privileged-secret scan.
+- Exact allowlist for all 15 Edge Function directories and their index.ts entrypoints.
+- The seven reviewed migration filenames are explicitly allowlisted. Every migration must be non-empty and start with a unique 14-digit timestamp. Adding, removing or renaming a migration requires an intentional review and allowlist update; the check does not silently accept arbitrary SQL files.
+- While PR #5 remains separate, the workflow overlays only its reviewed backend function/migration paths from commit 83a050413cff9f15a3fd0f881ff3e978287e533d into the ephemeral CI runner when the target tree lacks the final migration. This does not merge or modify either branch. Once the reviewed migration inventory exists in the target tree, the overlay is skipped.
+- Deno type-checking covers all 15 entrypoints, shared modules and every recursively discovered *_test.ts file.
+- Deno tests run with read access limited to contract-tests/, admin-panel/supabase/migrations/ and admin-panel/supabase/functions/. The current combined tree has seven test files:
+  - admin_audit_contract_test.ts — static checks for owner-only transactional audit SQL.
+  - database_integrity_contract_test.ts — static checks for report-idempotency and relational-integrity SQL.
+  - http_contract_test.ts — source-level checks for exact-origin CORS behavior.
+  - member_catalog_contract_test.ts — static checks for registration and catalog SQL contracts.
+  - realtime_contract_test.ts — static checks for private Realtime policy, event payload and invalidation triggers.
+  - recipe_test.ts — shared recipe fixture/schema/canonicalization test.
+  - run_report_test.ts — report step authorization, first-submit/identical-retry/conflict outcomes, fingerprint stability and fail-closed RPC error mapping.
+- Python CI tests prove that the production deployment guard rejects an actual Supabase functions deploy command containing --no-verify-jwt while ignoring comments and echo statements.
+- Repository-wide privileged-secret scanning runs against the combined source tree.
 
-The current checkpoint has a run-report test for signed step-ID authorization, but it does **not** yet contain a dedicated request-idempotency test or idempotency implementation in `submit-repair-run`. The CI command recursively discovers all Deno tests, so a dedicated test added by the Supabase implementation owner will run automatically. This pipeline change does not alter application/Edge Function source or invent idempotency behavior.
+The five *_contract_test.ts files that inspect SQL migrations are static source-contract checks. They read migration text and assert expected SQL constructs; they do not execute migrations and do not prove actual PostgreSQL parsing, transaction behavior, RLS enforcement, Realtime authorization, concurrency safety or deployed Supabase behavior. The run-report Deno tests exercise TypeScript helper contracts and fingerprints, while database idempotency/atomicity assertions remain static SQL checks. Real PostgreSQL/Supabase migration, RLS, Realtime, transaction, concurrency and end-to-end tests remain a separate pre-production acceptance gate.
 
 ## Protected production deployment
 

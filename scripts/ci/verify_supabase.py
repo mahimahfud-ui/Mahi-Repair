@@ -31,7 +31,29 @@ MIGRATIONS = (
     "20261105171330_20261105180000_harden_rls_grants_and_indexes.sql",
     "20261105171827_20261105183000_deny_browser_rate_limit_access.sql",
     "20261106120000_private_realtime_catalog_broadcast.sql",
+    "20261106153000_backend_report_idempotency_and_atomic_catalog.sql",
+    "20261106160000_transactional_admin_mutations_audit.sql",
+    "20261106170000_atomic_member_catalog_and_device_registration.sql",
 )
+
+EXPECTED_DENO_TESTS = (
+    "_shared/admin_audit_contract_test.ts",
+    "_shared/database_integrity_contract_test.ts",
+    "_shared/http_contract_test.ts",
+    "_shared/member_catalog_contract_test.ts",
+    "_shared/realtime_contract_test.ts",
+    "_shared/recipe_test.ts",
+    "_shared/run_report_test.ts",
+)
+
+FORBIDDEN_DEPLOY_FLAG = re.compile(
+    r"(?m)^[ \t]*supabase[ \t]+functions[ \t]+deploy\b[^\r\n]*--no-verify-jwt(?:[ \t]|$)"
+)
+
+
+def has_forbidden_jwt_override(workflow_text: str) -> bool:
+    """Return true only for an actual function-deploy command disabling JWT verification."""
+    return FORBIDDEN_DEPLOY_FLAG.search(workflow_text) is not None
 
 
 def fail(message: str) -> None:
@@ -109,8 +131,15 @@ def main() -> int:
     apply_at = deploy.index("supabase db push --linked --yes")
     if preview_at >= apply_at:
         fail("Migration preview must appear before migration application.")
-    if re.search(r"(?m)^\\s*supabase\\s+functions\\s+deploy[^\\n]*--no-verify-jwt\\b", deploy):
+    if has_forbidden_jwt_override(deploy):
         fail("A Supabase production deploy command must never disable JWT verification.")
+    forbidden_fixture = "supabase functions deploy test-function --project-ref test --no-verify-jwt"
+    if not has_forbidden_jwt_override(forbidden_fixture):
+        fail("JWT deployment guard self-test failed to detect --no-verify-jwt.")
+    safe_fixture = "# supabase functions deploy test-function --no-verify-jwt\necho deploy --no-verify-jwt"
+    if has_forbidden_jwt_override(safe_fixture):
+        fail("JWT deployment guard incorrectly matched a comment or echo statement.")
+    print("PASS: JWT deployment guard detects forbidden deploy flags and ignores comments/non-deploy text.")
     deploy_block = deploy.split("functions=(", 1)[-1].split(")", 1)[0]
     deployed_functions = tuple(re.findall(r"^\s+([a-z][a-z0-9-]+)\s*$", deploy_block, flags=re.M))
     if deployed_functions != FUNCTIONS:
@@ -119,15 +148,14 @@ def main() -> int:
     print("PASS: production deploy targets exactly the 15 protected functions without disabling JWT verification.")
 
     test_files = sorted(functions_root.rglob("*_test.ts"))
-    expected_tests = {
-        functions_root / "_shared/recipe_test.ts",
-        functions_root / "_shared/run_report_test.ts",
-    }
-    if not expected_tests.issubset(set(test_files)):
-        fail("Canonical recipe and run-report Deno contract tests must remain present.")
-    print(f"PASS: discovered {len(test_files)} Deno test file(s); directory-wide deno test runs all of them.")
-    if not any("idempot" in path.name.lower() for path in test_files):
-        print("::warning::No dedicated run-report idempotency test file exists in this checkpoint. Directory-wide Deno test discovery will include it when the Supabase implementation owner adds it.")
+    found_test_paths = {path.relative_to(functions_root).as_posix() for path in test_files}
+    missing_tests = sorted(set(EXPECTED_DENO_TESTS) - found_test_paths)
+    if missing_tests:
+        fail(f"Expected Deno contract test files are missing: {missing_tests}")
+    print(
+        f"PASS: discovered {len(test_files)} Deno *_test.ts file(s) recursively; "
+        f"all {len(EXPECTED_DENO_TESTS)} reviewed recipe/report/static contract files are present."
+    )
     return 0
 
 
