@@ -143,7 +143,7 @@ def main() -> int:
 
     if findings:
         for path, reason in findings:
-            print(f"::error file={path}::Potential {reason} detected. Values are intentionally not printed.")
+            print(f"::error file={path}::Potential {reason} detected in {path}. Values are intentionally not printed.")
         return 1
 
     print("PASS: no configured privileged credential patterns were found.")
