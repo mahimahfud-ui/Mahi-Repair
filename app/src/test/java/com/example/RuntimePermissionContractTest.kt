@@ -1,7 +1,6 @@
 package com.example
 
 import android.Manifest
-import android.os.Build
 import com.example.security.RuntimePermissionContract
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,9 +12,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class RuntimePermissionContractTest {
     @Test
-    @Config(sdk = [34])
     fun mapsEveryAllowlistedRuntimePermissionToItsAndroidPermission() {
         assertEquals(Manifest.permission.POST_NOTIFICATIONS,
             RuntimePermissionContract.resolve("POST_NOTIFICATIONS", 34)?.platformPermission)
@@ -28,7 +27,6 @@ class RuntimePermissionContractTest {
     }
 
     @Test
-    @Config(sdk = [32])
     fun mapsMediaPermissionToLegacyRuntimePermissionAndNotificationsAreNotRequired() {
         assertEquals(Manifest.permission.READ_EXTERNAL_STORAGE,
             RuntimePermissionContract.resolve("READ_MEDIA_IMAGES", 32)?.platformPermission)
@@ -37,11 +35,10 @@ class RuntimePermissionContractTest {
     }
 
     @Test
-    @Config(sdk = [26])
     fun olderSupportedAndroidVersionsDoNotRequestNotificationPermission() {
-        assertNull(RuntimePermissionContract.resolve("POST_NOTIFICATIONS", Build.VERSION.SDK_INT)?.platformPermission)
+        assertNull(RuntimePermissionContract.resolve("POST_NOTIFICATIONS", 26)?.platformPermission)
         assertEquals(Manifest.permission.CAMERA,
-            RuntimePermissionContract.resolve("CAMERA", Build.VERSION.SDK_INT)?.platformPermission)
+            RuntimePermissionContract.resolve("CAMERA", 26)?.platformPermission)
     }
 
     @Test
