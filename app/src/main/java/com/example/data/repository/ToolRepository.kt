@@ -317,12 +317,20 @@ class ToolRepository(
                 diagnosis = report.finalDiagnosis,
                 userEmail = report.userEmail
             )
+            UUID.fromString(report.runId)
+            val deviceId = preferencesManager.deviceIdFlow.first()
+                ?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("The registered device identity is unavailable.")
+            UUID.fromString(deviceId)
+            val request = createSubmitRunRequest(report, deviceId, BuildConfig.VERSION_NAME)
             val pending = PendingReportEntity(
                 id = report.runId,
                 payloadJson = reportAdapter.toJson(report),
                 createdAt = System.currentTimeMillis(),
-                deviceId = preferencesManager.deviceIdFlow.first(),
-                appVersion = BuildConfig.VERSION_NAME
+                deviceId = deviceId,
+                appVersion = BuildConfig.VERSION_NAME,
+                requestJson = supabaseClient.encodeSubmitRunRequest(request),
+                accountEmail = report.userEmail.trim().lowercase()
             )
             database.withTransaction {
                 historyDao.insertRecord(history)
@@ -349,7 +357,7 @@ class ToolRepository(
         _accessDeniedMessage.value = null
     }
 
-    /** Called by WorkManager. A row is deleted only after the server acknowledges this exact UUID. */
+    /** Called by WorkManager. A row is deleted only after this exact persisted request is acknowledged. */
     suspend fun uploadPendingReport(reportId: String): Result<Boolean> {
         return try {
             val pending = reportOutboxDao.get(reportId) ?: return Result.success(false)
@@ -365,37 +373,40 @@ class ToolRepository(
             require(session.email.equals(report.userEmail, ignoreCase = true)) {
                 "Sign in with the account that created this repair report before uploading it."
             }
-            val deviceId = pending.deviceId?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("The original device identity for this report is unavailable.")
-            val stepResults = report.stepRecords.map { record ->
-                val status = when (record.status) {
-                    StepStatus.COMPLETED -> "SUCCESS"
-                    StepStatus.SKIPPED -> "SKIPPED"
-                    StepStatus.CANCELLED -> "CANCELLED"
-                    else -> "FAILED"
-                }
-                StepRunResultDto(
-                    stepId = record.stepId,
-                    status = status,
-                    errorCode = if (status == "FAILED") "ERR_STEP_FAILED" else null
-                )
+            val storedAccount = pending.accountEmail?.takeIf { it.isNotBlank() }
+            require(storedAccount == null || storedAccount.equals(session.email, ignoreCase = true)) {
+                "The queued repair report belongs to a different account."
             }
-            val version = report.toolVersion.toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid repair version in execution report.")
-            val request = SubmitRunRequest(
-                runId = report.runId,
-                deviceId = deviceId,
-                toolId = report.toolId,
-                toolVersion = version,
-                startedAt = Instant.ofEpochMilli(report.startTime).toString(),
-                completedAt = Instant.ofEpochMilli(report.endTime).toString(),
-                result = report.result.name,
-                stepResults = stepResults,
-                errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
-                appVersion = pending.appVersion
-            )
-            val acceptedRunId = supabaseClient.submitRepairRun(request, session.token).getOrThrow()
-            require(acceptedRunId == report.runId) { "Server acknowledged a different repair report." }
+
+            val requestJson = pending.requestJson?.takeIf { it.isNotBlank() } ?: run {
+                // Backfill legacy v4 outbox entries using their original device and app identity.
+                val originalDeviceId = pending.deviceId?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("The original device identity for this report is unavailable.")
+                val rebuilt = createSubmitRunRequest(report, originalDeviceId, pending.appVersion)
+                val encoded = supabaseClient.encodeSubmitRunRequest(rebuilt)
+                reportOutboxDao.backfillRequestIfMissing(
+                    reportId = reportId,
+                    requestJson = encoded,
+                    accountEmail = report.userEmail.trim().lowercase()
+                )
+                reportOutboxDao.get(reportId)?.requestJson
+                    ?: throw IllegalStateException("The queued repair request could not be persisted.")
+            }
+
+            val persistedRequest = supabaseClient.decodeSubmitRunRequest(requestJson)
+            require(persistedRequest.runId == reportId) { "Queued report identifier mismatch." }
+            require(persistedRequest.deviceId == pending.deviceId) {
+                "The queued repair report belongs to a different registered device."
+            }
+            require(persistedRequest.appVersion == pending.appVersion) {
+                "The queued repair report app version does not match its saved identity."
+            }
+            val acceptedRunId = supabaseClient.submitRepairRun(
+                report = persistedRequest,
+                authToken = session.token,
+                serializedRequestJson = requestJson
+            ).getOrThrow()
+            require(acceptedRunId == reportId) { "Server acknowledged a different repair report." }
             reportOutboxDao.delete(reportId)
             Result.success(true)
         } catch (cancelled: CancellationException) {
@@ -404,6 +415,42 @@ class ToolRepository(
             handleAuthorizationRejection(error)
             Result.failure(error)
         }
+    }
+
+    private fun createSubmitRunRequest(
+        report: RepairRunReport,
+        deviceId: String,
+        appVersion: String
+    ): SubmitRunRequest {
+        UUID.fromString(report.runId)
+        UUID.fromString(deviceId)
+        val stepResults = report.stepRecords.map { record ->
+            val status = when (record.status) {
+                StepStatus.COMPLETED -> "SUCCESS"
+                StepStatus.SKIPPED -> "SKIPPED"
+                StepStatus.CANCELLED -> "CANCELLED"
+                else -> "FAILED"
+            }
+            StepRunResultDto(
+                stepId = record.stepId,
+                status = status,
+                errorCode = if (status == "FAILED") "ERR_STEP_FAILED" else null
+            )
+        }
+        val version = report.toolVersion.toIntOrNull()
+            ?: throw IllegalArgumentException("Invalid repair version in execution report.")
+        return SubmitRunRequest(
+            runId = report.runId,
+            deviceId = deviceId,
+            toolId = report.toolId,
+            toolVersion = version,
+            startedAt = Instant.ofEpochMilli(report.startTime).toString(),
+            completedAt = Instant.ofEpochMilli(report.endTime).toString(),
+            result = report.result.name,
+            stepResults = stepResults,
+            errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
+            appVersion = appVersion
+        )
     }
 
     private fun ToolEntity.toDomain(): RepairTool {
