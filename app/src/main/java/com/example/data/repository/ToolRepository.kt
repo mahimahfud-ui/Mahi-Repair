@@ -320,7 +320,8 @@ class ToolRepository(
                 id = report.runId,
                 payloadJson = reportAdapter.toJson(report),
                 createdAt = System.currentTimeMillis(),
-                deviceId = preferencesManager.deviceIdFlow.first()
+                deviceId = preferencesManager.deviceIdFlow.first(),
+                appVersion = BuildConfig.VERSION_NAME
             )
             database.withTransaction {
                 historyDao.insertRecord(history)
@@ -390,7 +391,7 @@ class ToolRepository(
                 result = report.result.name,
                 stepResults = stepResults,
                 errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
-                appVersion = BuildConfig.VERSION_NAME
+                appVersion = pending.appVersion
             )
             val acceptedRunId = supabaseClient.submitRepairRun(request, session.token).getOrThrow()
             require(acceptedRunId == report.runId) { "Server acknowledged a different repair report." }
