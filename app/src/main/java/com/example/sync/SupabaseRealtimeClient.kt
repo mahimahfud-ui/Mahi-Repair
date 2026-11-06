@@ -28,6 +28,25 @@ import java.util.concurrent.atomic.AtomicReference
 
 data class RepairRealtimeEvent(val name: String, val eventId: String?)
 
+/** Bounded process-local event de-duplication; events without IDs are never actionable. */
+class RealtimeEventDeduplicator(private val capacity: Int = 128) {
+    init {
+        require(capacity > 0)
+    }
+
+    private val seen = LinkedHashSet<String>(capacity)
+
+    @Synchronized
+    fun shouldProcess(eventId: String?): Boolean {
+        if (eventId.isNullOrBlank()) return false
+        if (!seen.add(eventId)) return false
+        while (seen.size > capacity) {
+            seen.remove(seen.first())
+        }
+        return true
+    }
+}
+
 class RealtimeAuthorizationException : IOException("The private repair update channel rejected this session.")
 
 /**
