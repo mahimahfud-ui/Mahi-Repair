@@ -20,7 +20,7 @@ External GitHub Actions are pinned to reviewed commit SHAs. Dependabot checks th
 - Android SDK Platform 36.1, Build Tools 36.0.0 and Platform Tools.
 - The checked-in Gradle wrapper controls the Gradle version (9.3.1); the CI setup action provides caching but does not replace the wrapper.
 - XML/manifest validation confirms `android:allowBackup=false`, that both backup rule resources are actually referenced, and that every app-private domain is excluded from cloud backup and device transfer.
-- Android unit tests, debug APK assembly and Compose UI tests on an API 35 Google APIs emulator.
+- Android unit tests, debug APK assembly and Compose UI tests on an API 35 Google APIs Pixel 2 emulator. The emulator boot allowance is 900 seconds; spellchecker and system animations are disabled to reduce flaky emulator startup/UI behavior.
 - Tracked-source scanning and generated APK archive inspection for private-key PEM blocks, Supabase service-role JWTs/secret API keys and common provider tokens.
 - Unit-test and Compose test reports plus the debug APK are retained as GitHub Actions artifacts for 14 days.
 
