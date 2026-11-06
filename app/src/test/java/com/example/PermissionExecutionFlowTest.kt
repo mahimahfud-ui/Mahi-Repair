@@ -59,7 +59,7 @@ class PermissionExecutionFlowTest {
         val context = ApplicationProvider.getApplicationContext<Application>()
         Shadows.shadowOf(context).denyPermissions(Manifest.permission.CAMERA)
         engine = RecipeExecutionEngine(ActionRegistry(context))
-        keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(3072) }.generateKeyPair()
         publicKeyPem = "-----BEGIN PUBLIC KEY-----\n" +
             Base64.encodeToString(keyPair.public.encoded, Base64.NO_WRAP) +
             "\n-----END PUBLIC KEY-----"
