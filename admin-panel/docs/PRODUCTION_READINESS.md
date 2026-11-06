@@ -1,6 +1,6 @@
 # Mahi Repair — production readiness
 
-This checklist separates code/CI evidence from checks that must be performed against the actual production Cloud Run, Supabase and Android environments. A passing CI workflow is not a production acceptance test.
+This checklist separates code/CI evidence from checks that must be performed against the actual production Cloud Run, Supabase and Android environments. A passing CI workflow is not a production acceptance test. Status below was refreshed against integration candidate `8e111d9eab9cce1e44efdbdf0dfe42015dc26f18` on 2026-11-06.
 
 ## Implemented in the branch and covered by current-head CI
 
@@ -15,27 +15,28 @@ This checklist separates code/CI evidence from checks that must be performed aga
 - [x] Native action allowlist; no remote script, shell, DEX, JAR, APK or arbitrary code execution by design.
 - [x] Private per-member/per-device Realtime Broadcast migration source and Android foreground WebSocket listener.
 - [x] Opaque Realtime events only; Android refetches and verifies the authorized catalogue. Launch/foreground/reconnect and WorkManager sync provide recovery.
-- [x] Current-head Android unit tests and debug APK assembly.
-- [x] Current-head Android Compose UI emulator tests (API 35).
-- [x] Current-head source and generated-debug-APK privileged-secret marker scans.
-- [x] Current-head Supabase CI: all 16 Edge Function entrypoints/shared modules type-check; canonical recipe/run-report tests pass.
-- [x] Current-head Admin CI: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build pass.
-- [x] Node.js 22.23.4 pinned across Render, Admin Panel and Admin Panel CI.
-- [x] Protected production workflow source for migration preview/apply and JWT-verified deployment of all 15 Edge Functions.
+- [x] Candidate Android unit tests pass, including the Room v4→v5 pending-report migration, and the debug APK assembles successfully.
+- [ ] Candidate Android Compose UI emulator tests are still running; do not treat the APK as a verified artifact until this gate passes.
+- [ ] Candidate source and generated-debug-APK privileged-secret scans and artifact upload are pending the successful Compose gate.
+- [x] Supabase Edge Functions CI passed for the unchanged Agent 2 backend source: all 16 function entrypoints/shared modules type-check and Deno contract tests pass.
+- [x] Candidate Admin CI passed: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build.
+- [x] Node.js 22.23.4 is pinned for Cloud Run/Admin Panel builds and CI.
+- [x] Protected production workflow source exists for migration preview/apply and JWT-verified deployment of the 15 application Edge Functions, with a separate signature-verified Auth email hook.
 
-Current-head commit: dd7c922bf5533c34a424d8d7994f29d2d0fb0f82.
+Candidate commit: 8e111d9eab9cce1e44efdbdf0dfe42015dc26f18.
 
 Evidence:
-- [Android CI](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251879)
-- [Supabase Edge Functions CI](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251882)
-- [Admin Panel CI](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251933)
-- [Debug APK artifact](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251879/artifacts/13479439548)
+- [Android CI — Compose gate in progress](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42269775221)
+- [Admin Panel CI — passed](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42269775264)
+- [Supabase Edge Functions CI — passed on unchanged backend source](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42264240682)
+
+No candidate APK artifact has been published from the latest Android run yet.
 
 The APK artifact is a debug build using an ephemeral debug keystore. It is not a signed production release APK/AAB.
 
 ## Production configuration still required
 
-- [ ] Establish the production Cloud Run service and record its canonical HTTPS URL; the checked-in render.yaml defines only the Free preview service.
+- [ ] Establish the production Cloud Run service and record its canonical HTTPS URL; the service has not been provisioned or smoke-tested.
 - [ ] Verify production Cloud Run TLS/HTTPS, health, owner sign-in and exact environment configuration.
 - [ ] Generate a real RSA-3072 key pair. Add only the PKCS#8 private key directly to Supabase Edge Function Secrets as RECIPE_SIGNING_PRIVATE_KEY_PEM; configure the matching X.509 public PEM in the Android release build. The checked-in public-key value remains a placeholder.
 - [ ] Configure the protected GitHub supabase-production environment with a required reviewer, secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD, and variable ADMIN_ORIGIN.
@@ -49,7 +50,7 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 
 ## End-to-end acceptance tests still required
 
-- [ ] Owner login on the production Render origin.
+- [ ] Owner login on the production Cloud Run origin.
 - [ ] Invite a member as owner; deliver and complete the member OTP flow.
 - [ ] Register the Android device and verify ownership binding and duplicate registration behavior.
 - [ ] Create a tool, validate its recipe, publish it and verify the committed immutable version in Supabase.
@@ -77,7 +78,7 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 
 ## Release decision
 
-**NOT PRODUCTION READY.** Current-head CI is green, but production deployment/configuration, real owner/member/device workflow, signed release artifact, live Realtime/RLS authorization tests and physical-device acceptance remain unverified. Do not merge PR #1 or announce production availability until every required gate above has evidence.
+**NOT PRODUCTION READY.** Candidate Admin and Supabase CI are green and Android unit/build checks pass, but the Android Compose emulator gate is still running. In addition, the recipe public-key placeholder, production signing key, release keystore, Cloud Run provisioning, live Supabase migrations/RLS/Realtime, provider secrets/Auth Hook activation, real Owner/member/device workflows and physical-device acceptance remain unverified. Keep PR #8 draft and do not merge/deploy or announce production availability until every required gate above has evidence.
 
 
 ## Shared Auth email delivery
