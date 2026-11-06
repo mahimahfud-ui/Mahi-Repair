@@ -55,6 +55,7 @@ class ToolRepository(
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
     private val reportOutboxDao = database.reportOutboxDao()
+    val pendingReportCountFlow: Flow<Int> = reportOutboxDao.observeCount()
     private val reportAdapter = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
