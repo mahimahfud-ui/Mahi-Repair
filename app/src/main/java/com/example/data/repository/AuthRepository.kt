@@ -39,7 +39,7 @@ class AuthRepository(
         }
     }
 
-    suspend fun verifyEmailOtp(email: String, otpToken: String): Result<UserSession> {
+    suspend fun verifyEmailOtp(email: String, otpToken: String): Result<UserSession> = refreshMutex.withLock {
         val cleanEmail = email.trim().lowercase()
         val cleanToken = otpToken.trim()
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
@@ -144,7 +144,12 @@ class AuthRepository(
         }
     }
 
-    suspend fun signOut() {
+    /** Clear local credentials after definitive server-side revocation without a logout request. */
+    suspend fun invalidateLocalSession() = refreshMutex.withLock {
+        preferencesManager.clearSession()
+    }
+
+    suspend fun signOut() = refreshMutex.withLock {
         val current = preferencesManager.sessionFlow.first()
         try {
             if (current.token.isNotBlank()) supabaseClient.signOut(current.token)
