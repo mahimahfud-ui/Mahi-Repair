@@ -135,8 +135,7 @@ class ToolRepository(
         if (sessionResult.isFailure) {
             val cause = sessionResult.exceptionOrNull()
             if (cause is InvalidAuthSessionException) {
-                clearLocalCatalog()
-                _accessDeniedMessage.value = "Your sign-in session expired. Please sign in again to refresh repair access."
+                handleAuthorizationRejection(cause)
             }
             return@withLock Result.failure(cause ?: IllegalStateException("Please sign in."))
         }
@@ -214,16 +213,20 @@ class ToolRepository(
     }
 
     private suspend fun handleAuthorizationRejection(error: Throwable) {
-        val rejection = generateSequence(error) { it.cause }
-            .filterIsInstance<ServerAuthorizationException>()
-            .firstOrNull() ?: return
+        val causes = generateSequence(error) { it.cause }.toList()
+        val rejection = causes.filterIsInstance<ServerAuthorizationException>().firstOrNull()
+        val expiredSession = causes.any { it is InvalidAuthSessionException }
+        if (rejection == null && !expiredSession) return
+
+        // Publish the reason before changing DataStore; session observers may react immediately.
+        _accessDeniedMessage.value = when {
+            rejection?.statusCode == 403 ->
+                "Access to Mahi Repair was denied for this account or device. Sign in again or contact the Owner."
+            else -> "Your repair session expired or is no longer authorized. Please sign in again."
+        }
         clearLocalCatalog()
         preferencesManager.clearDeviceId()
         authRepository.invalidateLocalSession()
-        _accessDeniedMessage.value = when (rejection.statusCode) {
-            403 -> "Access to Mahi Repair was denied for this account or device. Sign in again or contact the Owner."
-            else -> "Your repair session is no longer authorized. Please sign in again."
-        }
     }
 
     /**
@@ -355,6 +358,9 @@ class ToolRepository(
             }
             val session = authRepository.getValidSession().getOrElse { cause ->
                 throw IllegalStateException("Sign in again before pending reports can upload.", cause)
+            }
+            require(session.email.equals(report.userEmail, ignoreCase = true)) {
+                "Sign in with the account that created this repair report before uploading it."
             }
             val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val stepResults = report.stepRecords.map { record ->
