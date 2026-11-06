@@ -11,6 +11,7 @@ import com.example.domain.models.RepairRunResult
 import com.example.domain.models.RepairTool
 import com.example.domain.models.StepStatus
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
@@ -104,30 +105,15 @@ class PermissionExecutionFlowTest {
         assertEquals(StepStatus.FAILED, report.stepRecords.single().status)
     }
 
-    private suspend fun runWithPermissionResult(result: PermissionExecutionResult) =
-        kotlinx.coroutines.coroutineScope {
-            val task = async { executeUntilPermissionPrompt() }
-            val report = task.await(result)
-            report
-        }
-
-    private suspend fun kotlinx.coroutines.Deferred<com.example.domain.models.RepairRunReport>.await(
-        permissionResult: PermissionExecutionResult
-    ): com.example.domain.models.RepairRunReport {
-        // executeUntilPermissionPrompt is launched as a deferred report and will emit
-        // the permission prompt before waiting for the Android Activity Result callback.
-        return this@PermissionExecutionFlowTest.awaitPromptThen(permissionResult, this)
-    }
-
-    private suspend fun awaitPromptThen(
-        result: PermissionExecutionResult,
-        task: kotlinx.coroutines.Deferred<com.example.domain.models.RepairRunReport>
-    ): com.example.domain.models.RepairRunReport {
+    private suspend fun runWithPermissionResult(
+        result: PermissionExecutionResult
+    ): com.example.domain.models.RepairRunReport = coroutineScope {
+        val task = async { executeUntilPermissionPrompt() }
         withTimeout(3_000) {
             engine.engineState.first { it is ExecutionEvent.PromptUserAction }
         }
         engine.submitPermissionResult(result)
-        return task.await()
+        task.await()
     }
 
     private suspend fun executeUntilPermissionPrompt(): com.example.domain.models.RepairRunReport {
