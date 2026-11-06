@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.domain.models.RepairTool
 import com.example.domain.models.ToolCategory
@@ -78,9 +79,9 @@ class RunRepairScreenTest {
 
         composeRule.onNodeWithText("YOUR REPAIR HUB").assertIsDisplayed()
         composeRule.onNodeWithText("Everything running smoothly?").assertIsDisplayed()
-        composeRule.onNodeWithTag("run_repair_button").assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithText("Network Diagnostics").assertIsDisplayed()
-        composeRule.onNodeWithText("DNS Troubleshooting").assertIsDisplayed()
+        composeRule.onNodeWithTag("run_repair_button").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("Network Diagnostics").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("DNS Troubleshooting").performScrollTo().assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithTag("search_bar").fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithText("Admin Panel", substring = true).fetchSemanticsNodes().isEmpty())
     }
@@ -93,7 +94,7 @@ class RunRepairScreenTest {
             onRunRepair = { openCount++ }
         )
 
-        composeRule.onNodeWithTag("run_repair_button").performClick()
+        composeRule.onNodeWithTag("run_repair_button").performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals(1, openCount) }
     }
 
@@ -109,8 +110,9 @@ class RunRepairScreenTest {
             onSelectTool = { selectedToolId = it }
         )
 
-        composeRule.onNodeWithText("Network Diagnostics").assertIsDisplayed()
-        composeRule.onAllNodesWithText("DNS Troubleshooting")[0].performClick()
+        composeRule.onNodeWithText("Choose a repair").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool_picker_network-tool-id").assertExists()
+        composeRule.onNodeWithTag("tool_picker_dns-tool-id").performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
     }
 
@@ -137,7 +139,7 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithTag("run_repair_button").assertIsNotEnabled()
-        composeRule.onNodeWithTag("repair_status").assertIsDisplayed()
-        composeRule.onNodeWithText("No repair tools are currently available.").assertIsDisplayed()
+        composeRule.onNodeWithTag("repair_status").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("No repair tools are currently available.").performScrollTo().assertIsDisplayed()
     }
 }
