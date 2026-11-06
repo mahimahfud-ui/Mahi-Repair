@@ -319,7 +319,8 @@ class ToolRepository(
             val pending = PendingReportEntity(
                 id = report.runId,
                 payloadJson = reportAdapter.toJson(report),
-                createdAt = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                deviceId = preferencesManager.deviceIdFlow.first()
             )
             database.withTransaction {
                 historyDao.insertRecord(history)
@@ -362,7 +363,8 @@ class ToolRepository(
             require(session.email.equals(report.userEmail, ignoreCase = true)) {
                 "Sign in with the account that created this repair report before uploading it."
             }
-            val deviceId = ensureRegisteredDeviceId(session.token, session.email)
+            val deviceId = pending.deviceId?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("The original device identity for this report is unavailable.")
             val stepResults = report.stepRecords.map { record ->
                 val status = when (record.status) {
                     StepStatus.COMPLETED -> "SUCCESS"
