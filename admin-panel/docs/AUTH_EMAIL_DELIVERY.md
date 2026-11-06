@@ -48,16 +48,17 @@ SUPABASE_URL is injected by Supabase Edge Functions; do not create a custom secr
 
 The protected production workflow remains gated to main, an explicit DEPLOY input and the protected supabase-production environment. It checks required secret names without printing values, deploys the 15 application functions with JWT verification, then deploys send-auth-email with JWT verification disabled. The hook function verifies the Standard Webhooks signature itself.
 
-After the secrets exist and the deployment has completed:
+Prepare and enable the hook in this order:
 
-1. Open Supabase Dashboard → Authentication → Hooks.
-2. Create a Send Email hook and choose HTTP.
-3. Set the endpoint to https://shwqsljicmhflnvjqjah.supabase.co/functions/v1/send-auth-email.
-4. Generate the hook secret and save the complete value directly in Supabase Edge Function Secrets as SEND_EMAIL_HOOK_SECRET.
-5. Enable/save the hook.
-6. Confirm the Email provider remains enabled under Authentication → Sign In / Providers.
+1. Verify the sending domain and sender address in both Resend and Brevo.
+2. In Supabase Dashboard → Authentication → Hooks, create a Send Email hook, choose HTTP and set the endpoint to https://shwqsljicmhflnvjqjah.supabase.co/functions/v1/send-auth-email.
+3. Generate the hook secret, but leave the hook disabled until the Edge Function is deployed.
+4. Add the complete v1,whsec_... value as SEND_EMAIL_HOOK_SECRET in Supabase Edge Function Secrets. Add RESEND_API_KEY, RESEND_FROM_EMAIL, BREVO_API_KEY and BREVO_FROM_EMAIL there as well.
+5. Run the protected production workflow from main with its required reviewer approval and DEPLOY input. It verifies the secret names and deploys the signed hook endpoint.
+6. Return to Authentication → Hooks and enable/save the Send Email hook.
+7. Confirm the Email provider remains enabled under Authentication → Sign In / Providers.
 
-The HTTP hook is a project-level Auth setting; enabling it routes both Android and Admin email events through this shared service. Local config.toml records verify_jwt = false for the signed HTTP hook endpoint but does not enable the hosted Auth Hook.
+The HTTP hook is a project-level Auth setting; enabling it routes both Android and Admin email events through this shared service. Local config.toml records verify_jwt = false for the signed HTTP hook endpoint but does not enable the hosted Auth Hook. Supabase Auth limits HTTP Hook request bodies to 20 KB; the handler enforces that limit.
 
 ## Acceptance tests after activation
 
