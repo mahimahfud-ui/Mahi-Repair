@@ -366,7 +366,8 @@ private fun HomePage(
         Spacer(Modifier.height(18.dp))
         PrimaryActionButton(
             label = if (state.tools.isEmpty()) "Refresh repair library" else "Choose a repair",
-            enabled = !state.isToolsLoading && !state.isPreparingRepair,
+            enabled = if (state.tools.isEmpty()) state.canRetryAvailability && !state.isToolsLoading
+                else !state.isToolsLoading && !state.isPreparingRepair,
             loading = state.isToolsLoading || state.isPreparingRepair,
             onClick = if (state.tools.isEmpty()) onRetryAvailability else onRunRepair,
             modifier = Modifier.testTag("run_repair_button")
@@ -405,7 +406,7 @@ private fun ToolsPage(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("search_bar"),
             singleLine = true,
             placeholder = { Text("Search repair tools…", color = MahiTextMuted) },
             leadingIcon = { Icon(Icons.Default.Build, null, tint = MahiTextMuted) },
