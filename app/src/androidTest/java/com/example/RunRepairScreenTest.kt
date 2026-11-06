@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,6 +16,7 @@ import com.example.domain.models.ToolCategory
 import com.example.ui.MainUiState
 import com.example.ui.screens.MainScreen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,13 +76,13 @@ class RunRepairScreenTest {
             )
         )
 
-        composeRule.onNodeWithText("YOUR REPAIR HUB").assertExists().assertIsDisplayed()
-        composeRule.onNodeWithText("Everything running smoothly?").assertExists()
-        composeRule.onNodeWithTag("run_repair_button").assertExists().assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithText("Network Diagnostics").assertExists()
-        composeRule.onNodeWithText("DNS Troubleshooting").assertExists()
-        composeRule.onNodeWithTag("search_bar").assertDoesNotExist()
-        composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("YOUR REPAIR HUB").assertIsDisplayed()
+        composeRule.onNodeWithText("Everything running smoothly?").assertIsDisplayed()
+        composeRule.onNodeWithTag("run_repair_button").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("Network Diagnostics").assertIsDisplayed()
+        composeRule.onNodeWithText("DNS Troubleshooting").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("search_bar").fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("Admin Panel", substring = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -107,7 +109,7 @@ class RunRepairScreenTest {
             onSelectTool = { selectedToolId = it }
         )
 
-        composeRule.onNodeWithText("Network Diagnostics").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("Network Diagnostics").assertIsDisplayed()
         composeRule.onAllNodesWithText("DNS Troubleshooting")[0].performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
     }
@@ -119,8 +121,8 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithContentDescription("Tools").performClick()
-        composeRule.onNodeWithText("VERIFIED LIBRARY").assertExists()
-        composeRule.onNodeWithTag("search_bar").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("VERIFIED LIBRARY").assertIsDisplayed()
+        composeRule.onNodeWithTag("search_bar").assertIsDisplayed()
     }
 
     @Test
@@ -135,7 +137,7 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithTag("run_repair_button").assertIsNotEnabled()
-        composeRule.onNodeWithTag("repair_status").assertExists()
-        composeRule.onNodeWithText("No repair tools are currently available.").assertExists()
+        composeRule.onNodeWithTag("repair_status").assertIsDisplayed()
+        composeRule.onNodeWithText("No repair tools are currently available.").assertIsDisplayed()
     }
 }
