@@ -12,6 +12,7 @@ import com.example.domain.engine.PermissionExecutionResult
 import com.example.security.RuntimePermissionContract
 import com.example.domain.models.RepairTool
 import com.example.domain.models.RepairRunReport
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -193,6 +194,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     "The repair finished, but its report could not be saved locally."
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 _canRetryAvailability.value = true
                 _repairStatusMessage.value = when {
