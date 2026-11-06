@@ -266,7 +266,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authStatusMessage.value = null
-            val result = authRepo.requestEmailOtp(email)
+            val result = try {
+                authRepo.requestEmailOtp(email)
+            } catch (cancelled: CancellationException) {
+                _isAuthLoading.value = false
+                throw cancelled
+            }
             _isAuthLoading.value = false
             if (result.isSuccess) {
                 _otpSentForEmail.value = email
@@ -282,7 +287,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authStatusMessage.value = null
-            val result = authRepo.verifyEmailOtp(email, otp)
+            val result = try {
+                authRepo.verifyEmailOtp(email, otp)
+            } catch (cancelled: CancellationException) {
+                _isAuthLoading.value = false
+                throw cancelled
+            }
             _isAuthLoading.value = false
             if (result.isSuccess) {
                 toolRepo.clearAccessDeniedMessage()
