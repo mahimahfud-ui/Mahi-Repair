@@ -38,7 +38,9 @@ data class PendingReportEntity(
     @ColumnInfo(name = "payload_json") val payloadJson: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "device_id") val deviceId: String? = null,
-    @ColumnInfo(name = "app_version", defaultValue = "'1.0.0'") val appVersion: String = "1.0.0"
+    @ColumnInfo(name = "app_version", defaultValue = "'1.0.0'") val appVersion: String = "1.0.0",
+    @ColumnInfo(name = "request_json") val requestJson: String? = null,
+    @ColumnInfo(name = "account_email") val accountEmail: String? = null
 )
 
 @Entity(tableName = "repair_history")
@@ -95,6 +97,19 @@ interface ReportOutboxDao {
 
     @Query("SELECT COUNT(*) FROM pending_reports")
     fun observeCount(): Flow<Int>
+
+    /** Backfill old queued rows once while preserving any request body already stored. */
+    @Query("""
+        UPDATE pending_reports
+        SET request_json = COALESCE(request_json, :requestJson),
+            account_email = COALESCE(account_email, :accountEmail)
+        WHERE id = :reportId
+    """)
+    suspend fun backfillRequestIfMissing(
+        reportId: String,
+        requestJson: String,
+        accountEmail: String
+    ): Int
 }
 
 @Dao
@@ -108,7 +123,7 @@ interface RepairHistoryDao {
 
 @Database(
     entities = [ToolEntity::class, RepairHistoryEntity::class, PendingReportEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -140,6 +155,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pending_reports ADD COLUMN request_json TEXT")
+                database.execSQL("ALTER TABLE pending_reports ADD COLUMN account_email TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -149,7 +171,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mahi_repair.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
                 INSTANCE = instance
                 instance
             }
