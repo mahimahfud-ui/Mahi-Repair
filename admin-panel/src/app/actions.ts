@@ -5,32 +5,51 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { RepairRecipeSchema } from '@/lib/recipe/catalog';
 import { requireOwner } from '@/lib/auth/require-owner';
+import { isSupabaseEmailRateLimitError, resolveAuthCallbackOrigin } from '@/lib/auth/callback-origin';
 
 const ADMIN_FUNCTIONS = new Set(['admin-invite-member','admin-manage-member','admin-upsert-tool','admin-publish-tool','admin-disable-tool','admin-assign-tool','admin-save-validation','admin-delete-draft-tool','admin-manage-device','admin-manage-tool-state','get-admin-analytics']);
 const ADMIN_OPERATION_FAILED = 'The administrative operation could not be completed. Please retry.';
 
 /** Server-side OTP request keeps PKCE/session cookies out of browser JavaScript. */
-export async function requestSignInLink(email: string): Promise<{ ok: boolean }> {
+export type SignInLinkResult =
+  | { ok: true }
+  | { ok: false; reason: 'rate_limited' | 'configuration' | 'failed' };
+
+export async function requestSignInLink(email: string): Promise<SignInLinkResult> {
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return { ok: false };
+  if (normalizedEmail.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) {
+    return { ok: false, reason: 'failed' };
+  }
+
+  const requestOrigin = (await headers()).get('origin');
+  const callback = resolveAuthCallbackOrigin(
+    process.env['NEXT_PUBLIC_APP_URL'],
+    requestOrigin,
+    process.env.NODE_ENV === 'production'
+  );
+  if (!callback.ok) return { ok: false, reason: 'configuration' };
 
   try {
-    const requestOrigin = (await headers()).get('origin');
-    const callbackOrigin = process.env['NEXT_PUBLIC_APP_URL'] || requestOrigin;
-    if (!callbackOrigin) return { ok: false };
-    const parsedOrigin = new URL(callbackOrigin);
-    if (!['http:', 'https:'].includes(parsedOrigin.protocol) || parsedOrigin.username || parsedOrigin.password ||
-      (process.env.NODE_ENV === 'production' && parsedOrigin.protocol !== 'https:') ||
-      (parsedOrigin.pathname !== '/' && parsedOrigin.pathname !== '') || parsedOrigin.search || parsedOrigin.hash) return { ok: false };
-
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: normalizedEmail,
-      options: { shouldCreateUser: false, emailRedirectTo: new URL('/auth/callback', parsedOrigin.origin).toString() },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: new URL('/auth/callback', callback.origin).toString(),
+      },
     });
-    return { ok: !error };
+
+    if (error) {
+      const authError = error as { status?: number; code?: string; message?: string };
+      return {
+        ok: false,
+        reason: isSupabaseEmailRateLimitError(authError) ? 'rate_limited' : 'failed',
+      };
+    }
+
+    return { ok: true };
   } catch {
-    return { ok: false };
+    return { ok: false, reason: 'failed' };
   }
 }
 export async function signOut() { const supabase = await createClient(); await supabase.auth.signOut(); redirect('/login'); }
