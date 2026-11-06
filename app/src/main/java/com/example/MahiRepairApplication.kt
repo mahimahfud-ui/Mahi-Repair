@@ -49,7 +49,7 @@ class MahiRepairApplication : Application() {
         preferencesManager = PreferencesManager(this)
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
-        toolRepository = ToolRepository(database, preferencesManager, supabaseClient, authRepository)
+        toolRepository = ToolRepository(this, database, preferencesManager, supabaseClient, authRepository)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)
@@ -62,6 +62,9 @@ class MahiRepairApplication : Application() {
 
         // WorkManager provides eventual consistency when the process is not alive.
         SyncManager.schedulePeriodicSync(this)
+        applicationScope.launch {
+            toolRepository.enqueuePendingReportUploads()
+        }
     }
 
     /**
@@ -139,20 +142,16 @@ class MahiRepairApplication : Application() {
     }
 
     private suspend fun handleRealtimeEvent(event: RepairRealtimeEvent) {
+        // An event without a stable ID cannot be safely deduplicated; drop it.
+        if (event.eventId.isNullOrBlank()) return
         if (!rememberRealtimeEvent(event.eventId)) return
 
-        when (event.name) {
-            "catalog_changed" -> {
-                val result = toolRepository.syncTools()
-                if (result.isFailure) {
-                    Log.w(TAG, "Catalog synchronization after notification failed.")
-                }
-            }
-            "member_access_changed", "device_revoked" -> {
-                toolRepository.clearLocalCatalog()
-                // Clear the encrypted local session even when the network is unavailable.
-                authRepository.signOut()
-            }
+        // Events only invalidate local freshness. The authenticated Edge Function
+        // decides whether this member/device is still authorized; event labels never
+        // authorize execution or revoke a session on their own.
+        val result = toolRepository.syncTools()
+        if (result.isFailure) {
+            Log.w(TAG, "Authorized catalog refresh after Realtime event failed.")
         }
     }
 
