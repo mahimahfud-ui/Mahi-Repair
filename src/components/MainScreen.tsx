@@ -8,7 +8,6 @@ import {
   X,
   Wrench,
   ShieldCheck,
-  LayoutDashboard,
 } from 'lucide-react';
 import {
   AuthSession,
@@ -38,7 +37,6 @@ interface MainScreenProps {
   onClearHistory: () => void;
   onSaveBackendConfig: (config: BackendConfig) => void;
   onSignOut: () => void;
-  onSwitchToAdmin: () => void;
 }
 
 const CATEGORIES: { id: ToolCategory; title: string }[] = [
@@ -65,7 +63,6 @@ export const MainScreen: React.FC<MainScreenProps> = ({
   onClearHistory,
   onSaveBackendConfig,
   onSignOut,
-  onSwitchToAdmin,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ToolCategory>('ALL');
@@ -137,16 +134,6 @@ export const MainScreen: React.FC<MainScreenProps> = ({
 
           {/* Actions */}
           <div className="flex items-center gap-1">
-            {/* Owner Admin Switcher */}
-            <button
-              onClick={onSwitchToAdmin}
-              className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-[#1c1f2b] transition-colors"
-              title="Open Owner Admin Console"
-            >
-              <LayoutDashboard size={15} className="text-red-400" />
-              <span className="hidden sm:inline">Admin Console</span>
-            </button>
-
             {/* Sync */}
             <button
               onClick={onSync}
