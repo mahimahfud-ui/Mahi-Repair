@@ -94,10 +94,12 @@ class PermissionExecutionFlowTest {
     @Test
     fun repeatedResultCallbacksCannotTurnAnEarlierDenialIntoApproval() = runBlocking {
         val task = async { executeUntilPermissionPrompt() }
-        val waiting = task.await()
+        withTimeout(3_000) {
+            engine.engineState.first { it is ExecutionEvent.PromptUserAction }
+        }
         engine.submitPermissionResult(PermissionExecutionResult.DENIED)
         engine.submitPermissionResult(PermissionExecutionResult.GRANTED)
-        val report = waiting
+        val report = task.await()
         assertEquals(RepairRunResult.FAILED, report.result)
         assertEquals(StepStatus.FAILED, report.stepRecords.single().status)
     }
