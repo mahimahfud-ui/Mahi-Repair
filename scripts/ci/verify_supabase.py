@@ -109,8 +109,8 @@ def main() -> int:
     apply_at = deploy.index("supabase db push --linked --yes")
     if preview_at >= apply_at:
         fail("Migration preview must appear before migration application.")
-    if "--no-verify-jwt" in deploy:
-        fail("Production deploy must never disable JWT verification.")
+    if re.search(r"(?m)^\\s*supabase\\s+functions\\s+deploy[^\\n]*--no-verify-jwt\\b", deploy):
+        fail("A Supabase production deploy command must never disable JWT verification.")
     deploy_block = deploy.split("functions=(", 1)[-1].split(")", 1)[0]
     deployed_functions = tuple(re.findall(r"^\s+([a-z][a-z0-9-]+)\s*$", deploy_block, flags=re.M))
     if deployed_functions != FUNCTIONS:
