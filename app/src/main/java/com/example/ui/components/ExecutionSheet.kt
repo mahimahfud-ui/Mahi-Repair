@@ -56,6 +56,7 @@ import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairRunResult
 import com.example.domain.models.StepStatus
 import com.example.ui.theme.MahiCardStroke
+import com.example.ui.theme.MahiAccent
 import com.example.ui.theme.MahiCardSurface
 import com.example.ui.theme.MahiRedDim
 import com.example.ui.theme.MahiRedPrimary
@@ -72,7 +73,9 @@ import com.example.ui.theme.MahiWarningDim
 fun ExecutionDialog(
     executionEvent: ExecutionEvent,
     onSubmitUserAction: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRequestPermission: (String) -> Unit,
+    onCancelPermission: () -> Unit
 ) {
     if (executionEvent is ExecutionEvent.Idle) return
 
@@ -123,7 +126,7 @@ fun ExecutionDialog(
                                 Icon(
                                     imageVector = Icons.Default.Security,
                                     contentDescription = null,
-                                    tint = MahiRedPrimary,
+                                    tint = MahiAccent,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -179,8 +182,20 @@ fun ExecutionDialog(
                     is ExecutionEvent.PromptUserAction -> {
                         UserActionPromptSection(
                             event = executionEvent,
-                            onConfirm = { onSubmitUserAction(true) },
-                            onCancel = { onSubmitUserAction(false) }
+                                onConfirm = {
+                                if (executionEvent.type == UserActionType.PERMISSION) {
+                                    executionEvent.payload["permission"]?.let(onRequestPermission)
+                                } else {
+                                    onSubmitUserAction(true)
+                                }
+                            },
+                            onCancel = {
+                                if (executionEvent.type == UserActionType.PERMISSION) {
+                                    onCancelPermission()
+                                } else {
+                                    onSubmitUserAction(false)
+                                }
+                            }
                         )
                     }
                     is ExecutionEvent.Finished -> {
@@ -200,7 +215,7 @@ private fun VerifyingSignatureSection(toolName: String) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CircularProgressIndicator(
-            color = MahiRedPrimary,
+            color = MahiAccent,
             modifier = Modifier.size(40.dp),
             strokeWidth = 3.dp
         )
@@ -258,7 +273,7 @@ private fun SignatureFailedSection(reason: String, onDismiss: () -> Unit) {
         Spacer(modifier = Modifier.height(20.dp))
         Button(
             onClick = onDismiss,
-            colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+            colors = ButtonDefaults.buttonColors(containerColor = MahiAccent),
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("Close")
@@ -330,7 +345,7 @@ private fun RunningProgressSection(event: ExecutionEvent.Running) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp),
-            color = MahiRedPrimary,
+            color = MahiAccent,
             trackColor = Color(0xFF222530)
         )
 
@@ -414,7 +429,7 @@ private fun CurrentStepItem(step: com.example.domain.models.RecipeStep) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF222530)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MahiRedPrimary.copy(alpha = 0.5f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MahiAccent.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -422,7 +437,7 @@ private fun CurrentStepItem(step: com.example.domain.models.RecipeStep) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(
-                color = MahiRedPrimary,
+                color = MahiAccent,
                 modifier = Modifier.size(18.dp),
                 strokeWidth = 2.5.dp
             )
@@ -436,7 +451,7 @@ private fun CurrentStepItem(step: com.example.domain.models.RecipeStep) {
                 )
                 Text(
                     text = step.description.ifBlank { "Executing native diagnosis..." },
-                    color = MahiRedPrimary,
+                    color = MahiAccent,
                     fontSize = 11.sp
                 )
             }
@@ -504,7 +519,7 @@ private fun UserActionPromptSection(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = MahiRedPrimary,
+                                color = MahiAccent,
                                 modifier = Modifier.size(20.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -554,7 +569,7 @@ private fun UserActionPromptSection(
             Button(
                 onClick = onConfirm,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = MahiAccent),
                 modifier = Modifier
                     .weight(1f)
                     .height(46.dp)
@@ -675,7 +690,7 @@ private fun FinishedReportSection(
 
         Button(
             onClick = onDismiss,
-            colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+            colors = ButtonDefaults.buttonColors(containerColor = MahiAccent),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()

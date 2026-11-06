@@ -5,78 +5,66 @@ on:
   pull_request:
     branches:
       - main
+      - security-hardening/run-repair
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: admin-panel-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   admin-panel:
-    name: TypeScript, ESLint, Vitest and Next.js build
+    name: Admin Panel dependency, static and production-build checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: admin-panel
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js 22.23.4
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22.23.4'
-          package-manager-cache: false
-
-      - name: Update npm to stable v11
-        id: npm
-        run: |
-          npm install --global npm@11
-          npm --version
-
-      - name: Install Admin Panel dependencies
+          cache: npm
+          cache-dependency-path: admin-panel/package-lock.json
+      - name: Verify tracked source contains no privileged credentials
+        working-directory: .
+        run: python3 scripts/ci/secret_scan.py --source
+      - name: Install dependencies from the committed lockfile
         id: install
-        run: npm ci --no-audit --no-fund --no-progress
-
+        run: npm ci --no-audit --no-fund --progress=false
       - name: Block moderate, high and critical dependency vulnerabilities
         id: dependency-audit
         run: npm audit --audit-level=moderate
-
       - name: Run scaffold and security-integrity checks
         id: scaffold
         run: npm run check:scaffold
-
       - name: TypeScript check
         id: typecheck
         run: npm run typecheck
-
       - name: ESLint
         id: lint
         run: npm run lint
-
-      - name: Vitest unit tests
+      - name: Vitest unit and contract tests
         id: tests
         run: npm run test
-
       - name: Next.js production build
         id: next-build
         env:
-          # Public placeholders only: no real Supabase project credentials are used in CI.
+          # Public placeholders only. No live Supabase credentials are provided to CI.
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_only
           NEXT_PUBLIC_APP_URL: https://ci.example.invalid
         run: npm run build
-
       - name: Publish Admin Panel CI result
         if: always()
         env:
           JOB_RESULT: ${{ job.status }}
-          NPM_RESULT: ${{ steps.npm.outcome }}
           INSTALL_RESULT: ${{ steps.install.outcome }}
           DEPENDENCY_AUDIT_RESULT: ${{ steps.dependency-audit.outcome }}
           SCAFFOLD_RESULT: ${{ steps.scaffold.outcome }}
@@ -86,26 +74,26 @@ jobs:
           BUILD_RESULT: ${{ steps.next-build.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
+        shell: bash
         run: |
           {
             echo "## Admin Panel CI"
             echo ""
             echo "- **Overall:** ${JOB_RESULT}"
-            echo "- **npm setup:** ${NPM_RESULT}"
-            echo "- **Dependency installation:** ${INSTALL_RESULT}"
+            echo "- **Lockfile install:** ${INSTALL_RESULT}"
             echo "- **Moderate/high/critical dependency audit:** ${DEPENDENCY_AUDIT_RESULT}"
-            echo "- **Scaffold/security audit:** ${SCAFFOLD_RESULT}"
+            echo "- **Scaffold/security checks:** ${SCAFFOLD_RESULT}"
             echo "- **TypeScript:** ${TYPECHECK_RESULT}"
             echo "- **ESLint:** ${LINT_RESULT}"
             echo "- **Vitest:** ${TEST_RESULT}"
-            echo "- **Next.js production build:** ${BUILD_RESULT}"
+            echo "- **Next.js build:** ${BUILD_RESULT}"
             echo "- **Commit:** ${COMMIT_SHA}"
-            echo "- **Run:** [Open full logs]($RUN_URL)"
+            echo "- **Run:** [Open full logs](${RUN_URL})"
             echo ""
             if [ "${JOB_RESULT}" = "success" ]; then
               echo "All Admin Panel CI checks passed."
             else
-              echo "One or more checks failed. The step results above identify the first failing command; open the run for full logs."
-              echo "::error title=Admin Panel CI failed::Check the failed TypeScript, ESLint, Vitest, scaffold audit or Next.js build step."
+              echo "At least one Admin Panel check failed. No failed check is suppressed."
+              echo "::error title=Admin Panel CI failed::Review the failed dependency, scaffold, type, lint, test or build step."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

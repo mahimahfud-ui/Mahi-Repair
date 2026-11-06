@@ -4,6 +4,7 @@ import com.example.data.local.PreferencesManager
 import com.example.data.local.UserSession
 import com.example.data.remote.InvalidAuthSessionException
 import com.example.data.remote.SupabaseClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -39,7 +40,7 @@ class AuthRepository(
         }
     }
 
-    suspend fun verifyEmailOtp(email: String, otpToken: String): Result<UserSession> {
+    suspend fun verifyEmailOtp(email: String, otpToken: String): Result<UserSession> = refreshMutex.withLock {
         val cleanEmail = email.trim().lowercase()
         val cleanToken = otpToken.trim()
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
@@ -84,6 +85,8 @@ class AuthRepository(
                     expiresAtMillis = expiresAt
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely store the sign-in session on this device.", error))
         }
@@ -139,12 +142,19 @@ class AuthRepository(
                     expiresAtMillis = expiresAt
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(IllegalStateException("Could not securely persist the refreshed session.", error))
         }
     }
 
-    suspend fun signOut() {
+    /** Clear local credentials after definitive server-side revocation without a logout request. */
+    suspend fun invalidateLocalSession() = refreshMutex.withLock {
+        preferencesManager.clearSession()
+    }
+
+    suspend fun signOut() = refreshMutex.withLock {
         val current = preferencesManager.sessionFlow.first()
         try {
             if (current.token.isNotBlank()) supabaseClient.signOut(current.token)

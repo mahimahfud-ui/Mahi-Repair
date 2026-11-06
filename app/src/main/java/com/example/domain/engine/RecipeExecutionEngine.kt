@@ -50,6 +50,13 @@ sealed interface ExecutionEvent {
     ) : ExecutionEvent
 }
 
+enum class PermissionExecutionResult {
+    GRANTED,
+    DENIED,
+    PERMANENTLY_DENIED,
+    CANCELLED
+}
+
 class RecipeExecutionEngine(
     private val actionRegistry: ActionRegistry
 ) {
@@ -59,6 +66,7 @@ class RecipeExecutionEngine(
 
     // Suspends execution waiting for user confirmation or guide acknowledgement
     private var pendingUserResponse: CompletableDeferred<Boolean>? = null
+    private var pendingPermissionResponse: CompletableDeferred<PermissionExecutionResult>? = null
 
     private fun isAppVersionSupported(currentVersion: String, requiredVersion: String): Boolean {
         val current = currentVersion.split('.')
@@ -83,6 +91,11 @@ class RecipeExecutionEngine(
      */
     fun submitUserActionResponse(approved: Boolean) {
         pendingUserResponse?.complete(approved)
+    }
+
+    /** Completes a suspended permission step only with the result delivered by Android. */
+    fun submitPermissionResult(result: PermissionExecutionResult) {
+        pendingPermissionResponse?.complete(result)
     }
 
     /**
@@ -453,7 +466,57 @@ class RecipeExecutionEngine(
             val result = actionRegistry.executeAction(step)
 
             if (result.requiresUserAction && result.userActionType != null) {
-                // Interactive suspension (Guide or Confirmation)
+                if (result.userActionType == UserActionType.PERMISSION) {
+                    val deferred = CompletableDeferred<PermissionExecutionResult>()
+                    pendingPermissionResponse = deferred
+                    _engineState.value = ExecutionEvent.PromptUserAction(
+                        type = UserActionType.PERMISSION,
+                        title = result.userActionPayload["permission"]?.let { "Allow $it" } ?: step.name,
+                        message = result.message,
+                        payload = result.userActionPayload
+                    )
+
+                    val permissionResult = deferred.await()
+                    pendingPermissionResponse = null
+                    val permissionMessage = when (permissionResult) {
+                        PermissionExecutionResult.GRANTED -> "Android confirmed the requested permission."
+                        PermissionExecutionResult.DENIED -> "Permission denied. This required repair step was not completed."
+                        PermissionExecutionResult.PERMANENTLY_DENIED ->
+                            "Permission permanently denied. Enable it in Android app settings before retrying."
+                        PermissionExecutionResult.CANCELLED -> "Permission request cancelled. The repair was not completed."
+                    }
+                    val granted = permissionResult == PermissionExecutionResult.GRANTED
+                    stepRecords.add(
+                        StepExecutionRecord(
+                            stepId = step.id,
+                            actionName = step.action.identifier,
+                            title = step.name,
+                            status = when (permissionResult) {
+                                PermissionExecutionResult.GRANTED -> StepStatus.COMPLETED
+                                PermissionExecutionResult.CANCELLED -> StepStatus.CANCELLED
+                                else -> StepStatus.FAILED
+                            },
+                            message = permissionMessage,
+                            durationMs = System.currentTimeMillis() - stepStart,
+                            details = mapOf(
+                                "permission" to (result.userActionPayload["permission"] ?: ""),
+                                "granted" to granted.toString(),
+                                "permanentlyDenied" to (permissionResult == PermissionExecutionResult.PERMANENTLY_DENIED).toString()
+                            )
+                        )
+                    )
+                    if (!granted) {
+                        overallResult = if (permissionResult == PermissionExecutionResult.CANCELLED) {
+                            RepairRunResult.CANCELLED
+                        } else {
+                            RepairRunResult.FAILED
+                        }
+                        stopPipeline = true
+                    }
+                    continue
+                }
+
+                // Interactive suspension for guided and confirmation actions.
                 val deferred = CompletableDeferred<Boolean>()
                 pendingUserResponse = deferred
 
@@ -586,7 +649,10 @@ class RecipeExecutionEngine(
     }
 
     fun reset() {
+        pendingUserResponse?.complete(false)
+        pendingPermissionResponse?.complete(PermissionExecutionResult.CANCELLED)
         pendingUserResponse = null
+        pendingPermissionResponse = null
         _engineState.value = ExecutionEvent.Idle
     }
 }

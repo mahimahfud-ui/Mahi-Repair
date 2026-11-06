@@ -11,6 +11,7 @@ import com.example.data.repository.ToolRepository
 import com.example.domain.actions.ActionRegistry
 import com.example.domain.engine.RecipeExecutionEngine
 import com.example.sync.RepairRealtimeEvent
+import com.example.sync.RealtimeEventDeduplicator
 import com.example.sync.SupabaseRealtimeClient
 import com.example.sync.SyncManager
 import kotlinx.coroutines.CancellationException
@@ -27,7 +28,7 @@ import kotlinx.coroutines.launch
 class MahiRepairApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val seenRealtimeEvents = LinkedHashSet<String>(128)
+    private val realtimeEventDeduplicator = RealtimeEventDeduplicator(MAX_REMEMBERED_EVENTS)
     @Volatile private var appIsForeground = false
     private var realtimeJob: Job? = null
 
@@ -49,7 +50,7 @@ class MahiRepairApplication : Application() {
         preferencesManager = PreferencesManager(this)
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
-        toolRepository = ToolRepository(database, preferencesManager, supabaseClient, authRepository)
+        toolRepository = ToolRepository(this, database, preferencesManager, supabaseClient, authRepository)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)
@@ -62,6 +63,9 @@ class MahiRepairApplication : Application() {
 
         // WorkManager provides eventual consistency when the process is not alive.
         SyncManager.schedulePeriodicSync(this)
+        applicationScope.launch {
+            toolRepository.enqueuePendingReportUploads()
+        }
     }
 
     /**
@@ -139,31 +143,16 @@ class MahiRepairApplication : Application() {
     }
 
     private suspend fun handleRealtimeEvent(event: RepairRealtimeEvent) {
-        if (!rememberRealtimeEvent(event.eventId)) return
+        // An event without a stable ID cannot be safely deduplicated; drop it.
+        if (event.eventId.isNullOrBlank()) return
+        if (!realtimeEventDeduplicator.shouldProcess(event.eventId)) return
 
-        when (event.name) {
-            "catalog_changed" -> {
-                val result = toolRepository.syncTools()
-                if (result.isFailure) {
-                    Log.w(TAG, "Catalog synchronization after notification failed.")
-                }
-            }
-            "member_access_changed", "device_revoked" -> {
-                toolRepository.clearLocalCatalog()
-                // Clear the encrypted local session even when the network is unavailable.
-                authRepository.signOut()
-            }
-        }
-    }
-
-    private fun rememberRealtimeEvent(eventId: String?): Boolean {
-        if (eventId.isNullOrBlank()) return true
-        synchronized(seenRealtimeEvents) {
-            if (!seenRealtimeEvents.add(eventId)) return false
-            while (seenRealtimeEvents.size > MAX_REMEMBERED_EVENTS) {
-                seenRealtimeEvents.remove(seenRealtimeEvents.first())
-            }
-            return true
+        // Events only invalidate local freshness. The authenticated Edge Function
+        // decides whether this member/device is still authorized; event labels never
+        // authorize execution or revoke a session on their own.
+        val result = toolRepository.syncTools()
+        if (result.isFailure) {
+            Log.w(TAG, "Authorized catalog refresh after Realtime event failed.")
         }
     }
 

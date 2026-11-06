@@ -5,50 +5,56 @@ on:
   pull_request:
     branches:
       - main
+      - security-hardening/run-repair
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
-    name: Android tests and debug APK
+    name: Android unit, Compose UI tests and debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
+    timeout-minutes: 75
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up JDK 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: ''
-
-      - name: Install Android SDK platform and build tools
-        id: android-sdk
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+      - name: Install required Android SDK packages
+        shell: bash
         run: |
-          sdkmanager "platforms;android-36.1" "build-tools;36.0.0"
-
-      - name: Set up Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v6
+          set -euo pipefail
+          sdkmanager --install \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0" \
+            "platform-tools"
+      - name: Configure Gradle from the checked-in wrapper
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          gradle-version: '9.3.1'
-
-      - name: Create an ephemeral debug keystore
+          cache-cleanup: on-success
+      - name: Validate Android backup and restore exclusions
+        run: python3 scripts/ci/verify_android_backup.py
+      - name: Scan tracked source for privileged credentials
+        run: python3 scripts/ci/secret_scan.py --source
+      # This key is short-lived, conventional Android DEBUG signing material only.
+      # It is never used for a release build and is not uploaded as an artifact.
+      - name: Prepare an ephemeral Android debug-only keystore
+        shell: bash
         run: |
-          keytool -genkeypair -v \
+          set -euo pipefail
+          keytool -genkeypair -noprompt \
             -keystore debug.keystore \
+            -storetype JKS \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
@@ -56,89 +62,39 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000
-
-      - name: Verify Android app data backup and transfer are disabled
+      - name: Run Android unit tests
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-
-          ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
-          required_domains = {
-              "root", "file", "database", "sharedpref", "external",
-              "device_root", "device_file", "device_database", "device_sharedpref",
-          }
-
-          manifest = ET.parse("app/src/main/AndroidManifest.xml").getroot()
-          application = manifest.find("application")
-          assert application is not None, "Android application element is missing"
-          assert application.get(ANDROID_NS + "allowBackup") == "false", (
-              "android:allowBackup must remain false because app storage contains credentials/device identity"
-          )
-
-          legacy = ET.parse("app/src/main/res/xml/backup_rules.xml").getroot()
-          assert legacy.tag == "full-backup-content", "Legacy backup rules root is invalid"
-          legacy_excludes = {
-              (item.get("domain"), item.get("path"))
-              for item in legacy.findall("exclude")
-          }
-          assert {(domain, ".") for domain in required_domains}.issubset(legacy_excludes), (
-              "Legacy cloud/device backup exclusions are incomplete"
-          )
-
-          modern = ET.parse("app/src/main/res/xml/data_extraction_rules.xml").getroot()
-          assert modern.tag == "data-extraction-rules", "Modern data extraction rules root is invalid"
-          for section_name in ("cloud-backup", "device-transfer"):
-              section = modern.find(section_name)
-              assert section is not None, f"{section_name} rules are required"
-              excludes = {
-                  (item.get("domain"), item.get("path"))
-                  for item in section.findall("exclude")
-              }
-              assert {(domain, ".") for domain in required_domains}.issubset(excludes), (
-                  f"{section_name} exclusions are incomplete"
-              )
-
-          print("PASS: cloud backup and device-to-device transfer are disabled for all app-private domains.")
-          PY
-
-      - name: Run Android unit tests and assemble debug APK
-        id: gradle-build
-        run: |
+          set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
-
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest
+      - name: Assemble Android debug APK
+        id: debug-build
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
       - name: Run Compose UI tests on an Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
+          profile: pixel_2
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-boot-timeout: 900
           disable-animations: true
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
-
-      - name: Scan Android source for embedded privileged secrets
+          disable-spellchecker: true
+          script: ./gradlew --no-daemon --stacktrace connectedDebugAndroidTest
+      - name: Inspect generated debug APK for privileged credentials
+        if: always() && steps.debug-build.outcome == 'success'
+        shell: bash
         run: |
-          if grep -RInE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' app/src; then
-            echo "::error::Privileged key material detected in Android source."
-            exit 1
-          fi
-
-      - name: Inspect debug APK for private signing keys and service-role credentials
-        run: |
+          set -euo pipefail
           apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
           test -n "$apk"
-          unpacked="$(mktemp -d)"
-          unzip -q "$apk" -d "$unpacked"
-          if grep -RIlE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' "$unpacked"; then
-            echo "::error::Privileged key material detected in the generated APK."
-            exit 1
-          fi
-          echo "No private signing key or service-role credential markers found in the debug APK."
-
+          python3 scripts/ci/secret_scan.py --apk "$apk"
       - name: Upload Android Compose UI test reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: android-compose-ui-test-reports
           path: |
@@ -146,47 +102,43 @@ jobs:
             app/build/outputs/androidTest-results/connected/
           if-no-files-found: ignore
           retention-days: 14
-
       - name: Upload Android unit-test reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: android-unit-test-reports
           path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Upload debug APK
-        if: success()
-        uses: actions/upload-artifact@v7
+      - name: Upload Android debug APK (not a production release)
+        if: success() && steps.debug-build.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mahi-repair-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
-
       - name: Publish Android CI result
         if: always()
         env:
           JOB_RESULT: ${{ job.status }}
-          BUILD_RESULT: ${{ steps.gradle-build.outcome }}
-          SDK_RESULT: ${{ steps.android-sdk.outcome }}
+          BUILD_RESULT: ${{ steps.debug-build.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
+        shell: bash
         run: |
           {
             echo "## Android CI"
             echo ""
             echo "- **Overall:** ${JOB_RESULT}"
-            echo "- **SDK installation:** ${SDK_RESULT}"
-            echo "- **Gradle tests + APK build:** ${BUILD_RESULT}"
+            echo "- **Debug APK build:** ${BUILD_RESULT}"
             echo "- **Commit:** ${COMMIT_SHA}"
             echo "- **Run:** [Open full logs](${RUN_URL})"
             echo ""
             if [ "${JOB_RESULT}" = "success" ]; then
-              echo "The Android debug APK is attached to this run as artifact mahi-repair-debug-apk."
+              echo "The attached APK is a debug artifact only; it is not a production release."
             else
-              echo "The build did not complete successfully. Open the run logs and download artifact android-unit-test-reports when available."
-              echo "::error title=Android CI failed::Check this run's failed step and Android unit-test report artifact."
+              echo "One or more Android checks failed. Review the unit/Compose reports and failed step."
+              echo "::error title=Android CI failed::Review this run's failing Android test or build step."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
