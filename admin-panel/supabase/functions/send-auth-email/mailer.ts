@@ -107,7 +107,7 @@ function buildVerificationUrl(
     if (target.username || target.password) {
       throw new Error("Auth redirect must not contain URL credentials.");
     }
-    verification.searchParams.set("redirect_to", target.toString());
+    verification.searchParams.set("redirect_to", redirectTo);
   }
   return verification.toString();
 }
