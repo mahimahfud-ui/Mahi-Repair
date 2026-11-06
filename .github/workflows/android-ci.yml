@@ -57,6 +57,51 @@ jobs:
             -keysize 2048 \
             -validity 10000
 
+      - name: Verify Android app data backup and transfer are disabled
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
+          required_domains = {
+              "root", "file", "database", "sharedpref", "external",
+              "device_root", "device_file", "device_database", "device_sharedpref",
+          }
+
+          manifest = ET.parse("app/src/main/AndroidManifest.xml").getroot()
+          application = manifest.find("application")
+          assert application is not None, "Android application element is missing"
+          assert application.get(ANDROID_NS + "allowBackup") == "false", (
+              "android:allowBackup must remain false because app storage contains credentials/device identity"
+          )
+
+          legacy = ET.parse("app/src/main/res/xml/backup_rules.xml").getroot()
+          assert legacy.tag == "full-backup-content", "Legacy backup rules root is invalid"
+          legacy_excludes = {
+              (item.get("domain"), item.get("path"))
+              for item in legacy.findall("exclude")
+          }
+          assert {(domain, ".") for domain in required_domains}.issubset(legacy_excludes), (
+              "Legacy cloud/device backup exclusions are incomplete"
+          )
+
+          modern = ET.parse("app/src/main/res/xml/data_extraction_rules.xml").getroot()
+          assert modern.tag == "data-extraction-rules", "Modern data extraction rules root is invalid"
+          for section_name in ("cloud-backup", "device-transfer"):
+              section = modern.find(section_name)
+              assert section is not None, f"{section_name} rules are required"
+              excludes = {
+                  (item.get("domain"), item.get("path"))
+                  for item in section.findall("exclude")
+              }
+              assert {(domain, ".") for domain in required_domains}.issubset(excludes), (
+                  f"{section_name} exclusions are incomplete"
+              )
+
+          print("PASS: cloud backup and device-to-device transfer are disabled for all app-private domains.")
+          PY
+
       - name: Run Android unit tests and assemble debug APK
         id: gradle-build
         run: |
@@ -136,7 +181,7 @@ jobs:
             echo "- **SDK installation:** ${SDK_RESULT}"
             echo "- **Gradle tests + APK build:** ${BUILD_RESULT}"
             echo "- **Commit:** ${COMMIT_SHA}"
-            echo "- **Run:** [Open full logs]($RUN_URL)"
+            echo "- **Run:** [Open full logs](${RUN_URL})"
             echo ""
             if [ "${JOB_RESULT}" = "success" ]; then
               echo "The Android debug APK is attached to this run as artifact mahi-repair-debug-apk."
