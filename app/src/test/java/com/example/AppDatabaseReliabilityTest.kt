@@ -89,6 +89,33 @@ class AppDatabaseReliabilityTest {
         assertEquals(0, database.reportOutboxDao().count())
     }
 
+    @Test
+    fun outboxRequestBackfillIsWriteOnceAndPreservesFirstAccountIdentity() = runBlocking {
+        val report = PendingReportEntity(
+            id = "3e1dc0d4-78b3-4e7f-9ac7-0c4a976d28d6",
+            payloadJson = """{"runId":"3e1dc0d4-78b3-4e7f-9ac7-0c4a976d28d6"}""",
+            createdAt = 100L,
+            deviceId = "b65e6c13-56f2-4a73-b9f9-7cb8af6a708c",
+            appVersion = "1.0.0"
+        )
+        database.reportOutboxDao().enqueue(report)
+
+        database.reportOutboxDao().backfillRequestIfMissing(
+            report.id,
+            """{"run_id":"${report.id}"}""",
+            "member@example.invalid"
+        )
+        database.reportOutboxDao().backfillRequestIfMissing(
+            report.id,
+            """{"run_id":"changed"}""",
+            "attacker@example.invalid"
+        )
+
+        val saved = database.reportOutboxDao().get(report.id)
+        assertEquals("""{"run_id":"${report.id}"}""", saved?.requestJson)
+        assertEquals("member@example.invalid", saved?.accountEmail)
+    }
+
     private fun tool(id: String) = ToolEntity(
         id = id,
         name = id,
