@@ -17,6 +17,7 @@ CREATE POLICY "mahi repair member device broadcasts"
       SELECT 1
       FROM public.devices d
       WHERE d.user_id = (SELECT auth.uid())
+        AND d.revoked_at IS NULL
         AND d.id::text = split_part(realtime.topic(), ':device:', 2)
         AND realtime.topic() =
           'mahi-repair:member:' || d.user_id::text || ':device:' || d.id::text
