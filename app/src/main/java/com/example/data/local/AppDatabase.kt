@@ -36,7 +36,8 @@ data class ToolEntity(
 data class PendingReportEntity(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "payload_json") val payloadJson: String,
-    @ColumnInfo(name = "created_at") val createdAt: Long
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "device_id") val deviceId: String? = null
 )
 
 @Entity(tableName = "repair_history")
@@ -102,7 +103,7 @@ interface RepairHistoryDao {
 
 @Database(
     entities = [ToolEntity::class, RepairHistoryEntity::class, PendingReportEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -122,6 +123,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pending_reports ADD COLUMN device_id TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -131,7 +138,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mahi_repair.db"
-                ).addMigrations(MIGRATION_1_2).build()
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
                 INSTANCE = instance
                 instance
             }
