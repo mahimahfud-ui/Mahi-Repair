@@ -1,6 +1,9 @@
 package com.example
 
 import android.content.Context
+import android.Manifest
+import android.app.Application
+import org.robolectric.Shadows
 import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
 import com.example.domain.actions.ActionRegistry
@@ -53,7 +56,8 @@ class PermissionExecutionFlowTest {
 
     @Before
     fun setUp() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        Shadows.shadowOf(context).denyPermissions(Manifest.permission.CAMERA)
         engine = RecipeExecutionEngine(ActionRegistry(context))
         keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
         publicKeyPem = "-----BEGIN PUBLIC KEY-----\n" +
