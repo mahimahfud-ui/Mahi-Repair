@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "04:00"
+      timezone: Asia/Dhaka
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /admin-panel
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "04:30"
+      timezone: Asia/Dhaka
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "05:00"
+      timezone: Asia/Dhaka
+    open-pull-requests-limit: 5

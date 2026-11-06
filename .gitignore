@@ -1,30 +1,52 @@
 *.iml
-.gradle
-.kotlin
+.gradle/
+.kotlin/
+.local.properties
 /local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
-/.idea/navEditor.xml
+/.idea/navEditorSettings.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+/build/
+/app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
 local.properties
-.env
-debug.keystore
 
-# Keep real environment files and signing/build credentials out of Git.
+# Never commit live environment files or credentials.
 .env
 .env.*
 !.env.example
 **/.env
 **/.env.*
 !**/.env.example
+
+# Android signing material and distributable build outputs.
+debug.keystore
 *.jks
 *.keystore
 *.p12
 *.pfx
+*.apk
+*.aab
+
+# Admin Panel / Node build and test outputs.
+node_modules/
+admin-panel/.next/
+admin-panel/out/
+admin-panel/coverage/
+admin-panel/.vercel/
+admin-panel/.turbo/
+*.tsbuildinfo
+
+# Local logs, test artifacts and operating-system files.
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
+Thumbs.db
