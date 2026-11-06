@@ -73,11 +73,14 @@ class AppDatabaseReliabilityTest {
             id = "3e1dc0d4-78b3-4e7f-9ac7-0c4a976d28d6",
             payloadJson = """{"runId":"3e1dc0d4-78b3-4e7f-9ac7-0c4a976d28d6"}""",
             createdAt = 100L,
-            deviceId = "b65e6c13-56f2-4a73-b9f9-7cb8af6a708c"
+            deviceId = "b65e6c13-56f2-4a73-b9f9-7cb8af6a708c",
+            appVersion = "1.0.0"
         )
         database.reportOutboxDao().enqueue(report)
 
         assertEquals(report, database.reportOutboxDao().get(report.id))
+        database.reportOutboxDao().enqueue(report.copy(payloadJson = """{"runId":"changed"}""", appVersion = "9.9.9"))
+        assertEquals("The first immutable request must be retained.", report, database.reportOutboxDao().get(report.id))
         assertEquals(listOf(report.id), database.reportOutboxDao().getPendingIds())
         assertEquals(1, database.reportOutboxDao().count())
 
