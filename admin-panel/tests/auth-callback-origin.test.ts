@@ -20,6 +20,7 @@ describe('auth callback origin', () => {
     expect(resolveAuthCallbackOrigin('http://localhost:3000', null, true).ok).toBe(false);
     expect(resolveAuthCallbackOrigin('https://localhost:3000', null, true).ok).toBe(false);
     expect(resolveAuthCallbackOrigin('https://127.0.0.1', null, true).ok).toBe(false);
+    expect(resolveAuthCallbackOrigin('https://127.10.20.30', null, true).ok).toBe(false);
   });
 
   it('rejects callback URLs containing a path, query, or credentials', () => {
