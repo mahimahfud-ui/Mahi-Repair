@@ -39,13 +39,15 @@ gcloud run deploy mahi-repair-admin \
 
 Cloud Run's source deployment uses a Dockerfile when one exists in the source directory. This command therefore builds the checked-in standalone image rather than guessing a build command from the monorepo root. Refer to [Deploy services from source code](https://docs.cloud.google.com/run/docs/deploying-source-code).
 
-Once the service has a stable URL/custom domain, configure it as the callback origin:
+Once the service has a stable URL/custom domain, set `NEXT_PUBLIC_APP_URL` to that exact HTTPS origin before enabling Owner sign-in:
 
 ```bash
 gcloud run services update mahi-repair-admin \
   --region asia-southeast1 \
   --update-env-vars="NEXT_PUBLIC_APP_URL=https://YOUR_CLOUD_RUN_OR_CUSTOM_DOMAIN"
 ```
+
+**Important:** production sign-in fails closed when `NEXT_PUBLIC_APP_URL` is missing, malformed, non-HTTPS, or a loopback URL. It never falls back to the incoming request's Origin header in production. This prevents production magic links from silently targeting `localhost:3000`. The local value in `.env.example` is for development only.
 
 Use the Cloud Run console's environment settings instead of command-line variables when preferred. The two required Supabase values are public project configuration; do not configure secrets here.
 
@@ -74,7 +76,7 @@ Optional:
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_APP_URL` | Exact HTTPS origin for magic-link callback URLs |
+| `NEXT_PUBLIC_APP_URL` | **Required in production:** exact HTTPS Cloud Run/custom-domain origin for magic-link callback URLs |
 
 The server reads these settings dynamically at runtime. The login flow uses a server action so the Supabase SSR client and session cookies are not shipped in a browser bundle. Do not set `SUPABASE_SERVICE_ROLE_KEY`, a Supabase secret key, a database password or `RECIPE_SIGNING_PRIVATE_KEY_PEM` on the Cloud Run service.
 
