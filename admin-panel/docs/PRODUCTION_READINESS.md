@@ -23,7 +23,7 @@ This checklist separates code/CI evidence from checks that must be performed aga
 - [x] Node.js 22.23.4 pinned across Render, Admin Panel and Admin Panel CI.
 - [x] Protected production workflow source for migration preview/apply, JWT-verified deployment of 15 application Edge Functions, and separate signature-verified HTTP Auth email hook deployment.
 
-Current-head commit: 3df07f958575b50fa7b6d0737135376a45d76083.
+Auth email hook implementation commit: 3df07f958575b50fa7b6d0737135376a45d76083.
 
 Evidence:
 - [Android CI](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251879)
