@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
@@ -92,6 +94,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_LAST_SYNC = longPreferencesKey("last_sync_timestamp")
         private val KEY_DEVICE_ID = stringPreferencesKey("registered_device_id")
         private val KEY_DEVICE_OWNER_EMAIL = stringPreferencesKey("registered_device_owner_email")
+        private val KEY_REQUESTED_RUNTIME_PERMISSIONS = stringSetPreferencesKey("requested_runtime_permissions")
     }
 
     val deviceIdFlow: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -112,7 +115,22 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun clearDeviceId() {
-        context.dataStore.edit { prefs -> prefs.remove(KEY_DEVICE_ID) }
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_DEVICE_ID)
+            prefs.remove(KEY_DEVICE_OWNER_EMAIL)
+        }
+    }
+
+    suspend fun wasRuntimePermissionRequested(permissionName: String): Boolean {
+        return context.dataStore.data.first()[KEY_REQUESTED_RUNTIME_PERMISSIONS]?.contains(permissionName) == true
+    }
+
+    suspend fun markRuntimePermissionRequested(permissionName: String) {
+        context.dataStore.edit { prefs ->
+            val requested = prefs[KEY_REQUESTED_RUNTIME_PERMISSIONS].orEmpty().toMutableSet()
+            requested.add(permissionName)
+            prefs[KEY_REQUESTED_RUNTIME_PERMISSIONS] = requested
+        }
     }
 
     val sessionFlow: Flow<UserSession> = context.dataStore.data.map { prefs ->

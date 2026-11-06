@@ -3,6 +3,7 @@ package com.example.workers
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 
 class ToolSyncWorker(
     appContext: Context,
@@ -20,6 +21,8 @@ class ToolSyncWorker(
             } else {
                 Result.retry()
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.retry()
         }

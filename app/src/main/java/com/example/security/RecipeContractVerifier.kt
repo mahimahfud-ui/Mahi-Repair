@@ -163,7 +163,9 @@ object RecipeContractVerifier {
             }
             "REQUEST_OWN_APP_PERMISSION" -> {
                 keys(setOf("permission"), setOf("permission"))
-                require(text("permission", 40) in setOf("POST_NOTIFICATIONS", "CAMERA", "ACCESS_FINE_LOCATION", "READ_MEDIA_IMAGES")) { "Unsupported app permission" }
+                require(RuntimePermissionContract.isAllowlisted(text("permission", 40))) {
+                    "Unsupported app permission"
+                }
             }
             else -> error("Unsupported action: $action")
         }

@@ -53,7 +53,9 @@ class RunRepairScreenTest {
                 onSelectTool = {},
                 onDismissToolPicker = {},
                 onSubmitUserAction = {},
-                onDismissExecution = {}
+                onDismissExecution = {},
+                onRequestPermission = {},
+                onCancelPermission = {}
             )
         }
 
@@ -83,7 +85,9 @@ class RunRepairScreenTest {
                 onSelectTool = {},
                 onDismissToolPicker = {},
                 onSubmitUserAction = {},
-                onDismissExecution = {}
+                onDismissExecution = {},
+                onRequestPermission = {},
+                onCancelPermission = {}
             )
         }
 
@@ -106,7 +110,9 @@ class RunRepairScreenTest {
                 onSelectTool = { selectedToolId = it },
                 onDismissToolPicker = {},
                 onSubmitUserAction = {},
-                onDismissExecution = {}
+                onDismissExecution = {},
+                onRequestPermission = {},
+                onCancelPermission = {}
             )
         }
 
@@ -133,7 +139,9 @@ class RunRepairScreenTest {
                 onSelectTool = {},
                 onDismissToolPicker = {},
                 onSubmitUserAction = {},
-                onDismissExecution = {}
+                onDismissExecution = {},
+                onRequestPermission = {},
+                onCancelPermission = {}
             )
         }
 

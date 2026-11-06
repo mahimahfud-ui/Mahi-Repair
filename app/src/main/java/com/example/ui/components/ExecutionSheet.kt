@@ -72,7 +72,9 @@ import com.example.ui.theme.MahiWarningDim
 fun ExecutionDialog(
     executionEvent: ExecutionEvent,
     onSubmitUserAction: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRequestPermission: (String) -> Unit,
+    onCancelPermission: () -> Unit
 ) {
     if (executionEvent is ExecutionEvent.Idle) return
 
@@ -179,8 +181,20 @@ fun ExecutionDialog(
                     is ExecutionEvent.PromptUserAction -> {
                         UserActionPromptSection(
                             event = executionEvent,
-                            onConfirm = { onSubmitUserAction(true) },
-                            onCancel = { onSubmitUserAction(false) }
+                                onConfirm = {
+                                if (executionEvent.type == UserActionType.PERMISSION) {
+                                    executionEvent.payload["permission"]?.let(onRequestPermission)
+                                } else {
+                                    onSubmitUserAction(true)
+                                }
+                            },
+                            onCancel = {
+                                if (executionEvent.type == UserActionType.PERMISSION) {
+                                    onCancelPermission()
+                                } else {
+                                    onSubmitUserAction(false)
+                                }
+                            }
                         )
                     }
                     is ExecutionEvent.Finished -> {

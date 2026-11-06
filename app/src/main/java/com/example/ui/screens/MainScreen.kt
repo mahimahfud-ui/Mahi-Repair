@@ -51,7 +51,9 @@ fun MainScreen(
     onSelectTool: (String) -> Unit,
     onDismissToolPicker: () -> Unit,
     onSubmitUserAction: (Boolean) -> Unit,
-    onDismissExecution: () -> Unit
+    onDismissExecution: () -> Unit,
+    onRequestPermission: (String) -> Unit,
+    onCancelPermission: () -> Unit
 ) {
     val canRun = state.tools.isNotEmpty() &&
         !state.isToolsLoading &&
@@ -225,6 +227,8 @@ fun MainScreen(
     ExecutionDialog(
         executionEvent = state.executionState,
         onSubmitUserAction = onSubmitUserAction,
-        onDismiss = onDismissExecution
+        onDismiss = onDismissExecution,
+        onRequestPermission = onRequestPermission,
+        onCancelPermission = onCancelPermission
     )
 }

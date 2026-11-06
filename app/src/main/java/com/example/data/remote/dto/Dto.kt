@@ -101,6 +101,7 @@ data class StepRunResultDto(
 
 @JsonClass(generateAdapter = true)
 data class SubmitRunRequest(
+    @Json(name = "run_id") val runId: String,
     @Json(name = "device_id") val deviceId: String,
     @Json(name = "tool_id") val toolId: String,
     @Json(name = "tool_version") val toolVersion: Int,

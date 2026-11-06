@@ -28,7 +28,17 @@ data class ToolEntity(
     @ColumnInfo(name = "target_package") val targetPackage: String?,
     @ColumnInfo(name = "raw_signed_payload") val rawSignedPayload: String,
     @ColumnInfo(name = "signature_base64") val signatureBase64: String,
-    @ColumnInfo(name = "last_updated") val lastUpdated: Long
+    @ColumnInfo(name = "last_updated") val lastUpdated: Long,
+    @ColumnInfo(name = "recipe_slug", defaultValue = "''") val recipeSlug: String = ""
+)
+
+@Entity(tableName = "pending_reports")
+data class PendingReportEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "payload_json") val payloadJson: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "device_id") val deviceId: String? = null,
+    @ColumnInfo(name = "app_version", defaultValue = "'1.0.0'") val appVersion: String = "1.0.0"
 )
 
 @Entity(tableName = "repair_history")
@@ -57,6 +67,31 @@ interface ToolDao {
 
     @Query("DELETE FROM tools")
     suspend fun clearAll()
+
+    @androidx.room.Transaction
+    suspend fun replaceAll(tools: List<ToolEntity>) {
+        clearAll()
+        if (tools.isNotEmpty()) insertTools(tools)
+    }
+}
+
+@Dao
+interface ReportOutboxDao {
+    // A retry with the same run UUID must never overwrite the first accepted request body.
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun enqueue(report: PendingReportEntity)
+
+    @Query("SELECT * FROM pending_reports WHERE id = :reportId LIMIT 1")
+    suspend fun get(reportId: String): PendingReportEntity?
+
+    @Query("SELECT id FROM pending_reports ORDER BY created_at ASC")
+    suspend fun getPendingIds(): List<String>
+
+    @Query("DELETE FROM pending_reports WHERE id = :reportId")
+    suspend fun delete(reportId: String)
+
+    @Query("SELECT COUNT(*) FROM pending_reports")
+    suspend fun count(): Int
 }
 
 @Dao
@@ -68,12 +103,40 @@ interface RepairHistoryDao {
     suspend fun insertRecord(record: RepairHistoryEntity)
 }
 
-@Database(entities = [ToolEntity::class, RepairHistoryEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [ToolEntity::class, RepairHistoryEntity::class, PendingReportEntity::class],
+    version = 4,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun toolDao(): ToolDao
     abstract fun repairHistoryDao(): RepairHistoryDao
+    abstract fun reportOutboxDao(): ReportOutboxDao
 
     companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tools ADD COLUMN recipe_slug TEXT NOT NULL DEFAULT ''")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS pending_reports (" +
+                        "id TEXT NOT NULL, payload_json TEXT NOT NULL, created_at INTEGER NOT NULL, " +
+                        "PRIMARY KEY(id))"
+                )
+            }
+        }
+
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pending_reports ADD COLUMN device_id TEXT")
+            }
+        }
+
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pending_reports ADD COLUMN app_version TEXT NOT NULL DEFAULT '1.0.0'")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -83,7 +146,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mahi_repair.db"
-                ).fallbackToDestructiveMigration().build()
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
                 INSTANCE = instance
                 instance
             }
