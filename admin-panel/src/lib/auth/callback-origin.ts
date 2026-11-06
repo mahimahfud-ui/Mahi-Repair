@@ -24,7 +24,7 @@ export function resolveAuthCallbackOrigin(
       hostname === '::1' ||
       hostname === '[::1]' ||
       hostname === '0.0.0.0' ||
-      /^127(?:\\.\\d{1,3}){1,3}$/.test(hostname);
+      /^127(?:\.\d{1,3}){1,3}$/.test(hostname);
 
     if (
       !['http:', 'https:'].includes(parsed.protocol) ||
