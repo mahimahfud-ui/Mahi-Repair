@@ -91,7 +91,7 @@ To obtain a persistent hosted staging database, either upgrade the Primary Supab
 
 ## Database CI result
 
-<badge>not used in source file</badge>
+**Result: PASSED.**
 
 The first fresh-database run passed on integration commit `c9e71c0ebf3c5bace865f28c4bf79363a9519498`:
 
