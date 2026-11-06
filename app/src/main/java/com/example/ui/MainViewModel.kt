@@ -110,7 +110,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             toolRepo.lastSyncFlow.collect { timestamp -> _lastSyncTimestamp.value = timestamp }
         }
         viewModelScope.launch {
-            _pendingReportCount.value = toolRepo.pendingReportCount()
+            toolRepo.pendingReportCountFlow.collect { count -> _pendingReportCount.value = count }
         }
         viewModelScope.launch {
             authRepo.sessionFlow.collectLatest { session ->
