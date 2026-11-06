@@ -248,7 +248,10 @@ BEGIN
     RETURN jsonb_build_object('conflict', true, 'run_id', p_run_id::text);
   END IF;
 
-  IF v_device.app_version IS DISTINCT FROM p_app_version THEN
+  -- Pending reports may have been created by an older app before an upgrade.
+  -- Preserve their original app_version in the idempotent request, while requiring
+  -- the currently registered device to be that version or newer.
+  IF NOT private.app_version_at_least(v_device.app_version, p_app_version) THEN
     RAISE EXCEPTION 'DEVICE_APP_VERSION_MISMATCH' USING ERRCODE = 'P0001';
   END IF;
 
