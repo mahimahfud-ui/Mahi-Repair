@@ -13,10 +13,13 @@ export const corsHeaders = (request: Request) => {
     }
   }
 
-  if (origin && !allowed) {
+  // Local origins are disabled by default and must be explicitly enabled for
+  // local development. Production only allows the exact configured ADMIN_ORIGIN.
+  if (origin && !allowed && Deno.env.get('ALLOW_LOCALHOST_ORIGIN') === 'true') {
     try {
       const url = new URL(origin);
-      allowed = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      allowed = url.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     } catch {
       allowed = false;
     }
