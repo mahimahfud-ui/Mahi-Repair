@@ -76,7 +76,13 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
+          profile: pixel_2
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-boot-timeout: 900
           disable-animations: true
+          disable-spellchecker: true
           script: ./gradlew --no-daemon --stacktrace connectedDebugAndroidTest
       - name: Inspect generated debug APK for privileged credentials
         if: always() && steps.debug-build.outcome == 'success'
