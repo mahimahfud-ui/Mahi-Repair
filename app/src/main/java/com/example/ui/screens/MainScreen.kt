@@ -248,7 +248,7 @@ fun MainScreen(
                         tools = state.tools,
                         isLoading = state.isToolsLoading,
                         maxWidth = maxWidth,
-                        isTablet = tablet,
+                        columns = when { screenWidth >= 1024 -> 3; tablet -> 2; else -> 1 },
                         searchQuery = searchQuery,
                         onSearchChange = { searchQuery = it },
                         selectedCategory = selectedCategory,
@@ -366,8 +366,7 @@ private fun HomePage(
         Spacer(Modifier.height(18.dp))
         PrimaryActionButton(
             label = if (state.tools.isEmpty()) "Refresh repair library" else "Choose a repair",
-            enabled = if (state.tools.isEmpty()) state.canRetryAvailability && !state.isToolsLoading
-                else !state.isToolsLoading && !state.isPreparingRepair,
+            enabled = !state.isToolsLoading && !state.isPreparingRepair,
             loading = state.isToolsLoading || state.isPreparingRepair,
             onClick = if (state.tools.isEmpty()) onRetryAvailability else onRunRepair,
             modifier = Modifier.testTag("run_repair_button")
@@ -386,7 +385,7 @@ private fun ToolsPage(
     tools: List<RepairTool>,
     isLoading: Boolean,
     maxWidth: Dp,
-    isTablet: Boolean,
+    columns: Int,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     selectedCategory: String,
@@ -440,10 +439,10 @@ private fun ToolsPage(
                 onRefresh
             )
             else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                filtered.chunked(if (isTablet) 2 else 1).forEach { rowTools ->
+                filtered.chunked(columns).forEach { rowTools ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         rowTools.forEach { tool -> Box(Modifier.weight(1f)) { ToolRowCard(tool) { onSelectTool(tool.id) } } }
-                        if (isTablet && rowTools.size == 1) Spacer(Modifier.weight(1f))
+                        repeat((columns - rowTools.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
