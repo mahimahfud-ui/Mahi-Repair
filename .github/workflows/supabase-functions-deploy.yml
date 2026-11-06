@@ -101,6 +101,32 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Auth email delivery provider secrets exist in Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_names="$(supabase secrets list)"
+          required_secrets=(
+            RESEND_API_KEY
+            RESEND_FROM_EMAIL
+            BREVO_API_KEY
+            BREVO_FROM_EMAIL
+          )
+          missing=()
+          for secret_name in "${required_secrets[@]}"; do
+            if ! grep -Fq "$secret_name" <<< "$secret_names"; then
+              missing+=("$secret_name")
+            fi
+          done
+          if (("${#missing[@]}" > 0)); then
+            printf '::error::Missing Supabase email provider secret names: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          # SEND_EMAIL_HOOK_SECRET is generated later in the Supabase Auth Hook
+          # dashboard. Do not require it until the hook is created.
+
       - name: Configure the exact Admin Panel origin in Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -119,7 +145,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: supabase db push --linked --yes
 
-      - name: Deploy all 15 Edge Functions with JWT verification enabled
+      - name: Deploy all 16 Edge Functions using their reviewed JWT policy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         shell: bash
@@ -141,10 +167,13 @@ jobs:
             get-signed-repair-tool
             register-device
             submit-repair-run
+            send-auth-email
           )
           for function in "${functions[@]}"; do
             echo "::group::Deploying $function"
-            # Supabase CLI defaults to verify_jwt=true. Never pass --no-verify-jwt here.
+            # send-auth-email has verify_jwt=false in supabase/config.toml and
+            # validates the Standard Webhooks signature itself. The other 15
+            # protected application functions retain verify_jwt=true.
             supabase functions deploy "$function" --project-ref "$PROJECT_REF"
             echo "::endgroup::"
           done
