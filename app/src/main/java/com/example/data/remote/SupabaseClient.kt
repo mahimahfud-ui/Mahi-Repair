@@ -85,6 +85,8 @@ class SupabaseClient(
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -121,6 +123,8 @@ class SupabaseClient(
                     Result.failure(IOException("OTP verification failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -163,6 +167,8 @@ class SupabaseClient(
                     Result.failure(IOException("Session refresh failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -187,6 +193,8 @@ class SupabaseClient(
                 if (it.isSuccessful || it.code == 401) Result.success(Unit)
                 else Result.failure(IOException("Server sign-out failed (HTTP ${it.code})."))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -224,6 +232,8 @@ class SupabaseClient(
                     if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "This account or device is not authorized.")) else Result.failure(IOException("Device registration failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -260,6 +270,8 @@ class SupabaseClient(
                     if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "Access to the repair catalog was denied.")) else Result.failure(IOException("Failed to fetch repair tools (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -297,6 +309,8 @@ class SupabaseClient(
                     if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "This repair is no longer authorized for this device.")) else Result.failure(IOException("Failed to fetch signed repair (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -337,6 +351,8 @@ class SupabaseClient(
                     if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "The server denied this report submission.")) else Result.failure(IOException("Failed to submit run report (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
