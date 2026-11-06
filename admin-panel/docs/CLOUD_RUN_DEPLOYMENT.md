@@ -65,18 +65,18 @@ If the Build Mode import cannot deploy a monorepo subdirectory as its app root, 
 
 ## Cloud Run environment variables
 
-Required:
+Required for a fully configured service:
 
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (public) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (public) |
 
-Optional:
+Required after the first deployment has produced a stable service URL:
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_APP_URL` | **Required in production:** exact HTTPS Cloud Run/custom-domain origin for magic-link callback URLs |
+| `NEXT_PUBLIC_APP_URL` | Exact HTTPS Cloud Run/custom-domain origin for magic-link callback URLs |
 
 The server reads these settings dynamically at runtime. The login flow uses a server action so the Supabase SSR client and session cookies are not shipped in a browser bundle. Do not set `SUPABASE_SERVICE_ROLE_KEY`, a Supabase secret key, a database password or `RECIPE_SIGNING_PRIVATE_KEY_PEM` on the Cloud Run service.
 
