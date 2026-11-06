@@ -11,6 +11,7 @@ import com.example.data.repository.ToolRepository
 import com.example.domain.actions.ActionRegistry
 import com.example.domain.engine.RecipeExecutionEngine
 import com.example.sync.RepairRealtimeEvent
+import com.example.sync.RealtimeEventDeduplicator
 import com.example.sync.SupabaseRealtimeClient
 import com.example.sync.SyncManager
 import kotlinx.coroutines.CancellationException
@@ -27,7 +28,7 @@ import kotlinx.coroutines.launch
 class MahiRepairApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val seenRealtimeEvents = LinkedHashSet<String>(128)
+    private val realtimeEventDeduplicator = RealtimeEventDeduplicator(MAX_REMEMBERED_EVENTS)
     @Volatile private var appIsForeground = false
     private var realtimeJob: Job? = null
 
@@ -144,7 +145,7 @@ class MahiRepairApplication : Application() {
     private suspend fun handleRealtimeEvent(event: RepairRealtimeEvent) {
         // An event without a stable ID cannot be safely deduplicated; drop it.
         if (event.eventId.isNullOrBlank()) return
-        if (!rememberRealtimeEvent(event.eventId)) return
+        if (!realtimeEventDeduplicator.shouldProcess(event.eventId)) return
 
         // Events only invalidate local freshness. The authenticated Edge Function
         // decides whether this member/device is still authorized; event labels never
@@ -152,17 +153,6 @@ class MahiRepairApplication : Application() {
         val result = toolRepository.syncTools()
         if (result.isFailure) {
             Log.w(TAG, "Authorized catalog refresh after Realtime event failed.")
-        }
-    }
-
-    private fun rememberRealtimeEvent(eventId: String?): Boolean {
-        if (eventId.isNullOrBlank()) return true
-        synchronized(seenRealtimeEvents) {
-            if (!seenRealtimeEvents.add(eventId)) return false
-            while (seenRealtimeEvents.size > MAX_REMEMBERED_EVENTS) {
-                seenRealtimeEvents.remove(seenRealtimeEvents.first())
-            }
-            return true
         }
     }
 
