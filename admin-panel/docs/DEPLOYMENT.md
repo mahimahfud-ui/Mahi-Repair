@@ -128,3 +128,10 @@ npm run build
 ```
 
 GitHub Actions also runs Android unit/Compose UI tests, APK/source secret scans and Deno contract/type checks. CI success does not replace owner/member/device acceptance testing or testing on a physical Android device.
+
+
+## Shared Supabase Auth email delivery
+
+Android and the Admin Panel use the same project-level Supabase Auth Send Email Hook. It sends Android's existing six-digit OTP and the Admin's existing Magic Link/callback through Resend (primary) with Brevo fallback. Client-side Auth requests, Owner/member authorization and redirects stay unchanged.
+
+See AUTH_EMAIL_DELIVERY.md for provider verification, Edge Function secrets, protected deployment and the manual Supabase Dashboard hook activation steps. The hook is not active until its secrets are entered and it is enabled under Authentication → Hooks.

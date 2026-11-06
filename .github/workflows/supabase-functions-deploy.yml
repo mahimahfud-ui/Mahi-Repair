@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Apply database migrations and deploy 15 Edge Functions
+    name: Apply migrations and deploy 16 Edge Functions
     if: github.ref == 'refs/heads/main' && inputs.confirm_production == 'DEPLOY'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -87,6 +87,28 @@ jobs:
             exit 1
           fi
 
+
+      - name: Verify email delivery secrets exist in Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_names="$(supabase secrets list)"
+          required_secrets=(
+            SEND_EMAIL_HOOK_SECRET
+            RESEND_API_KEY
+            RESEND_FROM_EMAIL
+            BREVO_API_KEY
+            BREVO_FROM_EMAIL
+          )
+          for secret_name in "${required_secrets[@]}"; do
+            if ! grep -Fq "${secret_name}" <<< "${secret_names}"; then
+              echo "::error::Add ${secret_name} directly in Supabase Dashboard → Edge Function Secrets before deployment."
+              exit 1
+            fi
+          done
+
       - name: Configure the Admin Panel origin in Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -136,6 +158,11 @@ jobs:
             supabase functions deploy "${function}" --project-ref "$PROJECT_REF"
             echo "::endgroup::"
           done
+
+      - name: Deploy the signed Supabase Auth email hook
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy send-auth-email --no-verify-jwt --project-ref "$PROJECT_REF"
 
       - name: Verify deployed migration history
         env:

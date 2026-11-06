@@ -78,3 +78,18 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 ## Release decision
 
 **NOT PRODUCTION READY.** Current-head CI is green, but production deployment/configuration, real owner/member/device workflow, signed release artifact, live Realtime/RLS authorization tests and physical-device acceptance remain unverified. Do not merge PR #1 or announce production availability until every required gate above has evidence.
+
+
+## Shared Auth email delivery
+
+- [x] Project-level Send Email Auth Hook source implemented with Standard Webhooks signature verification.
+- [x] Resend primary and Brevo fallback sender implemented; OTP and token-hash verification link are included without changing the Auth-provided redirect.
+- [x] Unit/contract tests cover Android OTP, Admin callback preservation, email-change token mapping and provider fallback.
+- [x] Protected deployment workflow source includes the hook function with JWT verification disabled; it retains manual production and protected-environment gates.
+- [ ] Verify Resend and Brevo sender domains and DNS records.
+- [ ] Add hook/provider secrets directly in Supabase Edge Function Secrets.
+- [ ] Deploy from main using the protected production workflow.
+- [ ] Enable the HTTP Send Email hook in Supabase Authentication → Hooks.
+- [ ] Run live Owner Magic Link, Android Member OTP, invitation and Resend-to-Brevo fallback acceptance tests.
+
+See AUTH_EMAIL_DELIVERY.md for the full setup. Code and CI do not mean the production hook is enabled.
