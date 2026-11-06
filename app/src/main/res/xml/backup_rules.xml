@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude DataStore session credentials, tokens, and device registration identity -->
+    <exclude domain="file" path="datastore" />
+    <exclude domain="file" path="datastore/mahi_repair_prefs.preferences_pb" />
+    <exclude domain="database" path="mahi_repair.db" />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>
