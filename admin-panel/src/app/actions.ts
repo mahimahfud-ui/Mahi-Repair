@@ -41,10 +41,14 @@ export async function requestSignInLink(email: string): Promise<SignInLinkResult
 
     if (error) {
       const authError = error as { status?: number; code?: string; message?: string };
-      return {
-        ok: false,
-        reason: isSupabaseEmailRateLimitError(authError) ? 'rate_limited' : 'failed',
-      };
+      if (isSupabaseEmailRateLimitError(authError)) {
+        return { ok: false, reason: 'rate_limited' };
+      }
+
+      // Do not expose whether an address belongs to an eligible Owner account.
+      // Supabase Auth responses for unknown, member, or otherwise ineligible
+      // addresses receive the same public confirmation as a successful request.
+      return { ok: true };
     }
 
     return { ok: true };
