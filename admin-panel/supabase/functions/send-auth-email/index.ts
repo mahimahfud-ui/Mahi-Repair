@@ -38,7 +38,7 @@ Deno.serve(async (request: Request) => {
   } catch {
     return hookError(400, "Invalid authentication email request.");
   }
-  if (!body || body.length > 20 * 1024) {
+  if (!body || new TextEncoder().encode(body).byteLength > 20 * 1024) {
     return hookError(413, "Authentication email request is empty or too large.");
   }
 
