@@ -1,6 +1,15 @@
 -- Private, device-scoped Broadcast notifications.
 -- Events contain only an opaque event ID. Android always fetches current authorized
--- recipes from get-my-repair-tools and revalidates authorization before execution.
+-- recipes through get-my-repair-tools and revalidates authorization before execution.
+--
+-- Supabase evaluates this SELECT policy when a private channel is authorized and
+-- caches the authorization result for the lifetime of that connection. A client
+-- already subscribed when a member is suspended or its device is revoked can
+-- therefore receive the opaque revocation notification on that existing connection.
+-- A new or reconnected subscription is checked against current profile/device rows
+-- and is denied while suspended/revoked. Offline devices receive no event while
+-- disconnected; Android must fetch the catalog again on reconnect/resume. This
+-- cached-connection behavior is not a reason to weaken the policy below.
 
 GRANT USAGE ON SCHEMA realtime TO authenticated;
 GRANT SELECT ON TABLE realtime.messages TO authenticated;
@@ -236,7 +245,7 @@ CREATE TRIGGER devices_private_access_broadcast
   EXECUTE FUNCTION private.broadcast_repair_device_access_changed();
 
 COMMENT ON POLICY "mahi repair member device broadcasts" ON realtime.messages IS
-  'Allows an authenticated user to receive only opaque private Broadcast events on their own registered-device topic, including access-revocation notifications. It grants no repair recipe or Edge Function authorization.';
+  'Allows only an active authenticated member to join a private Broadcast topic for their own non-revoked device. Authorization is cached for an existing connection: it may receive an opaque revocation event after suspension/revocation, but a new/reconnected subscription is denied. Offline clients receive no event and must refetch the catalog on reconnect. This grants no recipe payload or Edge Function authorization.';
 
 
 -- SECURITY DEFINER predicates are needed by authenticated RLS policies, but they
