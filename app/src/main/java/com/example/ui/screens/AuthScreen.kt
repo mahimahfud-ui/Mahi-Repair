@@ -56,7 +56,6 @@ import com.example.ui.MainUiState
 import com.example.ui.theme.MahiBlack
 import com.example.ui.theme.MahiCardStroke
 import com.example.ui.theme.MahiCardSurface
-import com.example.ui.theme.MahiAccentDim
 import com.example.ui.theme.MahiAccent
 import com.example.ui.theme.MahiAccentDim
 import com.example.ui.theme.MahiRedPrimary
