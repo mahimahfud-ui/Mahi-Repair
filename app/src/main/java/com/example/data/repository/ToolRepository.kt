@@ -10,6 +10,7 @@ import com.example.data.local.RepairHistoryEntity
 import com.example.data.local.ToolEntity
 import com.example.data.remote.SupabaseClient
 import com.example.data.remote.ServerAuthorizationException
+import com.example.data.remote.InvalidAuthSessionException
 import com.example.data.remote.dto.RegisterDeviceRequest
 import com.example.data.remote.dto.StepRunResultDto
 import com.example.data.remote.dto.SubmitRunRequest
@@ -132,9 +133,12 @@ class ToolRepository(
 
         val sessionResult = authRepository.getValidSession()
         if (sessionResult.isFailure) {
-            return@withLock Result.failure(
-                sessionResult.exceptionOrNull() ?: IllegalStateException("Please sign in.")
-            )
+            val cause = sessionResult.exceptionOrNull()
+            if (cause is InvalidAuthSessionException) {
+                clearLocalCatalog()
+                _accessDeniedMessage.value = "Your sign-in session expired. Please sign in again to refresh repair access."
+            }
+            return@withLock Result.failure(cause ?: IllegalStateException("Please sign in."))
         }
 
         try {
