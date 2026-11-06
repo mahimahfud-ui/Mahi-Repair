@@ -87,9 +87,9 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 - [x] Unit/contract tests cover Android OTP, Admin callback preservation, email-change token mapping and provider fallback.
 - [x] Protected deployment workflow source includes the hook function with JWT verification disabled; it retains manual production and protected-environment gates.
 - [ ] Verify Resend and Brevo sender domains and DNS records.
-- [ ] Add hook/provider secrets directly in Supabase Edge Function Secrets.
+- [ ] Add Resend and Brevo API/sender secrets directly in Supabase Edge Function Secrets.
 - [ ] Deploy from main using the protected production workflow.
-- [ ] Enable the HTTP Send Email hook in Supabase Authentication → Hooks.
+- [ ] Generate the Supabase HTTP Hook secret in Authentication → Hooks, add it as SEND_EMAIL_HOOK_SECRET, then save/enable the hook.
 - [ ] Run live Owner Magic Link, Android Member OTP, invitation and Resend-to-Brevo fallback acceptance tests.
 
 See AUTH_EMAIL_DELIVERY.md for the full setup. Code and CI do not mean the production hook is enabled.

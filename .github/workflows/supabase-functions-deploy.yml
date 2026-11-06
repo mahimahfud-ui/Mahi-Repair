@@ -96,7 +96,6 @@ jobs:
           set -euo pipefail
           secret_names="$(supabase secrets list)"
           required_secrets=(
-            SEND_EMAIL_HOOK_SECRET
             RESEND_API_KEY
             RESEND_FROM_EMAIL
             BREVO_API_KEY
