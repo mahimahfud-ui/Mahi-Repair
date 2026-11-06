@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
       .eq('id', deviceId).eq('user_id', user.id).is('revoked_at', null).maybeSingle();
     if (!device) throw Object.assign(new Error('Active registered device required'), { status: 403 });
     const { data: tool, error } = await admin.from('repair_tools')
-      .select('id,status,audience').eq('id', toolId).single();
+      .select('id,slug,status,audience').eq('id', toolId).single();
     if (error || !tool || tool.status !== 'PUBLISHED') throw Object.assign(new Error('Published tool not found'), { status: 404 });
     if (tool.audience === 'selected_members') {
       const { data: access } = await admin.from('repair_tool_access').select('id')

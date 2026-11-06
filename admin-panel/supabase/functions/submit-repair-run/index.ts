@@ -1,5 +1,6 @@
 import { authenticate, respond, preflight, handleError, jsonBody, rateLimit } from '../_shared/http.ts';
 import { z } from 'npm:zod@4';
+import { hasAuthorizedRunStepIds } from '../_shared/run-report.ts';
 
 const ErrorCode = z.string().regex(/^[A-Z0-9_:-]{1,100}$/);
 const Run = z.object({
@@ -13,7 +14,7 @@ const Run = z.object({
     step_id: z.string().min(1).max(80),
     status: z.enum(['SUCCESS', 'FAILED', 'SKIPPED', 'CANCELLED']),
     error_code: ErrorCode.optional(),
-  }).strict()).max(50),
+  }).strict()).min(1).max(50),
   error_code: ErrorCode.optional(),
   app_version: z.string().max(30).regex(/^\d+(?:\.\d+){0,3}$/),
 }).strict().superRefine((value, ctx) => {
@@ -25,6 +26,19 @@ const Run = z.object({
     if (ids.has(step.step_id)) ctx.addIssue({ code: 'custom', path: ['step_results', index, 'step_id'], message: 'Duplicate step result.' });
     ids.add(step.step_id);
   });
+  const statuses = value.step_results.map((step) => step.status);
+  if (value.result === 'SUCCESS' && !statuses.includes('SUCCESS')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A successful run must contain at least one completed recipe step.' });
+  }
+  if (value.result === 'PARTIAL' && (!statuses.includes('FAILED') || !statuses.includes('SUCCESS'))) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A partial run must contain both completed and failed steps.' });
+  }
+  if (value.result === 'FAILED' && !statuses.includes('FAILED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A failed run must contain a failed step or failed precheck.' });
+  }
+  if (value.result === 'CANCELLED' && !statuses.includes('CANCELLED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A cancelled run must contain a cancelled step.' });
+  }
 });
 
 function compareVersions(a: string, b: string): number {
@@ -52,8 +66,9 @@ Deno.serve(async (req) => {
     if (deviceError || !device || device.revoked_at) throw Object.assign(new Error('Active registered device required'), { status: 403 });
     if (device.app_version !== value.app_version) throw Object.assign(new Error('Refresh device registration before submitting this run.'), { status: 409 });
 
-    const { data: tool, error: toolError } = await admin.from('repair_tools').select('id,status,audience').eq('id', value.tool_id).single();
-    if (toolError || !tool || tool.status !== 'PUBLISHED') throw Object.assign(new Error('Tool is not currently published'), { status: 403 });
+    const { data: tool, error: toolError } = await admin.from('repair_tools').select('id,slug,status,audience,version').eq('id', value.tool_id).single();
+    if (toolError || !tool || tool.status !== 'PUBLISHED') throw Object.assign(new Error('This repair is not currently published.'), { status: 403 });
+    if (tool.version !== value.tool_version) throw Object.assign(new Error('This repair version is no longer current. Refresh the repair list.'), { status: 409 });
     if (tool.audience === 'selected_members') {
       const { data: access } = await admin.from('repair_tool_access').select('id').eq('tool_id', value.tool_id).eq('member_id', user.id).maybeSingle();
       if (!access) throw Object.assign(new Error('No access to tool'), { status: 403 });
@@ -66,7 +81,7 @@ Deno.serve(async (req) => {
     if ((device.android_api ?? 0) < (payload.minAndroidApi ?? 23)) throw Object.assign(new Error('Device Android API is below the recipe requirement.'), { status: 409 });
     if (payload.minAppVersion && compareVersions(value.app_version, payload.minAppVersion) < 0) throw Object.assign(new Error('Android app version is below the recipe requirement.'), { status: 409 });
     const knownStepIds = new Set((payload.steps ?? []).map((step) => step.id));
-    if (value.step_results.some((step) => !knownStepIds.has(step.step_id))) throw Object.assign(new Error('Run contains a step ID that is not part of the signed recipe.'), { status: 422 });
+    if (!hasAuthorizedRunStepIds(value.result, value.step_results, knownStepIds)) throw Object.assign(new Error('Run contains a step ID that is not part of the signed recipe.'), { status: 422 });
 
     const { data, error } = await admin.from('repair_runs').insert({ ...value, user_id: user.id }).select('id').single();
     if (error) throw error;

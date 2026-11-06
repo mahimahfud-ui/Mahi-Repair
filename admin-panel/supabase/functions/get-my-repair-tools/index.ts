@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
 
     await admin.from('devices').update({ last_seen_at: new Date().toISOString() }).eq('id', deviceId);
     const { data: tools, error } = await admin.from('repair_tools')
-      .select('id,audience').eq('status', 'PUBLISHED');
+      .select('id,slug,audience').eq('status', 'PUBLISHED');
     if (error) throw error;
     const publishedIds = new Set((tools ?? []).map((tool) => tool.id));
     const allMemberToolIds = (tools ?? []).filter((tool) => tool.audience === 'all_active_members').map((tool) => tool.id);

@@ -1,43 +1,54 @@
-# Mahi Repair CI
+# Mahi Repair CI and release gates
 
-Two independent GitHub Actions workflows run on every branch push, pull requests targeting `main`, and manual dispatch:
+Three GitHub Actions workflows validate the PR branch:
 
 - Android: `.github/workflows/android-ci.yml`
 - Admin Panel: `.github/workflows/admin-panel-ci.yml`
+- Supabase Edge Functions: `.github/workflows/supabase-functions-ci.yml`
 
-## Android workflow
+Push and pull-request events use the same branch-based concurrency group, so the same branch is not built twice for the two event types.
 
-The Android source has Gradle wrapper properties but does not contain the wrapper launcher or wrapper JAR. CI installs Gradle 9.3.1 using the official Gradle setup action instead of calling a missing `./gradlew`.
+## Android CI
 
-The build uses Android SDK Platform 36.1 (matching `compileSdk { version = release(36) { minorApiLevel = 1 } }`) and Build Tools 36.0.0. It generates a temporary debug keystore on the runner, then runs:
+- JDK 17 and Android SDK Platform 36.1 / Build Tools 36.0.0.
+- The repository includes the Gradle wrapper launcher and wrapper JAR; `gradle/wrapper/gradle-wrapper.properties` pins Gradle 9.3.1.
+- Android unit/Robolectric tests and debug APK assembly.
+- Compose UI tests on an Android emulator.
+- Android source scan for privileged secret markers.
+- Generated APK scan for private signing keys and service-role credentials.
+- Test reports and a debug APK artifact upload when the respective checks succeed.
 
-```bash
-gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
-```
+The APK artifact is a debug build, not a release-signed production artifact. The checked-in signing public key is a placeholder until the real matching RSA-3072 public key is configured.
 
-On success, the debug APK is available from the run's `mahi-repair-debug-apk` artifact for 14 days. It is a debug build, not a release-signed APK. Unit-test reports are uploaded separately when available.
+## Admin Panel CI
 
-## Admin Panel workflow
+- Node.js 22.23.4, pinned consistently with Render.
+- Deterministic `npm ci` from the committed lockfile.
+- Scaffold/security-integrity checks.
+- `npm audit --audit-level=moderate` blocks moderate, high and critical advisories.
+- TypeScript, ESLint, Vitest and Next.js production build.
+- CI receives fake public Supabase values only; no live privileged credential is required.
 
-The Admin Panel does not yet have a committed npm lockfile. CI disables npm cache and upgrades the runner's bundled npm 10 to npm 11 before dependency installation. It runs:
+## Supabase Edge Function CI
 
-```bash
-npm install
-npm run check:scaffold
-npm run typecheck
-npm run lint
-npm run test
-npm run build
-```
+Deno type-checks all 15 Edge Function entrypoints, shared modules and canonical recipe/report contract tests. CI does not deploy to production.
 
-Next.js receives fake public Supabase configuration only. No live Supabase credentials are required for this build check.
+## Protected production deployment
 
-**Recommended follow-up:** Generate and commit `admin-panel/package-lock.json` after a successful dependency resolution, then switch CI to `npm ci` and enable npm caching.
+`.github/workflows/supabase-functions-deploy.yml` applies pending database migrations and deploys all 15 Edge Functions. It requires:
 
-## Failure reporting
+1. Dispatch from the `main` branch.
+2. Input `confirm_production=DEPLOY`.
+3. Required reviewer approval from the protected GitHub `supabase-production` environment.
+4. GitHub environment secret `SUPABASE_ACCESS_TOKEN`.
+5. GitHub environment secret `SUPABASE_DB_PASSWORD`.
+6. GitHub environment variable `ADMIN_ORIGIN`.
+7. The signing private key `RECIPE_SIGNING_PRIVATE_KEY_PEM` already present in Supabase Edge Function Secrets.
 
-Each workflow writes an Actions job summary with overall status, individual step outcomes, commit SHA and a direct run-log link. Failed steps also produce GitHub Actions annotations. GitHub repository watchers receive native workflow failure notifications according to their own notification settings.
+All Supabase CLI commands execute from `admin-panel/`, where `supabase/config.toml`, migrations and function source live. The workflow verifies signing-secret presence without reading its value, syncs `ADMIN_ORIGIN`, previews pending migrations, applies them, deploys all functions with JWT verification enabled and verifies migration history.
 
-## Credentials and signing
+The workflow never transports the signing private key through GitHub. Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` into the Edge Function runtime; those reserved values are not stored in Render or Android.
 
-These workflows do not reference repository secrets. They do not use Supabase service-role keys, RSA recipe-signing private keys, production API keys, Android release keystores or release passwords. The temporary debug keystore is created on the runner and is not committed or uploaded.
+## Remaining acceptance gates
+
+The Render preview is live, but production Realtime migration, Edge Function release, RSA key provisioning, owner account bootstrap, real owner/member/device end-to-end tests and physical-device acceptance remain necessary. A green CI build alone is not production readiness.

@@ -66,8 +66,7 @@ import com.example.ui.theme.MahiTextSecondary
 fun AuthScreen(
     state: MainUiState,
     onRequestOtp: (String) -> Unit,
-    onVerifyOtp: (String) -> Unit,
-    onContinueOffline: () -> Unit
+    onVerifyOtp: (String) -> Unit
 ) {
     var emailInput by remember { mutableStateOf("") }
     var otpInput by remember { mutableStateOf("") }
@@ -116,7 +115,7 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Personal Android Repair Toolkit",
+                text = "Private repair access",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = MahiRedPrimary,
                     fontWeight = FontWeight.Medium,
@@ -272,7 +271,7 @@ fun AuthScreen(
 
                         Button(
                             onClick = { onVerifyOtp(otpInput) },
-                            enabled = otpInput.length >= 4 && !state.isAuthLoading,
+                            enabled = otpInput.length == 6 && !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
                             modifier = Modifier
@@ -284,7 +283,7 @@ fun AuthScreen(
                                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                             } else {
                                 Text(
-                                    text = "VERIFY & LOAD TOOLS",
+                                    text = "VERIFY & CONTINUE",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     letterSpacing = 0.5.sp
@@ -320,22 +319,6 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Quick bypass / offline testing button
-            OutlinedButton(
-                onClick = onContinueOffline,
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF282B37)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .testTag("offline_demo_button")
-            ) {
-                Text(
-                    text = "Launch Verified Offline Toolkit",
-                    color = MahiTextSecondary,
-                    fontSize = 13.sp
-                )
-            }
         }
     }
 }

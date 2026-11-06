@@ -1,33 +1,62 @@
-# Mahi Repair — Personal Android Repair Toolkit (Web & React)
+# Mahi Repair
 
-A comprehensive React port of the Mahi Repair ecosystem. Mahi Repair is a declarative, verifiable device diagnostic and repair system that runs immutable, signed repair recipes signed by the Owner's RSA-2048 key.
+Mahi Repair is a private Android repair toolkit for the owner's family and trusted friends. A separate owner-only Admin Panel manages signed repair recipes and member/device access through Supabase.
 
 ## Architecture
 
-- **Client App (Android Device Toolkit View)**:
-  - Allowlisted native repair action engine (`CHECK_INTERNET`, `DNS_LOOKUP`, `HTTPS_PROBE`, `CHECK_APP_INSTALLED`, `CHECK_STORAGE`, `OPEN_APP`, `OPEN_APP_DETAILS`, `OPEN_ANDROID_SETTINGS`, `SHOW_GUIDE`, `ASK_USER_CONFIRMATION`, `REQUEST_OWN_APP_PERMISSION`, `VERIFY_INTERNET`, `VERIFY_DNS`).
-  - Cryptographic RSA-SHA256 signature verification via Web Crypto API (`RSASSA-PKCS1-v1_5` with `SHA-256`).
-  - Bundled verified tools: YouTube Quick Repair, Facebook Troubleshooter, DNS Repair & Diagnostics, Wi-Fi Troubleshooter, Play Store Repair.
-  - Interactive Step-by-step guidance and user confirmation modals.
-  - Real-time diagnostic verdicts, failure detection, and execution audit history.
-  - Backend connection configuration (Supabase URL, Anon Key, Public Key PEM).
-  - Invited email OTP authentication and offline emergency mode.
+- **Android app (`app/`)** — native Kotlin/Jetpack Compose repair client. The home screen has one primary **RUN REPAIR** action; the published-tool picker appears only after the user taps it. Invite-only email OTP remains enabled.
+- **Admin Panel (`admin-panel/`)** — separate Next.js owner console for drafting, validating, testing, publishing recipes, managing members and devices, and viewing repair reports. It is not embedded in the Android UI.
+- **Supabase** — Auth, PostgreSQL/RLS, private Realtime Broadcast and 15 JWT-protected Edge Functions.
 
-- **Owner Cloud Console & Recipe Studio**:
-  - Live overview metrics: total executions, success rate, active members, enrolled devices.
-  - Tools library: create, edit, duplicate, disable, and publish recipes.
-  - Script Studio & Recipe Composer: live JSON editor with syntax error checks, schema validation, and RSA signing.
-  - Test Lab: pre-release dry-run simulator with virtual Android devices (Pixel 9 Pro, Galaxy S24, Pixel Tablet), real-time progress steps, and debug logs.
-  - Members & Devices access control: invite family/team members, revoke compromised devices.
+## Security and signed recipes
 
-## Running Locally
+- The canonical recipe contract is `admin-panel/schemas/repair-recipe-v1.schema.json`.
+- The Admin Panel canonicalizes JSON and signs the exact UTF-8 bytes with RSA-3072 / RSA-SHA256 (RSASSA-PKCS1-v1_5).
+- Android verifies the detached signature before parsing or executing the recipe.
+- The APK contains only the matching public verification key. The private PKCS#8 signing key belongs only in Supabase Edge Function Secrets.
+- Android access/refresh tokens are encrypted with an Android Keystore-backed AES-GCM key. Refresh-token rotation is serialized.
+- A recipe is declarative JSON, not executable code. The APK runs only native action IDs compiled into the app. No remote shell, scripts, DEX, JAR, APK or arbitrary code are executed.
+
+## One-install catalogue updates
+
+After the APK is installed and the device is authorized, the owner can publish new recipes that combine existing allowlisted native actions. Android receives a private per-device Realtime notification, fetches the currently authorized signed catalogue, verifies each signature and updates Room.
+
+Realtime notifications are active while the app is foregrounded. App launch, foreground/resume, reconnect and periodic WorkManager sync recover missed events. A new native Kotlin feature, Android permission or unsupported OS capability still requires an APK update.
+
+## Important paths
+
+- Canonical recipe schema: `admin-panel/schemas/repair-recipe-v1.schema.json`
+- Canonical catalog/serializer: `admin-panel/src/lib/recipe/`
+- Supabase migrations: `admin-panel/supabase/migrations/`
+- Supabase Edge Functions: `admin-panel/supabase/functions/`
+- Android signature verifier contract: `admin-panel/android-contract/RecipeSignatureVerifier.kt`
+- Android implementation: `app/src/main/`
+- Shared contract fixtures: `contract-tests/`
+- Deployment/security runbooks: `admin-panel/docs/`
+
+## Local development
+
+Admin Panel:
 
 ```bash
-npm install
+cd admin-panel
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
-Build for production:
+Android (when the Gradle wrapper is available in your local environment):
+
 ```bash
-npm run build
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
 ```
+
+The root `.env.example` has a placeholder public signing key. Production recipe execution requires the real X.509 public key matching the private key configured directly in Supabase.
+
+## Current deployment status
+
+- Render preview: https://mahi-repair-admin-preview.onrender.com
+- GitHub PR #1: https://github.com/mahimahfud-ui/Mahi-Repair/pull/1
+
+The PR remains draft/open pending final Android CI, production secrets, owner bootstrap, production migration/function deployment and real-device acceptance tests. A live Render preview does not mean the production Supabase release is complete.

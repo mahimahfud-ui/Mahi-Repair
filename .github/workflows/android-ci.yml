@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.ref }}
+  group: android-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -62,6 +62,45 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+
+      - name: Run Compose UI tests on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Scan Android source for embedded privileged secrets
+        run: |
+          if grep -RInE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' app/src; then
+            echo "::error::Privileged key material detected in Android source."
+            exit 1
+          fi
+
+      - name: Inspect debug APK for private signing keys and service-role credentials
+        run: |
+          apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          unpacked="$(mktemp -d)"
+          unzip -q "$apk" -d "$unpacked"
+          if grep -RIlE -- '-----BEGIN (RSA )?PRIVATE KEY-----|OWNER_PRIVATE_KEY_PKCS8|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=' "$unpacked"; then
+            echo "::error::Privileged key material detected in the generated APK."
+            exit 1
+          fi
+          echo "No private signing key or service-role credential markers found in the debug APK."
+
+      - name: Upload Android Compose UI test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-compose-ui-test-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Android unit-test reports
         if: always()

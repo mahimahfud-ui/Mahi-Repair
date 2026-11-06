@@ -17,6 +17,11 @@ data class VerifyOtpRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class RefreshTokenRequest(
+    @Json(name = "refresh_token") val refreshToken: String
+)
+
+@JsonClass(generateAdapter = true)
 data class AuthSessionResponse(
     @Json(name = "access_token") val accessToken: String?,
     @Json(name = "token_type") val tokenType: String?,
@@ -64,7 +69,7 @@ data class RemoteSignedToolDto(
     val version: Int,
     @Json(name = "signed_payload") val signedPayload: String,
     val signature: String,
-    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String,
     @Json(name = "published_at") val publishedAt: String? = null
 )
 
@@ -83,7 +88,7 @@ data class GetSignedToolRequest(
 data class SignedRecipeResponse(
     @Json(name = "signed_payload") val signedPayload: String,
     val signature: String,
-    @Json(name = "signature_algorithm") val signatureAlgorithm: String = "RSA-SHA256",
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String,
     val version: Int
 )
 

@@ -32,6 +32,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        (application as MahiRepairApplication).setAppForegrounded(true)
+    }
+
+    override fun onStop() {
+        (application as MahiRepairApplication).setAppForegrounded(false)
+        super.onStop()
+    }
 }
 
 @Composable
@@ -44,17 +54,17 @@ fun MahiRepairApp(
         AuthScreen(
             state = state,
             onRequestOtp = { viewModel.onRequestEmailOtp(it) },
-            onVerifyOtp = { viewModel.onVerifyEmailOtp(it) },
-            onContinueOffline = {
-                // Allows invited family or friends to explore verified offline toolkit
-                viewModel.onRequestEmailOtp("family@mahirepair.local")
-                viewModel.onVerifyEmailOtp("123456")
-            }
+            onVerifyOtp = { viewModel.onVerifyEmailOtp(it) }
         )
     } else {
         MainScreen(
             state = state,
-            viewModel = viewModel
+            onRunRepair = { viewModel.onRunRepair() },
+            onRetryAvailability = { viewModel.onRetryAvailability() },
+            onSelectTool = { viewModel.onSelectTool(it) },
+            onDismissToolPicker = { viewModel.onDismissToolPicker() },
+            onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
+            onDismissExecution = { viewModel.onDismissExecution() }
         )
     }
 }

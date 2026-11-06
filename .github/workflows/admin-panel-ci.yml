@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: admin-panel-ci-${{ github.ref }}
+  group: admin-panel-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,10 +27,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 22.23.4
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '22.23.4'
           package-manager-cache: false
 
       - name: Update npm to stable v11
@@ -42,6 +42,10 @@ jobs:
       - name: Install Admin Panel dependencies
         id: install
         run: npm ci --no-audit --no-fund --no-progress
+
+      - name: Block moderate, high and critical dependency vulnerabilities
+        id: dependency-audit
+        run: npm audit --audit-level=moderate
 
       - name: Run scaffold and security-integrity checks
         id: scaffold
@@ -74,6 +78,7 @@ jobs:
           JOB_RESULT: ${{ job.status }}
           NPM_RESULT: ${{ steps.npm.outcome }}
           INSTALL_RESULT: ${{ steps.install.outcome }}
+          DEPENDENCY_AUDIT_RESULT: ${{ steps.dependency-audit.outcome }}
           SCAFFOLD_RESULT: ${{ steps.scaffold.outcome }}
           TYPECHECK_RESULT: ${{ steps.typecheck.outcome }}
           LINT_RESULT: ${{ steps.lint.outcome }}
@@ -88,6 +93,7 @@ jobs:
             echo "- **Overall:** ${JOB_RESULT}"
             echo "- **npm setup:** ${NPM_RESULT}"
             echo "- **Dependency installation:** ${INSTALL_RESULT}"
+            echo "- **Moderate/high/critical dependency audit:** ${DEPENDENCY_AUDIT_RESULT}"
             echo "- **Scaffold/security audit:** ${SCAFFOLD_RESULT}"
             echo "- **TypeScript:** ${TYPECHECK_RESULT}"
             echo "- **ESLint:** ${LINT_RESULT}"

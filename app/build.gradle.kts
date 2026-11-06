@@ -64,6 +64,7 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  sourceSets["test"].resources.srcDir("../contract-tests")
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

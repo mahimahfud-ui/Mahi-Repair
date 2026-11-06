@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import Editor from '@monaco-editor/react';
 import { AlertTriangle, ArrowDown, ArrowUp, Braces, ListPlus, ShieldCheck, Trash2 } from 'lucide-react';
 import {
   RepairRecipeSchema,
@@ -361,7 +360,13 @@ export function RecipeComposer({
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-[#292d36]">
-            <Editor height="540px" language="json" theme="vs-dark" value={raw} onChange={value => setRaw(value ?? '')} options={{ minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false, wordWrap: 'on', automaticLayout: true }} />
+            <textarea
+              aria-label="Recipe JSON"
+              spellCheck={false}
+              value={raw}
+              onChange={event => setRaw(event.target.value)}
+              className="field min-h-[540px] w-full resize-y font-mono text-xs leading-5"
+            />
           </div>
         )}
 
