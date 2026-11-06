@@ -282,7 +282,9 @@ fun MainScreen(
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                     items(state.tools, key = { it.id }) { tool ->
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            Modifier.fillMaxWidth()
+                                .testTag("tool_picker_${tool.id}")
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable { onSelectTool(tool.id) }
                                 .padding(horizontal = 8.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
