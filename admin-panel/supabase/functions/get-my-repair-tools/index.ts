@@ -19,6 +19,8 @@ Deno.serve(async (req) => {
 
     // One database transaction revalidates member/device state, current publication,
     // assignment and Android compatibility while recording device_tool_syncs.
+    // The RPC applies the catalog equivalent of publishedIds.has(id) in SQL:
+    // only tools with status = 'PUBLISHED' and the exact current version are emitted.
     const { data, error } = await admin.rpc('get_member_repair_catalog', {
       p_user_id: user.id,
       p_device_id: checked.data.device_id,
