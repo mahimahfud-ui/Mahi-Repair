@@ -68,3 +68,22 @@ The live Supabase project is healthy, has the expected application schema and RL
 ## Release decision
 
 **NOT PRODUCTION READY.** The codebase and live backend have substantial implemented functionality, but Compose CI, live staging acceptance, the RSA signing configuration, Auth email activation, hosting verification, release signing and physical-device tests are outstanding.
+
+
+## Hosted staging provisioning result
+
+The requested Supabase development branch could not be created: the Primary organization is Free-plan and Supabase requires Pro or above for database branching. The quoted branch cost was $0.01344/hour; no branch was provisioned and no recurring branch charge is active.
+
+A separate project was quoted at $0/month, but project creation was rejected because the organization is at its two active Free-project limit (`mahimahfud` and `Mahi-Repair`, both active/healthy). No project was paused/deleted and no subscription was upgraded. The production Mahi-Repair project was not modified.
+
+## Ephemeral database test path
+
+Added:
+- `.github/workflows/supabase-database-ci.yml` — starts a Docker-backed local Supabase stack in GitHub Actions, recreates its database from the tracked migration directory, runs pgTAP tests, and stops the stack.
+- `admin-panel/supabase/tests/mahi_repair_database.test.sql` — synthetic Owner/Member RLS checks, direct-write denial, core-table RLS coverage, RPC privilege checks, and report first-submit / exact-retry / changed-fingerprint / single-row tests. Fixtures are rolled back in the test transaction.
+
+This verifies the migration set against a fresh local Supabase database if the workflow passes; it is not proof of a persistent hosted staging environment or live production behavior. The first CI run on this addition is pending.
+
+## Persistent staging decision still required
+
+To obtain a persistent hosted staging database, either upgrade the Primary Supabase organization to Pro (branching becomes available) or free a Free-project slot by pausing an existing project. No existing project will be paused/deleted and no subscription will be upgraded without explicit approval.

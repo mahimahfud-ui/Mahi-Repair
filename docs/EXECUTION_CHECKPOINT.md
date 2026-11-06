@@ -57,3 +57,13 @@ Updated: 2026-11-07
 6. Obtain the Owner-controlled signing key, Auth, provider, hosting and release-signing configuration through their secure dashboards.
 7. Complete live staging Owner → Member/device → publish → signed catalogue → Android repair → report → Admin verification.
 8. Update the acceptance report with exact run IDs, SHAs, URLs and observed outcomes. Production merge/deploy remains a separate Owner approval gate.
+
+
+## Staging database constraint and fallback
+
+- The approved Supabase development-branch request was rejected because the Primary organization is on the Free plan; Supabase database branching requires Pro or above. The quoted branch rate was $0.01344/hour. No branch was provisioned, so there is no active branch charge.
+- A separate staging project was quoted at $0/month, but Supabase rejected creation because the organization has reached its two active Free-project limit. The two projects are `mahimahfud` and `Mahi-Repair`, both `ACTIVE_HEALTHY`.
+- No existing project was paused or deleted and no subscription was upgraded. Production `Mahi-Repair` was not changed.
+- Added `.github/workflows/supabase-database-ci.yml` and `admin-panel/supabase/tests/mahi_repair_database.test.sql`. GitHub Actions starts an isolated Docker-backed Supabase stack, resets it from all tracked migrations, and runs pgTAP checks using synthetic Owner/Member/device/tool fixtures. The test transaction rolls back its fixtures.
+- This GitHub-hosted local stack is an ephemeral CI test environment, not a persistent hosted staging project. Its CI result must be recorded separately from live-project acceptance.
+- A real persistent hosted staging database still requires either a Pro upgrade for branching or a freed Free-project slot. Do not pause `mahimahfud` or upgrade the organization without explicit approval.
