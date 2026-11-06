@@ -12,7 +12,7 @@ const ADMIN_OPERATION_FAILED = 'The administrative operation could not be comple
 /** Server-side OTP request keeps PKCE/session cookies out of browser JavaScript. */
 export async function requestSignInLink(email: string): Promise<{ ok: boolean }> {
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  if (normalizedEmail.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) return { ok: false };
+  if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return { ok: false };
 
   try {
     const requestOrigin = (await headers()).get('origin');
