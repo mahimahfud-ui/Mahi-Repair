@@ -65,6 +65,7 @@ class ToolRepository(
     private val deviceRegistrationMutex = Mutex()
 
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
+    val pendingReportCountFlow: Flow<Int> = reportOutboxDao.observeCount()
 
     val toolsFlow: Flow<List<RepairTool>> = toolDao.getEnabledToolsFlow().map { entities ->
         entities.map { it.toDomain() }
