@@ -1,6 +1,8 @@
 package com.example
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.ActivityCompat
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.ui.MainViewModel
@@ -69,7 +72,7 @@ fun MahiRepairApp(
     ) { granted ->
         val permissionName = activePermissionName.value
         if (permissionName.isNotBlank()) {
-            val activity = context as? Activity
+            val activity = context.findActivity()
             val androidPermission = com.example.security.RuntimePermissionContract
                 .resolve(permissionName)?.platformPermission
             val showRationale = activity != null && androidPermission != null &&
@@ -103,22 +106,29 @@ fun MahiRepairApp(
                 if (!permissionRequestInFlight.value) {
                     permissionRequestInFlight.value = true
                     scope.launch {
-                        val request = runCatching {
-                            viewModel.prepareRuntimePermissionRequest(permissionName)
-                        }.getOrNull()
-                        if (request == null) {
-                            permissionRequestInFlight.value = false
-                        } else {
-                            activePermissionName.value = request.permissionName
-                            activePermissionWasRequestedBefore.value = request.wasRequestedBefore
-                            try {
-                                permissionLauncher.launch(request.androidPermission)
-                            } catch (_: Exception) {
-                                viewModel.onCancelRuntimePermission()
-                                activePermissionName.value = ""
-                                activePermissionWasRequestedBefore.value = false
+                        try {
+                            val request = viewModel.prepareRuntimePermissionRequest(permissionName)
+                            if (request == null) {
                                 permissionRequestInFlight.value = false
+                            } else {
+                                activePermissionName.value = request.permissionName
+                                activePermissionWasRequestedBefore.value = request.wasRequestedBefore
+                                permissionLauncher.launch(request.androidPermission)
                             }
+                        } catch (cancelled: CancellationException) {
+                            viewModel.onCancelRuntimePermission()
+                            permissionRequestInFlight.value = false
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // A failed local preparation must not leave recipe execution suspended.
+                            viewModel.onRuntimePermissionResult(
+                                permissionName = permissionName,
+                                granted = false,
+                                permanentlyDenied = false
+                            )
+                            activePermissionName.value = ""
+                            activePermissionWasRequestedBefore.value = false
+                            permissionRequestInFlight.value = false
                         }
                     }
                 }
@@ -126,4 +136,11 @@ fun MahiRepairApp(
             onCancelPermission = { viewModel.onCancelRuntimePermission() }
         )
     }
+}
+
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
