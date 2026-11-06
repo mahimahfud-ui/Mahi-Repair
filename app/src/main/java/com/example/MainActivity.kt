@@ -133,7 +133,8 @@ fun MahiRepairApp(
                     }
                 }
             },
-            onCancelPermission = { viewModel.onCancelRuntimePermission() }
+            onCancelPermission = { viewModel.onCancelRuntimePermission() },
+            onSignOut = { viewModel.onSignOut() }
         )
     }
 }
