@@ -25,6 +25,14 @@ class DeploymentJwtGuardTests(unittest.TestCase):
         )
         self.assertFalse(has_forbidden_jwt_override(text))
 
+    def test_rejects_jwt_override_for_the_auth_hook_too(self) -> None:
+        command = "supabase functions deploy send-auth-email --no-verify-jwt --project-ref test-project"
+        self.assertTrue(has_forbidden_jwt_override(command))
+
+    def test_allows_configured_signed_webhook_without_cli_override(self) -> None:
+        command = "supabase functions deploy send-auth-email --project-ref test-project"
+        self.assertFalse(has_forbidden_jwt_override(command))
+
 
 if __name__ == "__main__":
     unittest.main()
