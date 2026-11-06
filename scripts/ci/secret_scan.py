@@ -13,7 +13,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Assemble the marker fragments so this scanner does not match its own detection rule.\nPRIVATE_KEY = re.compile(rb"-----" + rb"BEGIN " + rb"(?:RSA |EC |OPENSSH )?PRIVATE KEY" + rb"-----")
+# Assemble the marker fragments so this scanner does not match its own detection rule.
+PRIVATE_KEY = re.compile(rb"-----" + rb"BEGIN " + rb"(?:RSA |EC |OPENSSH )?PRIVATE KEY" + rb"-----")
 SUPABASE_SECRET = re.compile(rb"\bsb_secret_[A-Za-z0-9_-]{20,}\b")
 GITHUB_TOKEN = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,})\b")
 AWS_ACCESS_KEY = re.compile(rb"\bAKIA[0-9A-Z]{16}\b")
