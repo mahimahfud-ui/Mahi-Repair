@@ -6,12 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val MahiDarkColorScheme = darkColorScheme(
-    primary = MahiRedPrimary,
+    primary = MahiAccent,
     onPrimary = Color.White,
-    primaryContainer = MahiRedDark,
-    onPrimaryContainer = Color.White,
-    secondary = MahiRedPrimary,
-    onSecondary = Color.White,
+    primaryContainer = Color(0xFF243D70),
+    onPrimaryContainer = Color(0xFFE6EEFF),
+    secondary = MahiAccentLight,
+    onSecondary = Color(0xFF07101F),
+    tertiary = MahiSuccessGreen,
+    onTertiary = Color(0xFF062117),
+    error = MahiRedPrimary,
+    onError = Color.White,
     background = MahiBlack,
     onBackground = MahiTextPrimary,
     surface = MahiSurfaceDark,
@@ -23,9 +27,7 @@ private val MahiDarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun MahiRepairTheme(
-    content: @Composable () -> Unit
-) {
+fun MahiRepairTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = MahiDarkColorScheme,
         typography = Typography,
