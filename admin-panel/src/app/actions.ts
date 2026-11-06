@@ -17,7 +17,7 @@ export type SignInLinkResult =
 
 export async function requestSignInLink(email: string): Promise<SignInLinkResult> {
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(normalizedEmail)) {
+  if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     return { ok: false, reason: 'failed' };
   }
 
