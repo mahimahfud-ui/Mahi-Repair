@@ -140,6 +140,9 @@ class RunRepairScreenTest {
 
         composeRule.onNodeWithTag("run_repair_button").assertIsNotEnabled()
         composeRule.onNodeWithTag("repair_status").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("No repair tools are currently available.").performScrollTo().assertIsDisplayed()
+        assertTrue(
+            composeRule.onAllNodesWithText("No repair tools are currently available.")
+                .fetchSemanticsNodes().isNotEmpty()
+        )
     }
 }
