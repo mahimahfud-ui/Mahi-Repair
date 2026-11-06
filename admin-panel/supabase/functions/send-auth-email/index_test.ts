@@ -47,9 +47,9 @@ Deno.test("Admin Magic Link preserves Auth redirect and includes an OTP code", (
   assert(email.htmlContent.includes("Continue securely"), "clickable Admin link is missing");
 });
 
-Deno.test("Android OTP preserves the Auth-provided redirect and code", () => {
+Deno.test("Android OTP uses the project site URL when no client redirect is supplied", () => {
   const [email] = buildAuthEmailMessages(basePayload({
-    redirect_to: "https://repair.example.com",
+    redirect_to: "",
     site_url: "https://repair.example.com",
   }), config.supabaseUrl);
   assert(email.textContent.includes("One-time code: 123456"), "six-digit app OTP was not delivered");
