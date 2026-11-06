@@ -1,60 +1,59 @@
 "use server";
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { RepairRecipeSchema } from '@/lib/recipe/catalog';
 import { requireOwner } from '@/lib/auth/require-owner';
-import { isSupabaseEmailRateLimitError, resolveAuthCallbackOrigin } from '@/lib/auth/callback-origin';
+import { isValidOwnerAuthEmail, isValidOwnerPin } from '@/lib/auth/owner-pin';
 
 const ADMIN_FUNCTIONS = new Set(['admin-invite-member','admin-manage-member','admin-upsert-tool','admin-publish-tool','admin-disable-tool','admin-assign-tool','admin-save-validation','admin-delete-draft-tool','admin-manage-device','admin-manage-tool-state','get-admin-analytics']);
 const ADMIN_OPERATION_FAILED = 'The administrative operation could not be completed. Please retry.';
 
-/** Server-side OTP request keeps PKCE/session cookies out of browser JavaScript. */
-export type SignInLinkResult =
-  | { ok: true }
-  | { ok: false; reason: 'rate_limited' | 'configuration' | 'failed' };
+export type OwnerPinSignInResult =
+  | { ok: false; reason: 'invalid' | 'rate_limited' | 'configuration' | 'failed' };
 
-export async function requestSignInLink(email: string): Promise<SignInLinkResult> {
-  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    return { ok: false, reason: 'failed' };
+/**
+ * The Owner email remains a server-only Supabase Auth identifier. The browser
+ * submits only the PIN; no email, OTP or magic-link request is exposed.
+ * Supabase Auth creates the normal SSR session used by all existing Owner
+ * checks and Edge Function calls.
+ */
+export async function signInWithOwnerPin(pin: string): Promise<OwnerPinSignInResult> {
+  const ownerEmail = process.env['ADMIN_OWNER_EMAIL']?.trim().toLowerCase();
+  if (!isValidOwnerAuthEmail(ownerEmail)) {
+    return { ok: false, reason: 'configuration' };
   }
-
-  const requestOrigin = (await headers()).get('origin');
-  const callback = resolveAuthCallbackOrigin(
-    process.env['NEXT_PUBLIC_APP_URL'],
-    requestOrigin,
-    process.env.NODE_ENV === 'production'
-  );
-  if (!callback.ok) return { ok: false, reason: 'configuration' };
+  if (!isValidOwnerPin(pin)) {
+    return { ok: false, reason: 'invalid' };
+  }
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: new URL('/auth/callback', callback.origin).toString(),
-      },
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: ownerEmail,
+      password: pin,
     });
 
-    if (error) {
-      const authError = error as { status?: number; code?: string; message?: string };
-      if (isSupabaseEmailRateLimitError(authError)) {
-        return { ok: false, reason: 'rate_limited' };
-      }
-
-      // Do not expose whether an address belongs to an eligible Owner account.
-      // Supabase Auth responses for unknown, member, or otherwise ineligible
-      // addresses receive the same public confirmation as a successful request.
-      return { ok: true };
+    if (error || !data.user) {
+      const status = (error as { status?: number } | null)?.status;
+      return { ok: false, reason: status === 429 ? 'rate_limited' : 'invalid' };
     }
 
-    return { ok: true };
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role,status')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile || profile.role !== 'owner' || profile.status !== 'active') {
+      await supabase.auth.signOut();
+      return { ok: false, reason: 'invalid' };
+    }
   } catch {
     return { ok: false, reason: 'failed' };
   }
+
+  redirect('/');
 }
 export async function signOut() { const supabase = await createClient(); await supabase.auth.signOut(); redirect('/login'); }
 export async function invokeAdminFunction(functionName: string, body: Record<string, unknown>) {
