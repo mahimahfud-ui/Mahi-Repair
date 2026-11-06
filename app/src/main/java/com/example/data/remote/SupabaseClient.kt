@@ -316,17 +316,36 @@ class SupabaseClient(
         }
     }
 
+    /** Persist and replay the same compact server request for every idempotent retry. */
+    fun encodeSubmitRunRequest(report: SubmitRunRequest): String =
+        moshi.adapter(SubmitRunRequest::class.java).toJson(report)
+
+    fun decodeSubmitRunRequest(payloadJson: String): SubmitRunRequest =
+        requireNotNull(moshi.adapter(SubmitRunRequest::class.java).fromJson(payloadJson)) {
+            "The queued repair request is malformed."
+        }
+
     /**
      * Submit repair run execution report to Supabase backend.
+     * A serialized body may be supplied by the durable outbox to preserve exact retries.
      */
-    suspend fun submitRepairRun(report: SubmitRunRequest, authToken: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun submitRepairRun(
+        report: SubmitRunRequest,
+        authToken: String,
+        serializedRequestJson: String? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
         }
 
         val url = "$baseUrl/functions/v1/submit-repair-run"
         val adapter = moshi.adapter(SubmitRunRequest::class.java)
-        val bodyJson = adapter.toJson(report)
+        val bodyJson = serializedRequestJson ?: adapter.toJson(report)
+        val persistedRequest = adapter.fromJson(bodyJson)
+            ?: return@withContext Result.failure(IOException("The queued repair request is malformed."))
+        if (persistedRequest.runId != report.runId) {
+            return@withContext Result.failure(IOException("The queued repair request ID does not match its outbox key."))
+        }
 
         val request = Request.Builder()
             .url(url)
