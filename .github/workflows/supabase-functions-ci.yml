@@ -80,15 +80,15 @@ jobs:
           cache: true
           cache-hash: ${{ hashFiles('admin-panel/supabase/functions/**/*.ts', 'admin-panel/supabase/migrations/**/*.sql', 'admin-panel/supabase/config.toml', 'contract-tests/**') }}
 
-      - name: Discover all 15 Edge Function entrypoints and recursive Deno tests
+      - name: Discover all 16 Edge Function entrypoints and recursive Deno tests
         id: inventory
         shell: bash
         run: |
           set -euo pipefail
           mapfile -t functions < <(find admin-panel/supabase/functions -mindepth 2 -maxdepth 2 -type f -name index.ts | sort)
           mapfile -t tests < <(find admin-panel/supabase/functions -type f -name '*_test.ts' | sort)
-          test "${#functions[@]}" -eq 15
-          test "${#tests[@]}" -ge 7
+          test "${#functions[@]}" -eq 16
+          test "${#tests[@]}" -ge 8
           printf 'Validated %s Edge Function entrypoints and discovered %s recursive Deno test files.\\n' "${#functions[@]}" "${#tests[@]}"
           printf '%s\\n' "${functions[@]}"
           printf '%s\\n' "${tests[@]}"
