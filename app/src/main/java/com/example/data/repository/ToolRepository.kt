@@ -191,6 +191,10 @@ class ToolRepository(
                 )
             }
 
+            require(entities.map { it.recipeSlug }.distinct().size == entities.size) {
+                "The server returned duplicate signed recipe identifiers."
+            }
+
             // The mapping lives in each Room row, so catalogue metadata and slug identity
             // become visible together or not at all. An empty verified list is a valid replacement.
             toolDao.replaceAll(entities)
@@ -330,6 +334,10 @@ class ToolRepository(
     }
 
     suspend fun pendingReportCount(): Int = reportOutboxDao.count()
+
+    fun clearAccessDeniedMessage() {
+        _accessDeniedMessage.value = null
+    }
 
     /** Called by WorkManager. A row is deleted only after the server acknowledges this exact UUID. */
     suspend fun uploadPendingReport(reportId: String): Result<Boolean> {
