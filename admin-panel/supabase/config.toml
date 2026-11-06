@@ -13,3 +13,8 @@ additional_redirect_urls = ["http://localhost:3000/auth/callback"]
 
 [functions.admin-manage-tool-state]
 verify_jwt = true
+
+# Supabase Auth invokes this endpoint with a signed HTTP Auth Hook request.
+# The function verifies the Standard Webhooks signature itself.
+[functions.send-auth-email]
+verify_jwt = false
