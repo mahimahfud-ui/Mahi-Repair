@@ -6,7 +6,7 @@ Mahi Repair consists of three separate components:
 
 - `app/`: Native Android repair client. Its home screen exposes one **RUN REPAIR** action; the published-tool picker opens after it is tapped.
 - `admin-panel/`: Private Next.js owner console for drafting, validating, signing and publishing recipes, and managing members/devices.
-- Supabase: Auth, Postgres/RLS, private Realtime Broadcast and 15 Edge Functions.
+- Supabase: Auth, Postgres/RLS, private Realtime Broadcast, 15 JWT-verified application Edge Functions and one signature-verified Send Email Auth Hook.
 
 The Android app does not contain Admin Panel navigation, owner tools or backend configuration screens.
 
@@ -78,7 +78,7 @@ Do not put the service-role key, database password or signing private key in Ren
 
 ## Protected Supabase production deployment
 
-The workflow `.github/workflows/supabase-functions-deploy.yml` applies pending database migrations and deploys all 15 Edge Functions. It requires:
+The workflow `.github/workflows/supabase-functions-deploy.yml` applies pending database migrations and deploys the 15 application Edge Functions and the separate signed Send Email Auth Hook. It requires:
 
 1. Workflow dispatch from `main`.
 2. `confirm_production` input exactly equal to `DEPLOY`.
@@ -87,7 +87,7 @@ The workflow `.github/workflows/supabase-functions-deploy.yml` applies pending d
 5. Environment variable `ADMIN_ORIGIN`, set to the exact deployed HTTPS origin.
 6. `RECIPE_SIGNING_PRIVATE_KEY_PEM` already added directly in Supabase Edge Function Secrets.
 
-The workflow links the explicitly configured project, verifies the custom signing secret exists without reading it, sets `ADMIN_ORIGIN`, previews pending migrations, applies them, deploys the 15 Edge Functions with JWT verification enabled, and verifies migration history. Do not remove the branch, typed input or protected-environment gates.
+The workflow links the explicitly configured project, verifies the custom signing secret exists without reading it, sets `ADMIN_ORIGIN`, previews pending migrations, applies them, deploys the 15 application Edge Functions with JWT verification enabled and the Send Email Auth Hook with JWT verification disabled, and verifies migration history. Do not remove the branch, typed input or protected-environment gates.
 
 ## Canonical recipe and execution model
 

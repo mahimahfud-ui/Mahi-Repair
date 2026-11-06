@@ -15,15 +15,15 @@ This checklist separates code/CI evidence from checks that must be performed aga
 - [x] Native action allowlist; no remote script, shell, DEX, JAR, APK or arbitrary code execution by design.
 - [x] Private per-member/per-device Realtime Broadcast migration source and Android foreground WebSocket listener.
 - [x] Opaque Realtime events only; Android refetches and verifies the authorized catalogue. Launch/foreground/reconnect and WorkManager sync provide recovery.
-- [x] Current-head Android unit tests and debug APK assembly.
-- [x] Current-head Android Compose UI emulator tests (API 35).
-- [x] Current-head source and generated-debug-APK privileged-secret marker scans.
-- [x] Current-head Supabase CI: all 15 Edge Function entrypoints/shared modules type-check; canonical recipe/run-report tests pass.
-- [x] Current-head Admin CI: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build pass.
+- [ ] Current-head Android unit tests and debug APK assembly (run #42261416465 is still in progress).
+- [ ] Current-head Android Compose UI emulator tests (API 35; run #42261416465 is still in progress).
+- [ ] Current-head source and generated-debug-APK privileged-secret marker scans (run #42261416465 is still in progress).
+- [x] Current-head Supabase CI: all 16 Edge Function entrypoints/shared modules type-check; canonical recipe/run-report and Resend/Brevo Auth email contract tests pass (run #42261416613).
+- [x] Current-head Admin CI: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build pass (run #42261416530).
 - [x] Node.js 22.23.4 pinned across Render, Admin Panel and Admin Panel CI.
-- [x] Protected production workflow source for migration preview/apply and JWT-verified deployment of all 15 Edge Functions.
+- [x] Protected production workflow source for migration preview/apply, JWT-verified deployment of 15 application Edge Functions, and separate signature-verified HTTP Auth email hook deployment.
 
-Current-head commit: dd7c922bf5533c34a424d8d7994f29d2d0fb0f82.
+Current-head commit: 3df07f958575b50fa7b6d0737135376a45d76083.
 
 Evidence:
 - [Android CI](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42167251879)
@@ -77,7 +77,7 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 
 ## Release decision
 
-**NOT PRODUCTION READY.** Current-head CI is green, but production deployment/configuration, real owner/member/device workflow, signed release artifact, live Realtime/RLS authorization tests and physical-device acceptance remain unverified. Do not merge PR #1 or announce production availability until every required gate above has evidence.
+**NOT PRODUCTION READY.** Supabase and Admin CI pass on the current head; Android CI is still running. Production provider secrets, Auth Hook activation, live Owner/member/device workflows, signed release artifact, Realtime/RLS authorization tests and physical-device acceptance remain unverified. Do not merge PR #1 or announce production availability until every required gate above has evidence.
 
 
 ## Shared Auth email delivery
