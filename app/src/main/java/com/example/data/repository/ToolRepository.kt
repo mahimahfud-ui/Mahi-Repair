@@ -1,12 +1,15 @@
 package com.example.data.repository
 
+import android.content.Context
 import android.os.Build
 import com.example.BuildConfig
 import com.example.data.local.AppDatabase
 import com.example.data.local.PreferencesManager
+import com.example.data.local.PendingReportEntity
 import com.example.data.local.RepairHistoryEntity
 import com.example.data.local.ToolEntity
 import com.example.data.remote.SupabaseClient
+import com.example.data.remote.ServerAuthorizationException
 import com.example.data.remote.dto.RegisterDeviceRequest
 import com.example.data.remote.dto.StepRunResultDto
 import com.example.data.remote.dto.SubmitRunRequest
@@ -16,7 +19,14 @@ import com.example.domain.models.StepStatus
 import com.example.domain.models.ToolCategory
 import com.example.security.RecipeContractVerifier
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import androidx.room.withTransaction
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.example.sync.SyncManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -35,6 +45,7 @@ data class RealtimeIdentity(
 )
 
 class ToolRepository(
+    private val context: Context,
     private val database: AppDatabase,
     private val preferencesManager: PreferencesManager,
     private val supabaseClient: SupabaseClient,
@@ -42,8 +53,14 @@ class ToolRepository(
 ) {
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
-    private val recipeSlugsByToolId = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val reportOutboxDao = database.reportOutboxDao()
+    private val reportAdapter = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+        .adapter(RepairRunReport::class.java)
     private val syncMutex = Mutex()
+    private val _accessDeniedMessage = MutableStateFlow<String?>(null)
+    val accessDeniedMessage: StateFlow<String?> = _accessDeniedMessage.asStateFlow()
     private val deviceRegistrationMutex = Mutex()
 
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
@@ -131,7 +148,9 @@ class ToolRepository(
 
             val dtos = remoteResult.getOrThrow()
             val now = System.currentTimeMillis()
-            val nextRecipeSlugs = mutableMapOf<String, String>()
+            require(dtos.map { it.toolId }.distinct().size == dtos.size) {
+                "The server returned duplicate repair identifiers."
+            }
             val entities = dtos.map { dto ->
                 UUID.fromString(dto.toolId)
                 val recipe = verifiedPayload(
@@ -144,7 +163,6 @@ class ToolRepository(
                 require(recipeSlug.matches(Regex("^[a-z0-9]+(-[a-z0-9]+)*$"))) {
                     "The signed repair tool identifier is invalid."
                 }
-                nextRecipeSlugs[dto.toolId] = recipeSlug
                 val category = recipe.getString("category")
                 val minAndroidApi = recipe.optInt("minAndroidApi", 23)
                 val minAppVersionText = recipe.optString("minAppVersion", "1.0.0")
@@ -168,29 +186,35 @@ class ToolRepository(
                     targetPackage = null,
                     rawSignedPayload = "",
                     signatureBase64 = "",
-                    lastUpdated = now
+                    lastUpdated = now,
+                    recipeSlug = recipeSlug
                 )
             }
 
-            // Do not replace a verified local catalog unless every remote entry passed verification.
-            // Publish the verified ID-to-slug map before Room notifies UI collectors.
-            recipeSlugsByToolId.value = nextRecipeSlugs
-            toolDao.clearAll()
-            if (entities.isNotEmpty()) toolDao.insertTools(entities)
+            // The mapping lives in each Room row, so catalogue metadata and slug identity
+            // become visible together or not at all. An empty verified list is a valid replacement.
+            toolDao.replaceAll(entities)
             preferencesManager.updateLastSyncTime(now)
+            _accessDeniedMessage.value = null
             Result.success(entities.size)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
-            clearCatalogWhenServerRejects(error)
+            handleAuthorizationRejection(error)
             Result.failure(IllegalStateException("Could not securely synchronize repair tools.", error))
         }
     }
 
-    private suspend fun clearCatalogWhenServerRejects(error: Throwable) {
-        val messages = generateSequence(error) { it.cause }
-            .mapNotNull { it.message }
-            .joinToString(" ")
-        if (Regex("HTTP\\s+(401|403|404)").containsMatchIn(messages)) {
-            clearLocalCatalog()
+    private suspend fun handleAuthorizationRejection(error: Throwable) {
+        val rejection = generateSequence(error) { it.cause }
+            .filterIsInstance<ServerAuthorizationException>()
+            .firstOrNull() ?: return
+        clearLocalCatalog()
+        preferencesManager.clearDeviceId()
+        authRepository.invalidateLocalSession()
+        _accessDeniedMessage.value = when (rejection.statusCode) {
+            403 -> "Access to Mahi Repair was denied for this account or device. Sign in again or contact the Owner."
+            else -> "Your repair session is no longer authorized. Please sign in again."
         }
     }
 
@@ -214,14 +238,16 @@ class ToolRepository(
                 .getString("sub")
                 .also { UUID.fromString(it) }
             Result.success(RealtimeIdentity(userId, deviceId, session.token, session.expiresAtMillis))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
+            handleAuthorizationRejection(error)
             Result.failure(error)
         }
     }
 
     suspend fun clearLocalCatalog() {
         toolDao.clearAll()
-        recipeSlugsByToolId.value = emptyMap()
     }
 
     /**
@@ -246,38 +272,77 @@ class ToolRepository(
                 signatureAlgorithm = signed.signatureAlgorithm,
                 expectedVersion = signed.version
             )
-            val expectedSlug = recipeSlugsByToolId.value[toolId]
+            val catalogEntry = toolDao.getToolById(toolId)
+                ?: throw IllegalStateException("Refresh the repair list before running this repair.")
+            val expectedSlug = catalogEntry.recipeSlug.takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("Refresh the repair list before running this repair.")
             if (recipe.getString("toolId") != expectedSlug) {
                 throw IllegalArgumentException("The repair release does not match the selected repair.")
             }
             Result.success(signed.signedPayload to signed.signature)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
-            clearCatalogWhenServerRejects(error)
+            handleAuthorizationRejection(error)
             Result.failure(error)
         }
     }
 
+    /**
+     * Commit local history and its pending upload together. Uploading is deliberately
+     * decoupled so a missing network never loses a completed repair report.
+     */
     suspend fun recordRepairRun(report: RepairRunReport): Result<Unit> {
         return try {
-            val entity = RepairHistoryEntity(
+            val history = RepairHistoryEntity(
                 id = report.runId,
                 toolId = report.toolId,
                 toolName = report.toolName,
                 toolVersion = report.toolVersion,
                 timestamp = report.endTime,
-                durationMs = report.endTime - report.startTime,
+                durationMs = (report.endTime - report.startTime).coerceAtLeast(0L),
                 result = report.result.name,
                 diagnosis = report.finalDiagnosis,
                 userEmail = report.userEmail
             )
-            historyDao.insertRecord(entity)
+            val pending = PendingReportEntity(
+                id = report.runId,
+                payloadJson = reportAdapter.toJson(report),
+                createdAt = System.currentTimeMillis()
+            )
+            database.withTransaction {
+                historyDao.insertRecord(history)
+                reportOutboxDao.enqueue(pending)
+            }
+            runCatching { SyncManager.enqueueReportUpload(context, report.runId) }
+            Result.success(Unit)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
 
+    suspend fun enqueuePendingReportUploads() {
+        reportOutboxDao.getPendingIds().forEach { reportId ->
+            runCatching { SyncManager.enqueueReportUpload(context, reportId) }
+        }
+    }
+
+    suspend fun pendingReportCount(): Int = reportOutboxDao.count()
+
+    /** Called by WorkManager. A row is deleted only after the server acknowledges this exact UUID. */
+    suspend fun uploadPendingReport(reportId: String): Result<Boolean> {
+        return try {
+            val pending = reportOutboxDao.get(reportId) ?: return Result.success(false)
+            val report = reportAdapter.fromJson(pending.payloadJson)
+                ?: throw IllegalStateException("The pending repair report could not be decoded.")
+            require(report.runId == reportId) { "Pending report identifier mismatch." }
             if (!supabaseClient.isConfigured()) {
-                throw IllegalStateException("The repair report cannot be sent right now.")
+                throw IllegalStateException("The repair service is not configured.")
             }
             val session = authRepository.getValidSession().getOrElse { cause ->
-                throw IllegalStateException("The session expired before the report could be sent.", cause)
+                throw IllegalStateException("Sign in again before pending reports can upload.", cause)
             }
             val deviceId = ensureRegisteredDeviceId(session.token, session.email)
             val stepResults = report.stepRecords.map { record ->
@@ -296,6 +361,7 @@ class ToolRepository(
             val version = report.toolVersion.toIntOrNull()
                 ?: throw IllegalArgumentException("Invalid repair version in execution report.")
             val request = SubmitRunRequest(
+                runId = report.runId,
                 deviceId = deviceId,
                 toolId = report.toolId,
                 toolVersion = version,
@@ -306,9 +372,14 @@ class ToolRepository(
                 errorCode = if (report.result.name == "FAILED") "ERR_RUN_FAILED" else null,
                 appVersion = BuildConfig.VERSION_NAME
             )
-            supabaseClient.submitRepairRun(request, session.token).getOrThrow()
-            Result.success(Unit)
+            val acceptedRunId = supabaseClient.submitRepairRun(request, session.token).getOrThrow()
+            require(acceptedRunId == report.runId) { "Server acknowledged a different repair report." }
+            reportOutboxDao.delete(reportId)
+            Result.success(true)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
+            handleAuthorizationRejection(error)
             Result.failure(error)
         }
     }
