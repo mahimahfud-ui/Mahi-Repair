@@ -9,7 +9,7 @@ const validRelease = {
   mandatory: false,
   releaseNotes: 'Initial signed remote configuration',
   remoteConfig: {
-    featureFlags: { new-diagnostics: true },
+    featureFlags: { "new-diagnostics": true },
     repairTools: { 'run-repair': true },
     ui: { announcement: { title: 'Update ready', body: 'New repair guidance is available.', tone: 'info' } },
     toolMetadata: {},
