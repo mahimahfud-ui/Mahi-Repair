@@ -37,11 +37,16 @@ data class AuthSessionResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class AuthAppMetadata(
+    val role: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class AuthUser(
     val id: String,
     val email: String?,
-    @Json(name = "user_metadata") val userMetadata: Map<String, String>? = null,
-    @Json(name = "app_metadata") val appMetadata: Map<String, String>? = null
+    @Json(name = "user_metadata") val userMetadata: Map<String, Any?>? = null,
+    @Json(name = "app_metadata") val appMetadata: AuthAppMetadata? = null
 )
 
 @JsonClass(generateAdapter = true)

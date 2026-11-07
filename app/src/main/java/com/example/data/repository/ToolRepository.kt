@@ -45,6 +45,8 @@ class ToolRepository(
     private val recipeSlugsByToolId = MutableStateFlow<Map<String, String>>(emptyMap())
     private val syncMutex = Mutex()
     private val deviceRegistrationMutex = Mutex()
+    @Volatile private var heartbeatDeviceId: String? = null
+    @Volatile private var heartbeatOwnerEmail: String? = null
 
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
 
@@ -63,8 +65,18 @@ class ToolRepository(
             val sameOwnerDeviceId = savedId?.takeIf {
                 it.isNotBlank() && savedOwner.equals(ownerEmail, ignoreCase = true)
             }
+            val normalizedOwner = ownerEmail.trim().lowercase()
+            if (
+                sameOwnerDeviceId != null &&
+                sameOwnerDeviceId == heartbeatDeviceId &&
+                normalizedOwner == heartbeatOwnerEmail
+            ) {
+                return@withLock sameOwnerDeviceId
+            }
 
-            // Existing device identities must heartbeat on every app start/sync. A 403
+            // Existing device identities are heartbeated once per app process (and therefore
+            // once on app start), not on every tool action. The Edge Functions still re-check
+            // device ownership/revocation for catalog and signed-recipe requests. A 403
             // for a revoked UUID is not converted into a fresh registration.
             val request = RegisterDeviceRequest(
                 deviceId = sameOwnerDeviceId,
@@ -90,6 +102,8 @@ class ToolRepository(
             if (sameOwnerDeviceId == null || !sameOwnerDeviceId.equals(deviceId, ignoreCase = true)) {
                 preferencesManager.saveDeviceId(deviceId, ownerEmail)
             }
+            heartbeatDeviceId = deviceId
+            heartbeatOwnerEmail = normalizedOwner
             deviceId
         }
     private fun verifySignatureAlgorithm(algorithm: String) {
