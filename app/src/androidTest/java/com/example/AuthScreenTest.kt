@@ -2,7 +2,8 @@ package com.example
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -33,7 +34,8 @@ class AuthScreenTest {
         }
 
         composeRule.onNodeWithTag("otp_input").performTextInput("12a34567")
-        composeRule.onNodeWithTag("otp_input").assertTextEquals("123456")
+        val otpText = composeRule.onNodeWithTag("otp_input").fetchSemanticsNode()
+        assertEquals(AnnotatedString("123456"), otpText.config[SemanticsProperties.EditableText])
         composeRule.onNodeWithTag("verify_otp_button").assertIsEnabled().performClick()
         composeRule.runOnIdle { assertEquals("123456", verifiedCode) }
     }
