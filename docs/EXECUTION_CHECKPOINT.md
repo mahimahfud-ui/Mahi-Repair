@@ -67,3 +67,20 @@ Updated: 2026-11-07
 - Added `.github/workflows/supabase-database-ci.yml` and `admin-panel/supabase/tests/mahi_repair_database.test.sql`. GitHub Actions run #42277797821 PASSED: isolated Docker-backed Supabase stack started, all seven tracked migrations applied to a fresh local database, all 17 pgTAP checks passed, and the stack shut down cleanly. Synthetic Owner/Member/device/tool fixtures were rolled back.
 - This GitHub-hosted local stack is an ephemeral CI test environment, not a persistent hosted staging project. Its CI result must be recorded separately from live-project acceptance.
 - A real persistent hosted staging database still requires either a Pro upgrade for branching or a freed Free-project slot. Do not pause `mahimahfud` or upgrade the organization without explicit approval.
+
+
+## Latest verified checkpoint — 2026-11-07
+
+This section supersedes earlier candidate CI status text in this file. The latest fully tested code candidate is `3207acb104a1ee390ba0a9fa621ae234d5bcfd01`.
+
+All four CI workflows passed on that exact code SHA:
+- Android CI #42356155144: unit tests, debug APK assembly, all 6/6 Compose emulator tests, source credential scan, generated APK secret scan and artifact upload passed.
+- Admin Panel CI #42356155163: dependency/security checks, TypeScript, ESLint, Vitest and Next.js production build passed.
+- Supabase Edge Functions CI #42356155152: all 16 candidate function entrypoints, Deno type checks and contract/source tests passed.
+- Supabase Database CI #42356155031: a fresh ephemeral local Supabase stack applied all seven tracked migrations and passed 17 pgTAP RLS/idempotency checks.
+
+Debug APK artifact: [#13567644352](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42356155144/artifacts/13567644352). Extracted `app-debug.apk`: 24,521,209 bytes; SHA-256 `9e2a786b1683d6c4bfc6cb40adf85be9e4eb85586e8d3a31fa63dfe0f66e9aec`. It is debug-signed with an ephemeral CI key and is not a production release APK/AAB.
+
+The live Supabase project is healthy, seven migrations are applied, all nine core application tables have RLS enabled, and 15 application Edge Functions are active with JWT verification. Live data still has one active Owner and one active Member but no registered devices, repair tools, signed versions, assignments or repair runs. The Member catalogue is empty until the Owner configures the RSA-3072 recipe signing pair and publishes a real signed recipe.
+
+Remaining production gates: replace the Android public-key placeholder with the matching RSA-3072 X.509 public key; store the private key only in Supabase Edge Function Secrets; configure and activate the Resend/Brevo Send Email hook; enable leaked-password protection; provision and smoke-test Cloud Run; create a separate Android upload keystore and production-signed APK/AAB; perform physical-device and full Owner → Member/device → publish → repair → report → Admin acceptance. Hosted staging remains blocked by the Primary Supabase Free-plan project/branch limit. No production merge, deploy, migration or data change was performed.

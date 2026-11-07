@@ -118,3 +118,12 @@ The 17 checks cover:
 17. Exactly one report row is stored after first submit plus retry.
 
 All test data is synthetic and the SQL test ends with ROLLBACK. This result is from an ephemeral GitHub-hosted local Supabase stack, not from a persistent cloud staging project or production.
+
+
+## Latest candidate verification — 2026-11-07
+
+The status in earlier sections is superseded by this exact candidate result: `3207acb104a1ee390ba0a9fa621ae234d5bcfd01`. All four workflows passed: Android #42356155144 (including 6/6 Compose tests and APK source/generated-secret scans), Admin #42356155163, Edge Functions #42356155152, and Database #42356155031 (seven fresh migrations and 17 pgTAP checks).
+
+The debug APK artifact is [#13567644352](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42356155144/artifacts/13567644352). Extracted APK SHA-256: `9e2a786b1683d6c4bfc6cb40adf85be9e4eb85586e8d3a31fa63dfe0f66e9aec`. It is debug-signed with an ephemeral key, not a production release.
+
+Production acceptance is still outstanding: no live devices or published catalogue entries exist; the recipe-signing public key is a placeholder; the Auth email hook is not deployed/active; leaked-password protection is disabled; hosted staging is unavailable on the current Free-plan limits; Cloud Run and production release signing are not verified; and no physical-device Owner/member/report round-trip has been tested. The product remains NOT PRODUCTION READY.

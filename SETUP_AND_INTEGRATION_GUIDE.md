@@ -141,3 +141,16 @@ Supabase Edge Functions and contract tests are checked by .github/workflows/supa
 - Establish key rotation/backup, monitoring, backup/restore and privacy/retention procedures.
 
 A passing CI workflow does not replace live production integration tests or physical-device acceptance. See admin-panel/docs/BUILD_STATUS.md and admin-panel/docs/PRODUCTION_READINESS.md for the verified state and release blockers.
+
+
+## Latest candidate CI evidence — 2026-11-07
+
+The release candidate `integration/mahi-repair-release-candidate` at code commit `3207acb104a1ee390ba0a9fa621ae234d5bcfd01` passed all four CI workflows:
+- Android #42356155144: 6/6 Compose UI tests, unit tests, debug APK assembly, source/APK secret scans and artifact upload passed.
+- Admin Panel #42356155163: production build passed.
+- Supabase Edge Functions #42356155152: all candidate function entrypoints and contract tests passed.
+- Supabase Database #42356155031: seven fresh migrations and 17 pgTAP checks passed.
+
+The installable debug APK is [artifact #13567644352](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42356155144/artifacts/13567644352), extracted file SHA-256 `9e2a786b1683d6c4bfc6cb40adf85be9e4eb85586e8d3a31fa63dfe0f66e9aec`. This is a debug build and not a production release.
+
+Production hosting is Cloud Run per `admin-panel/docs/DEPLOYMENT.md`. The legacy Render preview tracks an older branch and is not verified as production. Recipe signing, Auth email activation, leaked-password protection, release signing, real live device/catalogue population and physical-device acceptance remain outstanding.

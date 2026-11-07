@@ -94,3 +94,16 @@ The APK artifact is a debug build using an ephemeral debug keystore. It is not a
 - [ ] Run live Owner Magic Link, Android Member OTP, invitation and Resend-to-Brevo fallback acceptance tests.
 
 See AUTH_EMAIL_DELIVERY.md for the full setup. Code and CI do not mean the production hook is enabled.
+
+
+## Latest candidate CI and live-state refresh — 2026-11-07
+
+Candidate `3207acb104a1ee390ba0a9fa621ae234d5bcfd01` has a fully green CI matrix:
+- Android #42356155144: unit tests, assembleDebug, 6/6 Compose UI tests, source/APK secret scans and debug APK upload passed.
+- Admin Panel #42356155163: production build and static/security checks passed.
+- Supabase Edge Functions #42356155152: all 16 candidate function entrypoints and contract tests passed.
+- Supabase Database #42356155031: all seven migrations and 17 pgTAP checks passed on a fresh ephemeral local Supabase stack.
+
+The debug APK artifact is [#13567644352](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42356155144/artifacts/13567644352); it is not release-signed. The live database has 15 active JWT-verified application functions, one active Owner and one active Member, but no registered devices or published tools/recipe versions. `send-auth-email` remains code-only in this candidate and is not yet deployed or enabled in the live Auth project.
+
+The live Supabase security advisor still flags leaked-password protection as disabled; the performance advisor flags the missing `device_tool_syncs(tool_id, version)` covering index. Cloud Run is not provisioned, and the Android RSA recipe-signing key and production upload keystore are not configured. Do not mark production readiness until the checklist above has real environment evidence.
