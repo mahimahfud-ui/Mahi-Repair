@@ -1,0 +1,171 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Mahi Repair Cloud Backend API",
+    "version": "1.2.0-staging",
+    "description": "Secure Google Cloud and Firebase backend for Mahi Repair Android toolkit."
+  },
+  "servers": [
+    { "url": "/api/v1", "description": "Current Environment" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Firebase Authentication ID Token"
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/auth/verify": {
+      "post": {
+        "summary": "Verify token and retrieve role",
+        "responses": {
+          "200": { "description": "Token verified" },
+          "401": { "description": "Unauthenticated" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get caller profile and registered devices",
+        "responses": {
+          "200": { "description": "Profile details" }
+        }
+      }
+    },
+    "/devices/register": {
+      "post": {
+        "summary": "Register or update Android device hardware profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device_id": { "type": "string" },
+                  "device_label": { "type": "string" },
+                  "app_version": { "type": "string" },
+                  "android_version": { "type": "string" },
+                  "android_api": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Device updated" },
+          "201": { "description": "Device registered with new UUID" }
+        }
+      }
+    },
+    "/devices": {
+      "get": {
+        "summary": "List devices (all if owner, self if member)",
+        "responses": { "200": { "description": "List of devices" } }
+      }
+    },
+    "/devices/{id}/revoke": {
+      "put": {
+        "summary": "Revoke or restore device access (Owner only)",
+        "responses": { "200": { "description": "Device updated" } }
+      }
+    },
+    "/tools": {
+      "get": {
+        "summary": "List repair tools (all for owner, published for member)",
+        "responses": { "200": { "description": "List of repair tools" } }
+      },
+      "post": {
+        "summary": "Create new repair tool in DRAFT status (Owner only)",
+        "responses": { "201": { "description": "Tool created" } }
+      }
+    },
+    "/tools/{id}": {
+      "get": { "summary": "Get tool details", "responses": { "200": { "description": "Tool found" } } },
+      "put": { "summary": "Update draft tool (Owner only)", "responses": { "200": { "description": "Tool updated" } } }
+    },
+    "/tools/{id}/publish": {
+      "post": {
+        "summary": "Publish and sign new tool version using RSA-3072 key (Owner only)",
+        "responses": { "200": { "description": "Tool published with detached signature" } }
+      }
+    },
+    "/tools/{id}/state": {
+      "put": { "summary": "Update tool lifecycle status (Owner only)", "responses": { "200": { "description": "State updated" } } }
+    },
+    "/tools/{id}/disable": {
+      "put": { "summary": "Disable or enable tool (Owner only)", "responses": { "200": { "description": "State toggled" } } }
+    },
+    "/tools/{id}/assign": {
+      "post": { "summary": "Assign tool audience and members (Owner only)", "responses": { "200": { "description": "Audience updated" } } }
+    },
+    "/recipes/my-tools": {
+      "post": {
+        "summary": "Get signed releases authorized for caller's registered device",
+        "responses": { "200": { "description": "Authorized tools with signed payloads" } }
+      }
+    },
+    "/recipes/signed-tool": {
+      "post": {
+        "summary": "Fetch detached RSA-3072 signature and canonical payload for one tool",
+        "responses": { "200": { "description": "Signed payload and signature" } }
+      }
+    },
+    "/repair-runs": {
+      "post": { "summary": "Submit repair execution telemetry", "responses": { "201": { "description": "Telemetry recorded" } } },
+      "get": { "summary": "Retrieve repair run logs", "responses": { "200": { "description": "List of runs" } } }
+    },
+    "/members": {
+      "get": { "summary": "List all members (Owner only)", "responses": { "200": { "description": "List of members" } } }
+    },
+    "/members/invite": {
+      "post": { "summary": "Invite new member (Owner only)", "responses": { "201": { "description": "Member invited" } } }
+    },
+    "/members/{id}/status": {
+      "put": { "summary": "Update member status (active, suspended, revoked) (Owner only)", "responses": { "200": { "description": "Status updated" } } }
+    },
+    "/analytics/dashboard": {
+      "get": { "summary": "Retrieve aggregated repair metrics and dashboard data (Owner only)", "responses": { "200": { "description": "Analytics data" } } }
+    },
+    "/audit-logs": {
+      "get": { "summary": "Retrieve audit logs (Owner only)", "responses": { "200": { "description": "List of audit logs" } } }
+    },
+    "/admin/pin/verify": {
+      "post": {
+        "summary": "Verify Owner unlock PIN (constant-time PBKDF2 check + rate limiting)",
+        "responses": { "200": { "description": "PIN verified" }, "401": { "description": "Invalid PIN" } }
+      }
+    },
+    "/admin/pin/change": {
+      "post": {
+        "summary": "Change Owner unlock PIN",
+        "responses": { "200": { "description": "PIN changed" } }
+      }
+    },
+    "/admin/gemini": {
+      "post": {
+        "summary": "Execute natural language admin instructions via Gemini AI engine",
+        "responses": { "200": { "description": "Structured execution output" } }
+      }
+    },
+    "/public-key": {
+      "get": {
+        "summary": "Expose RSA-3072 verification public key (X.509 PEM and DER base64)",
+        "security": [],
+        "responses": { "200": { "description": "Public verification key" } }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "System and database connectivity healthcheck",
+        "security": [],
+        "responses": { "200": { "description": "System status" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User account profile for authenticated Owners and Members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["owner", "member"] },
+        "status": { "type": "string", "enum": ["active", "suspended", "revoked"] },
+        "email": { "type": "string", "format": "email", "maxLength": 255 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "role", "status", "email", "createdAt", "updatedAt"]
+    },
+    "Device": {
+      "title": "Device",
+      "description": "Registered Android device associated with a member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "deviceLabel": { "type": "string", "maxLength": 100 },
+        "appVersion": { "type": "string", "maxLength": 32 },
+        "androidVersion": { "type": "string", "maxLength": 32 },
+        "androidApi": { "type": "integer" },
+        "registeredAt": { "type": "string", "format": "date-time" },
+        "lastSeenAt": { "type": "string", "format": "date-time" },
+        "revokedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "appVersion", "androidVersion", "registeredAt", "lastSeenAt"]
+    },
+    "RepairTool": {
+      "title": "RepairTool",
+      "description": "Repair tool catalog metadata and working draft recipe",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "slug": { "type": "string", "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 50 },
+        "icon": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["DRAFT", "TESTING", "PUBLISHED", "DISABLED", "ARCHIVED"] },
+        "audience": { "type": "string", "enum": ["all_active_members", "selected_members"] },
+        "version": { "type": "integer" },
+        "draftRecipe": { "type": "object" },
+        "androidCompatibility": { "type": "object" },
+        "minimumAppVersion": { "type": "string", "maxLength": 30 },
+        "estimatedSeconds": { "type": "integer" },
+        "riskClassification": { "type": "string", "maxLength": 30 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "slug", "status", "audience", "version", "draftRecipe", "createdBy", "createdAt", "updatedAt"]
+    },
+    "RepairToolVersion": {
+      "title": "RepairToolVersion",
+      "description": "Immutable published recipe version with RSA-3072 signature",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "toolId": { "type": "string", "maxLength": 128 },
+        "version": { "type": "integer" },
+        "payload": { "type": "object" },
+        "canonicalPayload": { "type": "string" },
+        "signature": { "type": "string" },
+        "signatureAlgorithm": { "type": "string", "enum": ["RSA-SHA256"] },
+        "changelog": { "type": "string", "maxLength": 2000 },
+        "publishedBy": { "type": "string", "maxLength": 128 },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "toolId", "version", "payload", "canonicalPayload", "signature", "signatureAlgorithm", "publishedBy", "publishedAt"]
+    },
+    "RepairToolAccess": {
+      "title": "RepairToolAccess",
+      "description": "Per-member tool access grant for selected_members audience",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "toolId": { "type": "string", "maxLength": 128 },
+        "memberId": { "type": "string", "maxLength": 128 },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "toolId", "memberId", "assignedBy", "createdAt"]
+    },
+    "DeviceToolSync": {
+      "title": "DeviceToolSync",
+      "description": "Tracks tool version synced to a specific device",
+      "type": "object",
+      "properties": {
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "toolId": { "type": "string", "maxLength": 128 },
+        "version": { "type": "integer" },
+        "syncedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["deviceId", "userId", "toolId", "version", "syncedAt"]
+    },
+    "RepairRun": {
+      "title": "RepairRun",
+      "description": "Execution report and telemetry of a completed or cancelled repair recipe",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "toolId": { "type": "string", "maxLength": 128 },
+        "toolVersion": { "type": "integer" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "result": { "type": "string", "enum": ["SUCCESS", "PARTIAL", "FAILED", "CANCELLED"] },
+        "stepResults": { "type": "array" },
+        "errorCode": { "type": "string", "maxLength": 100 },
+        "appVersion": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "deviceId", "toolId", "toolVersion", "startedAt", "result", "appVersion", "createdAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Append-only immutable record of administrative mutations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "targetType": { "type": "string", "maxLength": 50 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorId", "action", "targetType", "createdAt"]
+    },
+    "RecipeTestHistory": {
+      "title": "RecipeTestHistory",
+      "description": "Test simulation and schema validation logs from Test Lab",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "toolId": { "type": "string", "maxLength": 128 },
+        "recipeHash": { "type": "string", "maxLength": 128 },
+        "validationStatus": { "type": "string", "enum": ["VALID", "INVALID"] },
+        "issues": { "type": "array" },
+        "simulatedStepCount": { "type": "integer" },
+        "testedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "recipeHash", "validationStatus", "testedAt"]
+    },
+    "AdminSetting": {
+      "title": "AdminSetting",
+      "description": "Protected administrative configuration such as salted hashed unlock PIN",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "pinHash": { "type": "string", "maxLength": 256 },
+        "pinSalt": { "type": "string", "maxLength": 128 },
+        "iterations": { "type": "integer" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "pinHash", "pinSalt", "iterations", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "User profile with role (owner/member) and account status"
+    },
+    "/devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/Device" },
+      "description": "Registered devices with server-issued UUIDs"
+    },
+    "/repair_tools/{toolId}": {
+      "schema": { "$ref": "#/entities/RepairTool" },
+      "description": "Repair tools catalog and draft configurations"
+    },
+    "/repair_tool_versions/{versionId}": {
+      "schema": { "$ref": "#/entities/RepairToolVersion" },
+      "description": "Immutable signed releases for published tools"
+    },
+    "/repair_tool_access/{accessId}": {
+      "schema": { "$ref": "#/entities/RepairToolAccess" },
+      "description": "Tool-to-member assignment records"
+    },
+    "/device_tool_syncs/{syncId}": {
+      "schema": { "$ref": "#/entities/DeviceToolSync" },
+      "description": "Tool synchronization records per device"
+    },
+    "/repair_runs/{runId}": {
+      "schema": { "$ref": "#/entities/RepairRun" },
+      "description": "Telemetry and execution logs of repair runs"
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Immutable audit trails for administrative operations"
+    },
+    "/recipe_test_history/{historyId}": {
+      "schema": { "$ref": "#/entities/RecipeTestHistory" },
+      "description": "Validation records from Test Lab"
+    },
+    "/admin_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AdminSetting" },
+      "description": "Server-side protected admin configuration"
+    }
+  }
+}

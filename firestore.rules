@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'owner'
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isActiveMember() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function canAccessTool(toolId) {
+      return isActiveMember()
+        && exists(/databases/$(database)/documents/repair_tools/$(toolId))
+        && get(/databases/$(database)/documents/repair_tools/$(toolId)).data.status == 'PUBLISHED'
+        && (
+          get(/databases/$(database)/documents/repair_tools/$(toolId)).data.audience == 'all_active_members'
+          || exists(/databases/$(database)/documents/repair_tool_access/$(toolId + '_' + request.auth.uid))
+        );
+    }
+
+    // User Profiles
+    match /profiles/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isOwner());
+      allow list: if isOwner();
+      allow write: if false; // All profile mutations must use server-side Firebase Admin SDK
+    }
+
+    // Devices
+    match /devices/{deviceId} {
+      allow get: if isValidId(deviceId) && isSignedIn() && (resource.data.userId == request.auth.uid || isOwner());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwner());
+      allow write: if false; // Device registration and revocation handled via backend API
+    }
+
+    // Repair Tools Catalog
+    match /repair_tools/{toolId} {
+      allow get: if isValidId(toolId) && (isOwner() || (canAccessTool(toolId) && resource.data.status == 'PUBLISHED'));
+      allow list: if isOwner() || (isActiveMember() && resource.data.status == 'PUBLISHED' && resource.data.audience == 'all_active_members');
+      allow write: if false; // Tool upsert, draft, publish, and delete must use backend API
+    }
+
+    // Repair Tool Versions (Immutable RSA-Signed Releases)
+    match /repair_tool_versions/{versionId} {
+      allow get: if isValidId(versionId) && (isOwner() || canAccessTool(resource.data.toolId));
+      allow list: if isOwner();
+      allow write: if false; // Immutable; committed exclusively by server-side Admin SDK
+    }
+
+    // Repair Tool Member Access Grants
+    match /repair_tool_access/{accessId} {
+      allow get: if isValidId(accessId) && (isOwner() || (isSignedIn() && resource.data.memberId == request.auth.uid));
+      allow list: if isOwner() || (isSignedIn() && resource.data.memberId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Device Tool Sync Records
+    match /device_tool_syncs/{syncId} {
+      allow get: if isValidId(syncId) && (isOwner() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isOwner() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Repair Runs & Execution Telemetry
+    match /repair_runs/{runId} {
+      allow get: if isValidId(runId) && (isOwner() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isOwner() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false; // Submitted via validated server endpoint
+    }
+
+    // Admin Audit Logs (Append-Only)
+    match /admin_audit_logs/{logId} {
+      allow get: if isValidId(logId) && isOwner();
+      allow list: if isOwner();
+      allow write: if false; // Append-only via server-side Admin SDK
+    }
+
+    // Recipe Test History (Test Lab)
+    match /recipe_test_history/{historyId} {
+      allow get: if isValidId(historyId) && isOwner();
+      allow list: if isOwner();
+      allow write: if false;
+    }
+
+    // Admin Settings (Protected Server State, Salted PIN Hashes)
+    match /admin_settings/{settingId} {
+      allow read, write: if false; // Strictly server-side only
+    }
+  }
+}

@@ -143,7 +143,8 @@ fun MainScreen(
     onDismissExecution: () -> Unit,
     onRequestPermission: (String) -> Unit,
     onCancelPermission: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onOpenAdmin: () -> Unit = {}
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val desktop = screenWidth >= 1024
@@ -267,7 +268,8 @@ fun MainScreen(
                         device = device,
                         maxWidth = maxWidth,
                         onRefresh = onRetryAvailability,
-                        onSignOut = onSignOut
+                        onSignOut = onSignOut,
+                        onOpenAdmin = onOpenAdmin
                     )
                 }
             }

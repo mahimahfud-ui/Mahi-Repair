@@ -10,16 +10,27 @@ import { getInitialTools } from './data/defaultCatalog';
 import { DEFAULT_OWNER_PUBLIC_KEY } from './security/verifier';
 import { ActionRegistry } from './engine/ActionRegistry';
 import { RecipeExecutionEngine } from './engine/RecipeExecutionEngine';
-import { AuthScreen } from './components/AuthScreen';
-import { MainScreen } from './components/MainScreen';
-import { AdminConsole } from './components/AdminConsole';
+import { Navigation, NavTab } from './components/Navigation';
+import { HomeScreen } from './components/HomeScreen';
+import { ToolsScreen } from './components/ToolsScreen';
+import { ToolDetailScreen } from './components/ToolDetailScreen';
+import { ConfirmationSheet } from './components/ConfirmationSheet';
+import { HistoryScreen } from './components/HistoryScreen';
+import { SettingsScreen } from './components/SettingsScreen';
+import { BackendConfigDialog } from './components/BackendConfigDialog';
 
 const LOCAL_STORAGE_KEY_HISTORY = 'mahi_repair_history_v1';
 const LOCAL_STORAGE_KEY_CONFIG = 'mahi_repair_backend_config_v1';
 const LOCAL_STORAGE_KEY_SESSION = 'mahi_repair_session_v1';
 
 export const App: React.FC = () => {
-  // Session state
+  // Navigation & Screen selection
+  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
+  const [confirmTool, setConfirmTool] = useState<RepairTool | null>(null);
+  const [showBackendConfig, setShowBackendConfig] = useState(false);
+
+  // Session state (default authenticated for instant access)
   const [session, setSession] = useState<AuthSession>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION);
@@ -27,7 +38,6 @@ export const App: React.FC = () => {
     } catch {
       // Fallback
     }
-    // Default to active authenticated demo user for instant accessibility
     return {
       isAuthenticated: true,
       email: 'alex.owner@example.com',
@@ -37,7 +47,7 @@ export const App: React.FC = () => {
   });
 
   // Tools catalog
-  const [tools, setTools] = useState<RepairTool[]>(() => getInitialTools());
+  const [tools] = useState<RepairTool[]>(() => getInitialTools());
 
   // Backend config
   const [backendConfig, setBackendConfig] = useState<BackendConfig>(() => {
@@ -93,9 +103,6 @@ export const App: React.FC = () => {
   const [executionEvent, setExecutionEvent] = useState<ExecutionEvent>({
     type: 'Idle',
   });
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
-  const [viewMode, setViewMode] = useState<'client' | 'admin'>('client');
 
   // Engine ref
   const engineRef = useRef<RecipeExecutionEngine | null>(null);
@@ -160,14 +167,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSync = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setLastSyncTime(Date.now());
-    }, 700);
-  };
-
   const handleRunTool = async (tool: RepairTool) => {
     if (!engineRef.current) return;
     const rawPayload = tool.rawSignedPayload || '';
@@ -206,40 +205,127 @@ export const App: React.FC = () => {
     } catch {
       // Ignore
     }
-    handleSync();
   };
 
-  if (!session.isAuthenticated) {
-    return <AuthScreen onLogin={handleLogin} />;
-  }
+  const handleSelectTab = (tab: NavTab) => {
+    setSelectedToolId(null);
+    setActiveTab(tab);
+  };
 
-  if (viewMode === 'admin') {
-    return (
-      <AdminConsole
-        tools={tools}
-        onUpdateTools={(newTools) => setTools(newTools)}
-        onSwitchToClient={() => setViewMode('client')}
-      />
-    );
-  }
+  const selectedTool = selectedToolId
+    ? tools.find((t) => t.id === selectedToolId) || null
+    : null;
 
   return (
-    <MainScreen
-      session={session}
-      tools={tools}
-      executionEvent={executionEvent}
-      history={history}
-      backendConfig={backendConfig}
-      lastSyncTime={lastSyncTime}
-      isSyncing={isSyncing}
-      onSync={handleSync}
-      onRunTool={handleRunTool}
-      onSubmitUserAction={handleSubmitUserAction}
-      onDismissExecution={handleDismissExecution}
-      onClearHistory={handleClearHistory}
-      onSaveBackendConfig={handleSaveBackendConfig}
-      onSignOut={handleSignOut}
-      onSwitchToAdmin={() => setViewMode('admin')}
-    />
+    <div className="min-h-screen bg-[#060A14] text-[#F3F6FC] flex flex-col lg:flex-row antialiased selection:bg-[#5B8CFF]/30">
+      {/* Navigation Shell (Left sidebar on desktop, bottom bar on mobile) */}
+      <Navigation
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        isOfflineMode={session.isOfflineMode}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Top Header (<1024px) */}
+        <header className="lg:hidden sticky top-0 z-30 bg-[#060A14]/90 backdrop-blur-md border-b border-[rgba(150,180,255,0.08)] px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-[#5B8CFF] to-[#FF4D5E] grid place-items-center text-white font-extrabold text-xs shadow-sm">
+              M
+            </div>
+            <span className="font-bold text-[15px] tracking-tight text-[#F3F6FC]">
+              Mahi Repair
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#4FD69C] animate-pulse"></span>
+            <span className="text-[11px] font-semibold text-[#9AA7C2] uppercase tracking-wider">
+              {session.isOfflineMode ? 'Offline' : 'Connected'}
+            </span>
+          </div>
+        </header>
+
+        {/* Viewport Screen Content */}
+        <main className="flex-1 px-4 py-6 sm:px-8 sm:py-8 pb-28 lg:pb-12 max-w-[1240px] w-full mx-auto">
+          {selectedTool ? (
+            <ToolDetailScreen
+              tool={selectedTool}
+              executionEvent={executionEvent}
+              onBack={() => setSelectedToolId(null)}
+              onRequestRun={(tool) => setConfirmTool(tool)}
+              onResetRun={handleDismissExecution}
+              onSubmitUserAction={handleSubmitUserAction}
+            />
+          ) : (
+            <>
+              {activeTab === 'home' && (
+                <HomeScreen
+                  tools={tools}
+                  history={history}
+                  onOpenTool={(toolId) => {
+                    setSelectedToolId(toolId);
+                  }}
+                  onGoTab={(tab) => {
+                    setSelectedToolId(null);
+                    setActiveTab(tab);
+                  }}
+                />
+              )}
+
+              {activeTab === 'tools' && (
+                <ToolsScreen
+                  tools={tools}
+                  onOpenTool={(toolId) => {
+                    setSelectedToolId(toolId);
+                  }}
+                />
+              )}
+
+              {activeTab === 'hist' && (
+                <HistoryScreen
+                  history={history}
+                  onClearHistory={handleClearHistory}
+                />
+              )}
+
+              {activeTab === 'set' && (
+                <SettingsScreen
+                  session={session}
+                  backendConfig={backendConfig}
+                  onSignOut={handleSignOut}
+                  onLogin={handleLogin}
+                  onOpenBackendConfig={() => setShowBackendConfig(true)}
+                />
+              )}
+            </>
+          )}
+        </main>
+      </div>
+
+      {/* Confirmation Sheet (Modal / Bottom Sheet) */}
+      {confirmTool && (
+        <ConfirmationSheet
+          tool={confirmTool}
+          isOpen={true}
+          onConfirm={async () => {
+            const toolToRun = confirmTool;
+            setConfirmTool(null);
+            if (toolToRun) {
+              await handleRunTool(toolToRun);
+            }
+          }}
+          onCancel={() => setConfirmTool(null)}
+        />
+      )}
+
+      {/* Backend Configuration Modal */}
+      {showBackendConfig && (
+        <BackendConfigDialog
+          config={backendConfig}
+          onSave={handleSaveBackendConfig}
+          onDismiss={() => setShowBackendConfig(false)}
+        />
+      )}
+    </div>
   );
 };
