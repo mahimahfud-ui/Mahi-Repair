@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ToolsPage() {
   const { supabase } = await requireOwner();
   const [{ data: tools, error }, { data: members }, { data: assignments, error: assignmentError }] = await Promise.all([
-    supabase.from('repair_tools').select('id,name,slug,category,status,version,updated_at,audience,icon').order('updated_at', { ascending: false }),
+    supabase.from('repair_tools').select('id,name,slug,category,status,version,updated_at,audience,icon,android_compatibility,minimum_app_version,risk_classification').order('updated_at', { ascending: false }),
     supabase.from('profiles').select('id,email,display_name').eq('role', 'member').eq('status', 'active').order('email'),
     supabase.from('repair_tool_access').select('tool_id,member_id'),
   ]);
@@ -34,6 +34,7 @@ export default async function ToolsPage() {
               <thead className="bg-[#0d0f13] text-[11px] muted"><tr>
                 <th className="p-4 text-left font-medium">TOOL</th><th className="p-4 text-left font-medium">CATEGORY</th>
                 <th className="p-4 text-left font-medium">STATUS</th><th className="p-4 text-left font-medium">VERSION</th>
+                <th className="p-4 text-left font-medium">RECIPE REQUIREMENTS &amp; RISK</th>
                 <th className="p-4 text-left font-medium">LAST UPDATED</th><th className="p-4 text-left font-medium">ACTIONS</th>
               </tr></thead>
               <tbody className="divide-y divide-[#252830]">
@@ -46,6 +47,11 @@ export default async function ToolsPage() {
                     <td className="p-4 capitalize text-gray-300">{tool.category}</td>
                     <td className="p-4"><span className={`rounded-full px-2 py-1 text-[10px] ${tool.status === 'PUBLISHED' ? 'bg-emerald-950 text-emerald-300' : tool.status === 'DISABLED' || tool.status === 'ARCHIVED' ? 'bg-red-950 text-red-300' : 'bg-[#292d36] text-gray-300'}`}>{tool.status}</span></td>
                     <td className="p-4 tabular-nums">v{tool.version}</td>
+                    <td className="p-4 text-xs">
+                      <div>Android API {(tool.android_compatibility as { minApi?: number } | null)?.minApi ?? '—'}+</div>
+                      <div className="mt-1 muted">App {tool.minimum_app_version || '—'}+</div>
+                      <div className="mt-1 uppercase tracking-wide muted">Risk: {tool.risk_classification || 'Unknown'}</div>
+                    </td>
                     <td className="p-4 text-xs muted">{formatDate(tool.updated_at)}</td>
                     <td className="min-w-[330px] p-4">
                       <div className="flex flex-wrap gap-2">
