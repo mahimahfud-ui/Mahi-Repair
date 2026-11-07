@@ -631,7 +631,7 @@ class AdminApiClient(
 
     // 14. Get Audit Logs
     suspend fun getAuditLogs(authToken: String): Result<List<AdminAuditLogItem>> = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/api/v1/audit-logs"
+        val url = "$baseUrl/api/v1/analytics/audit-logs"
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
