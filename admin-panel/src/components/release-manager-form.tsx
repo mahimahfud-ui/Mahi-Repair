@@ -12,7 +12,7 @@ type UploadedAsset = {
 };
 
 const DEFAULT_REMOTE_CONFIG = JSON.stringify({
-  featureFlags: { newDiagnostics: true },
+  featureFlags: { new-diagnostics: true },
   repairTools: { 'run-repair': true },
   ui: { announcement: null },
   toolMetadata: {},
@@ -21,8 +21,6 @@ const DEFAULT_REMOTE_CONFIG = JSON.stringify({
 
 export function ReleaseManagerForm() {
   const [channel, setChannel] = useState('stable');
-  const [appVersionCode, setAppVersionCode] = useState(1);
-  const [packageVersion, setPackageVersion] = useState(1);
   const [packageAsset, setPackageAsset] = useState<UploadedAsset | null>(null);
   const [packageEntries, setPackageEntries] = useState('[\n  { "path": "metadata/repair-tools.json", "sha256": "REPLACE_WITH_SHA256", "sizeBytes": 128 }\n]');
   const [apkAsset, setApkAsset] = useState<UploadedAsset | null>(null);
@@ -33,16 +31,16 @@ export function ReleaseManagerForm() {
 
   const packageJson = useMemo(() => packageAsset ? JSON.stringify([{
     ...packageAsset,
-    version: packageVersion,
+    version: 1,
     entries: (() => { try { return JSON.parse(packageEntries); } catch { return []; } })(),
-  }]) : '[]', [packageAsset, packageEntries, packageVersion]);
+  }]) : '[]', [packageAsset, packageEntries]);
 
   const nativeApkJson = useMemo(() => apkAsset ? JSON.stringify({
     ...apkAsset,
     packageName: 'com.aistudio.mahirepair.qrzntk',
-    versionCode: appVersionCode,
+    versionCode: 1,
     signingCertificateSha256: certificateSha.trim().toLowerCase(),
-  }) : 'null', [apkAsset, certificateSha, appVersionCode]);
+  }) : 'null', [apkAsset, certificateSha]);
 
   async function uploadAsset(kind: 'packages' | 'native', file?: File) {
     if (!file) return;
@@ -89,7 +87,7 @@ export function ReleaseManagerForm() {
             <input name="app_version_name" required defaultValue="1.0.0" maxLength={40} className="mt-1 w-full rounded-lg border border-[#333843] bg-[#101319] p-2.5 text-sm"/>
           </label>
           <label className="block text-xs">App version code
-            <input name="app_version_code" type="number" min="1" required value={appVersionCode} onChange={(event) => setAppVersionCode(Math.max(1, Number(event.target.value) || 1))} className="mt-1 w-full rounded-lg border border-[#333843] bg-[#101319] p-2.5 text-sm"/>
+            <input name="app_version_code" type="number" min="1" required defaultValue="1" className="mt-1 w-full rounded-lg border border-[#333843] bg-[#101319] p-2.5 text-sm"/>
           </label>
           <label className="block text-xs">Minimum supported app code
             <input name="min_supported_app_version_code" type="number" min="1" required defaultValue="1" className="mt-1 w-full rounded-lg border border-[#333843] bg-[#101319] p-2.5 text-sm"/>
@@ -114,9 +112,6 @@ export function ReleaseManagerForm() {
           <div className="rounded-xl border border-[#333843] p-3">
             <div className="text-xs font-semibold">Data-only ZIP content package</div>
             <p className="muted mt-1 text-[11px] leading-5">Upload a ZIP containing only declared JSON/image resources. Provide exact entry paths, SHA-256 hashes and uncompressed byte sizes below.</p>
-            <label className="mt-3 block text-xs">Content package version
-              <input type="number" min="1" required value={packageVersion} onChange={(event) => setPackageVersion(Math.max(1, Number(event.target.value) || 1))} className="mt-1 w-full rounded-lg border border-[#333843] bg-[#101319] p-2.5 text-sm"/>
-            </label>
             <input type="file" accept=".zip,application/zip" onChange={(event) => void uploadAsset('packages', event.target.files?.[0])} className="mt-3 block w-full text-xs"/>
             {packageAsset ? <p className="mt-2 break-all font-mono text-[10px] text-emerald-300">{packageAsset.storagePath}<br/>SHA-256 {packageAsset.sha256}</p> : null}
             <label className="mt-3 block text-xs">Declared package entries JSON
