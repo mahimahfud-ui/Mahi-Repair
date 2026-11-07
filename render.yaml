@@ -1,5 +1,5 @@
-# Mahi Repair Admin Panel — PR preview/staging service.
-# Production must be configured separately after PR review and merge.
+# Render preview service for the Next.js Owner Admin Panel.
+# This is staging/preview configuration; create a separate production service.
 services:
   - type: web
     name: mahi-repair-admin-preview
@@ -7,9 +7,10 @@ services:
     plan: free
     region: singapore
     repo: https://github.com/mahimahfud-ui/Mahi-Repair
-    branch: security-hardening/run-repair
+    branch: ai/mahi-repair-complete-workflow
     buildCommand: cd admin-panel && npm ci && npm run build
     startCommand: cd admin-panel && npm start
+    healthCheckPath: /api/health
     autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION

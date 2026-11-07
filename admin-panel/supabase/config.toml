@@ -11,6 +11,13 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000/auth/callback"]
 
+# Local Supabase environments require re-authentication after a maximum
+# session lifetime or prolonged inactivity. Hosted projects must receive the
+# same settings in Dashboard -> Authentication -> Sessions separately.
+[auth.sessions]
+timebox = "12h"
+inactivity_timeout = "8h"
+
 [functions.admin-manage-tool-state]
 verify_jwt = true
 
