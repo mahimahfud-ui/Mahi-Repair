@@ -17,7 +17,7 @@ class AuthSessionDtoTest {
               "user": {
                 "id": "0e4eac6e-6b36-4a72-9c8d-53daeb6b5c77",
                 "email": "member@example.com",
-                "user_metadata": { "display_name": "Mahi", "preferences": { "theme": "dark" } },
+                "user_metadata": { "role": "member", "display_name": "Mahi", "preferences": { "theme": "dark" } },
                 "app_metadata": { "provider": "email", "providers": ["email"], "role": "member" }
               }
             }
@@ -27,6 +27,7 @@ class AuthSessionDtoTest {
         val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(json)
 
         assertEquals("member@example.com", session?.user?.email)
-        assertEquals("member", session?.user?.appMetadata?.role)
+        assertEquals("member", session?.user?.userMetadata?.get("role"))
+        assertEquals(null, session?.user?.appMetadata?.role)
     }
 }

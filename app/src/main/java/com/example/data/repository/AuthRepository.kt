@@ -64,7 +64,11 @@ class AuthRepository(
         val refreshToken = response.refreshToken?.takeIf { it.isNotBlank() }
             ?: return Result.failure(IllegalStateException("Authentication response did not include a refresh token."))
         val expiresAt = System.currentTimeMillis() + ((response.expiresIn ?: 0L) * 1000L)
-        val role = response.user?.appMetadata?.role?.takeIf { it.isNotBlank() } ?: "member"
+        val role = response.user?.appMetadata?.role?.takeIf { it.isNotBlank() }
+            ?: (response.user?.userMetadata?.get("role") as? String)?.takeIf { it.isNotBlank() }
+        if (role != "member") {
+            return Result.failure(IllegalStateException("This account is not an active invited member for the Android app."))
+        }
 
         return try {
             preferencesManager.saveSession(
@@ -123,7 +127,8 @@ class AuthRepository(
         val expiresIn = response.expiresIn?.takeIf { it > 0L }
             ?: return Result.failure(IllegalStateException("Invitation verification returned an invalid session lifetime."))
         val expiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
-        val role = response.user?.appMetadata?.role?.takeIf { it.isNotBlank() } ?: "member"
+        val role = response.user?.appMetadata?.role?.takeIf { it.isNotBlank() }
+            ?: (response.user?.userMetadata?.get("role") as? String)?.takeIf { it.isNotBlank() }
         if (role != "member") {
             return Result.failure(IllegalStateException("This invitation is not a member invitation for the Android app."))
         }
