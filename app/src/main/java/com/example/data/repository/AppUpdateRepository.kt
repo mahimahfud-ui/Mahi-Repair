@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.example.BuildConfig
 import com.example.data.remote.SupabaseClient
+import com.example.security.AppUpdateManifestVerifier
 import com.example.security.VerifiedAppUpdateRelease
 import java.io.File
 import java.security.MessageDigest
