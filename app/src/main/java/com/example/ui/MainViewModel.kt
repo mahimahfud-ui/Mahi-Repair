@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
+import com.example.BuildConfig
+import com.example.security.VerifiedAppUpdateRelease
 import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairTool
@@ -20,6 +22,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 
+data class AppUpdateUiState(
+    val isChecking: Boolean = false,
+    val isInstalling: Boolean = false,
+    val release: VerifiedAppUpdateRelease? = null,
+    val message: String? = null,
+    val error: String? = null
+)
+
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
     val tools: List<RepairTool> = emptyList(),
@@ -32,7 +42,8 @@ data class MainUiState(
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
     val otpSentForEmail: String? = null,
-    val isDeviceRegistered: Boolean = false
+    val isDeviceRegistered: Boolean = false,
+    val appUpdate: AppUpdateUiState = AppUpdateUiState()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -40,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val authRepo = app.authRepository
     private val toolRepo = app.toolRepository
     private val engine = app.recipeExecutionEngine
+    private val appUpdateRepository = app.appUpdateRepository
 
     private val _isToolsLoading = MutableStateFlow(true)
     private val _canRetryAvailability = MutableStateFlow(false)
@@ -49,6 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
+    private val _appUpdate = MutableStateFlow(AppUpdateUiState())
     private val executionMutex = Mutex()
 
     val uiState: StateFlow<MainUiState> = combine(
@@ -63,7 +76,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _authStatusMessage,
         _isAuthLoading,
         _otpSentForEmail,
-        app.preferencesManager.deviceIdFlow
+        app.preferencesManager.deviceIdFlow,
+        _appUpdate
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
@@ -77,7 +91,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             authStatusMessage = values[8] as String?,
             isAuthLoading = values[9] as Boolean,
             otpSentForEmail = values[10] as String?,
-            isDeviceRegistered = !(values[11] as String?).isNullOrBlank()
+            isDeviceRegistered = !(values[11] as String?).isNullOrBlank(),
+            appUpdate = values[12] as AppUpdateUiState
         )
     }.stateIn(
         viewModelScope,
@@ -205,6 +220,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onDismissExecution() {
         engine.reset()
+    }
+
+    fun onCheckForAppUpdates() {
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling) return
+        _appUpdate.value = AppUpdateUiState(isChecking = true)
+        viewModelScope.launch {
+            val result = appUpdateRepository.checkForUpdate()
+            if (result.isFailure) {
+                _appUpdate.value = AppUpdateUiState(
+                    error = result.exceptionOrNull()?.message
+                        ?: "The app-update service could not be reached."
+                )
+                return@launch
+            }
+
+            val release = result.getOrNull()
+            val installedVersion = BuildConfig.VERSION_CODE.toLong()
+            val message = when {
+                release == null -> "No signed stable release is currently published."
+                release.isNativeUpdateAvailable(installedVersion) ->
+                    "A signed Android update is available."
+                release.requiresUpdate(installedVersion) ->
+                    "This app version is below the minimum supported version, but no compatible APK is available. Contact the Owner."
+                release.contentPackageCount > 0 ->
+                    "A signed content release is available. This app build does not activate content packages yet."
+                else -> "Mahi Repair is up to date."
+            }
+            _appUpdate.value = AppUpdateUiState(release = release, message = message)
+        }
+    }
+
+    fun onInstallAppUpdate() {
+        val release = _appUpdate.value.release ?: return
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            !release.isNativeUpdateAvailable(BuildConfig.VERSION_CODE.toLong())
+        ) return
+
+        _appUpdate.value = _appUpdate.value.copy(isInstalling = true, error = null, message = null)
+        viewModelScope.launch {
+            val result = appUpdateRepository.downloadAndPromptInstall(release)
+            _appUpdate.value = _appUpdate.value.copy(
+                isInstalling = false,
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message
+                    ?: if (result.isFailure) "The update could not be installed." else null
+            )
+        }
     }
 
     fun onSignOut() {

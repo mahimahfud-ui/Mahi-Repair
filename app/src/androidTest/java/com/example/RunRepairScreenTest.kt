@@ -7,10 +7,14 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.domain.models.RepairTool
 import com.example.domain.models.ToolCategory
 import com.example.ui.MainUiState
+import com.example.ui.AppUpdateUiState
+import com.example.security.VerifiedAppUpdateRelease
+import com.example.security.VerifiedNativeApk
 import com.example.ui.screens.MainScreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -137,6 +141,54 @@ class RunRepairScreenTest {
 
         composeRule.onNodeWithTag("sign_out_button").performClick()
         composeRule.runOnIdle { assertTrue(signOutCalled) }
+    }
+
+    @Test
+    fun verifiedNewerApkOffersTheAndroidInstallerHandoff() {
+        val release = VerifiedAppUpdateRelease(
+            releaseId = "123e4567-e89b-12d3-a456-426614174000",
+            channel = "stable",
+            releaseNumber = 3,
+            appVersionName = "1.2.0",
+            appVersionCode = 12L,
+            minSupportedAppVersionCode = 1L,
+            mandatory = false,
+            releaseNotes = "Security and stability improvements.",
+            contentPackageCount = 0,
+            nativeApk = VerifiedNativeApk(
+                assetId = "android-apk",
+                sha256 = "a".repeat(64),
+                sizeBytes = 1024L,
+                contentType = "application/vnd.android.package-archive",
+                packageName = "com.aistudio.mahirepair.qrzntk",
+                versionCode = 12L,
+                signingCertificateSha256 = "b".repeat(64)
+            )
+        )
+        var installRequested = false
+
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(
+                    isToolsLoading = false,
+                    appUpdate = AppUpdateUiState(release = release)
+                ),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {},
+                onCheckForAppUpdates = {},
+                onInstallAppUpdate = { installRequested = true }
+            )
+        }
+
+        composeRule.onNodeWithTag("install_app_update_button")
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        composeRule.runOnIdle { assertTrue(installRequested) }
     }
 
     @Test

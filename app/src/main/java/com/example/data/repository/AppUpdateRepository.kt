@@ -63,6 +63,11 @@ class AppUpdateRepository(
                 expectedPackageName = BuildConfig.APPLICATION_ID,
                 installedVersionCode = BuildConfig.VERSION_CODE.toLong()
             )
+            verified.nativeApk?.let { apk ->
+                require(installedSigningCertificateSha256() == apk.signingCertificateSha256) {
+                    "The update is not signed with the currently installed Mahi Repair certificate."
+                }
+            }
             Result.success(verified)
         } catch (error: Exception) {
             Result.failure(error)
@@ -216,6 +221,32 @@ class AppUpdateRepository(
     }
 
     @Suppress("DEPRECATION")
+    private fun installedSigningCertificateSha256(): String {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+        val packageInfo = appContext.packageManager.getPackageInfo(BuildConfig.APPLICATION_ID, flags)
+        val signers = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners?.toList().orEmpty()
+        } else {
+            packageInfo.signatures?.toList().orEmpty()
+        }
+        require(signers.size == 1) {
+            "The installed Mahi Repair signing identity is not a single-certificate release."
+        }
+        return certificateSha256(signers.single())
+    }
+
+    private fun certificateSha256(signature: android.content.pm.Signature): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(signature.toByteArray())
+            .joinToString("") { byte ->
+                "%02x".format(Locale.US, byte.toInt() and 0xff)
+            }
+
+    @Suppress("DEPRECATION")
     private fun verifyApkMetadata(
         apkFile: File,
         expectedPackageName: String,
@@ -253,13 +284,12 @@ class AppUpdateRepository(
             packageInfo.signatures?.toList().orEmpty()
         }
         require(signerCertificates.isNotEmpty()) { "The downloaded APK has no verifiable signing certificate." }
-        val actualCertificateDigests = signerCertificates.map { signature ->
-            MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { byte ->
-                "%02x".format(Locale.US, byte.toInt() and 0xff)
-            }
-        }
-        require(actualCertificateDigests.any { it == expectedCertificateSha256 }) {
-            "The downloaded APK signing certificate does not match the Owner-published release."
+        val actualCertificateDigests = signerCertificates.map(::certificateSha256)
+        require(
+            actualCertificateDigests.size == 1 &&
+                actualCertificateDigests.single() == expectedCertificateSha256
+        ) {
+            "The downloaded APK signing certificate does not match the Owner-published single-signer release."
         }
     }
 

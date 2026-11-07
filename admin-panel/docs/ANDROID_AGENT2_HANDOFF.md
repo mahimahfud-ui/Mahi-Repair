@@ -57,5 +57,12 @@ Remaining live-update scope: the Admin backend supports signed ZIP content packa
 ## Current validation notes
 
 - The Android unit-test and assembleDebug CI stage passes on the shared branch after the Robolectric tests were pinned to API 34.
-- The KVM permission step fixes the hosted runner's earlier emulator boot timeout. The latest emulator run exposed an OTP UI test which needs to scroll its verify button into view before tapping while the numeric IME is open; the AuthScreen implementation itself filters to six ASCII digits.
+- The KVM permission step fixes the hosted runner's earlier emulator boot timeout. The OTP test now scrolls the verify button into view before tapping while the numeric IME is open, and checks the submitted six-digit value.
 - The KVM permission is ephemeral to the GitHub runner and does not alter application/device permissions.
+
+
+## Follow-up Android updater validation
+
+The first CI run including the signed updater detected a ViewModel merge omission (the update card callbacks were wired in the Activity/UI while the committed ViewModel lacked the update state and actions). The complete ViewModel wiring is restored in the follow-up commit; the next Android CI run is the validation gate for the updater code.
+
+The APK release verifier now requires the manifest's signing-certificate digest to match the currently installed app signer before offering an update, and requires the downloaded APK to carry exactly that single signer. This ensures a release cannot silently change the Android package signing identity.
