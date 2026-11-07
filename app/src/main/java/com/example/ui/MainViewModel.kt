@@ -215,6 +215,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val catalogClearFailure = runCatching { toolRepo.clearLocalCatalog() }.exceptionOrNull()
 
             _otpSentForEmail.value = null
+            _appUpdate.value = AppUpdateUiState()
             _repairStatusMessage.value = null
             _authStatusMessage.value = when {
                 catalogClearFailure != null ->

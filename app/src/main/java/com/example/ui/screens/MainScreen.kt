@@ -50,8 +50,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.BuildConfig
 import com.example.device.DeviceIntelligence
 import com.example.ui.MainUiState
+import com.example.ui.AppUpdateUiState
 import com.example.ui.components.ExecutionDialog
 import com.example.ui.theme.MahiBlack
 import com.example.ui.theme.MahiRedPrimary
@@ -68,7 +70,9 @@ fun MainScreen(
     onDismissToolPicker: () -> Unit,
     onSubmitUserAction: (Boolean) -> Unit,
     onDismissExecution: () -> Unit,
-    onSignOut: () -> Unit = {}
+    onSignOut: () -> Unit = {},
+    onCheckForAppUpdates: () -> Unit = {},
+    onInstallAppUpdate: () -> Unit = {}
 ) {
     val canRun = state.tools.isNotEmpty() &&
         !state.isToolsLoading &&
@@ -194,6 +198,14 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 DeviceDiagnosticsCard(isDeviceRegistered = state.isDeviceRegistered)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                AppUpdateCard(
+                    state = state.appUpdate,
+                    onCheckForUpdates = onCheckForAppUpdates,
+                    onInstallUpdate = onInstallAppUpdate
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(
@@ -394,5 +406,106 @@ private fun DeviceDiagnosticLine(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Text(label, color = MahiTextMuted, fontSize = 11.sp, modifier = Modifier.width(76.dp))
         Text(value, color = MahiTextSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+
+@Composable
+private fun AppUpdateCard(
+    state: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit
+) {
+    val installedVersion = BuildConfig.VERSION_CODE.toLong()
+    val release = state.release
+    val updateAvailable = release?.isNativeUpdateAvailable(installedVersion) == true
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF191B23)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30323D))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "APP UPDATES",
+                color = MahiTextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp
+            )
+            Text(
+                "Installed version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                color = MahiTextSecondary,
+                fontSize = 11.sp
+            )
+            Button(
+                onClick = onCheckForUpdates,
+                enabled = !state.isChecking && !state.isInstalling,
+                modifier = Modifier.fillMaxWidth().testTag("check_app_updates_button"),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
+            ) {
+                if (state.isChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("CHECK FOR UPDATES", color = Color.White, fontSize = 11.sp)
+                }
+            }
+
+            if (release != null && updateAvailable) {
+                Text(
+                    "Version ${release.appVersionName} (${release.appVersionCode}) is available",
+                    color = MahiTextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
+                if (release.mandatory && release.requiresUpdate(installedVersion)) {
+                    Text(
+                        "The Owner marked this update as mandatory.",
+                        color = Color(0xFFFFC56E),
+                        fontSize = 11.sp
+                    )
+                }
+                if (release.releaseNotes.isNotBlank()) {
+                    Text(release.releaseNotes, color = MahiTextSecondary, fontSize = 11.sp)
+                }
+                Button(
+                    onClick = onInstallUpdate,
+                    enabled = !state.isChecking && !state.isInstalling && release.nativeApk != null,
+                    modifier = Modifier.fillMaxWidth().testTag("install_app_update_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
+                ) {
+                    if (state.isInstalling) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("DOWNLOAD & INSTALL", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+                Text(
+                    "The APK is verified before Android's system installer opens. You must approve the installation on this device.",
+                    color = MahiTextMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            if (state.message != null) {
+                Text(state.message, color = MahiTextSecondary, fontSize = 11.sp)
+            }
+            if (state.error != null) {
+                Text(state.error, color = Color(0xFFFF8585), fontSize = 11.sp)
+            }
+        }
     }
 }

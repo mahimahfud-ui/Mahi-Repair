@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.ui.MainUiState
 import com.example.ui.screens.AuthScreen
@@ -37,7 +38,7 @@ class AuthScreenTest {
         composeRule.onNodeWithTag("otp_input").performTextInput("12a34567")
         val otpText = composeRule.onNodeWithTag("otp_input").fetchSemanticsNode()
         assertEquals(AnnotatedString("123456"), otpText.config[SemanticsProperties.EditableText])
-        composeRule.onNodeWithTag("verify_otp_button").assertIsEnabled().performTouchInput { click() }
+        composeRule.onNodeWithTag("verify_otp_button").performScrollTo().assertIsEnabled().performTouchInput { click() }
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals("123456", verifiedCode) }
     }

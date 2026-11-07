@@ -6,6 +6,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.PreferencesManager
 import com.example.data.remote.SupabaseClient
 import com.example.data.repository.AuthRepository
+import com.example.data.repository.AppUpdateRepository
 import com.example.data.repository.HistoryRepository
 import com.example.data.repository.ToolRepository
 import com.example.domain.actions.ActionRegistry
@@ -36,6 +37,7 @@ class MahiRepairApplication : Application() {
     lateinit var supabaseClient: SupabaseClient private set
     lateinit var authRepository: AuthRepository private set
     lateinit var toolRepository: ToolRepository private set
+    lateinit var appUpdateRepository: AppUpdateRepository private set
     lateinit var historyRepository: HistoryRepository private set
     lateinit var actionRegistry: ActionRegistry private set
     lateinit var recipeExecutionEngine: RecipeExecutionEngine private set
@@ -50,6 +52,7 @@ class MahiRepairApplication : Application() {
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
         toolRepository = ToolRepository(database, preferencesManager, supabaseClient, authRepository)
+        appUpdateRepository = AppUpdateRepository(this, supabaseClient, toolRepository)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)

@@ -214,8 +214,11 @@ class AuthRepository(
     suspend fun signOut() {
         val current = preferencesManager.sessionFlow.first()
         try {
-            if (current.token.isNotBlank()) supabaseClient.signOut(current.token)
+            if (current.token.isNotBlank()) {
+                supabaseClient.signOut(current.token).getOrThrow()
+            }
         } finally {
+            // Always remove the local encrypted session even when server revocation fails.
             preferencesManager.clearSession()
         }
     }

@@ -133,3 +133,46 @@ data class SubmitRunData(
 data class SubmitRunResponse(
     val data: SubmitRunData
 )
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateManifestRequest(
+    @Json(name = "device_id") val deviceId: String,
+    val channel: String = "stable"
+)
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateManifestData(
+    @Json(name = "release_id") val releaseId: String,
+    val channel: String,
+    @Json(name = "release_number") val releaseNumber: Int,
+    @Json(name = "manifest_payload") val manifestPayload: String,
+    val signature: String,
+    @Json(name = "signature_algorithm") val signatureAlgorithm: String
+)
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateManifestResponse(
+    val data: AppUpdateManifestData?
+)
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateAssetRequest(
+    @Json(name = "device_id") val deviceId: String,
+    @Json(name = "release_id") val releaseId: String,
+    @Json(name = "asset_id") val assetId: String
+)
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateAssetData(
+    @Json(name = "asset_id") val assetId: String,
+    @Json(name = "signed_url") val signedUrl: String,
+    val sha256: String,
+    @Json(name = "size_bytes") val sizeBytes: Long,
+    @Json(name = "content_type") val contentType: String,
+    @Json(name = "expires_in_seconds") val expiresInSeconds: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class AppUpdateAssetResponse(
+    val data: AppUpdateAssetData
+)

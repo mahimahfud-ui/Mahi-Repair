@@ -39,3 +39,23 @@ Consequently no Android QR pairing or live WebRTC session is claimed as complete
 ## Build and device validation
 
 The current execution environment could not resolve `github.com` for a local clone, so Gradle could not be run in this session. Pushing the branch triggers the repository `android-ci.yml` workflow, which is the authoritative build/unit/UI-test and debug-APK check. A physical Android device is not attached to this environment; MediaProjection consent, vendor-specific hardware reporting, background restrictions, and real network behaviour still require device QA.
+
+## Signed Android app updates — Android client implementation
+
+Android now has an authenticated client for the Owner-published app-update endpoints:
+
+- get-app-update-manifest requests the stable-channel manifest using the authenticated member JWT and this device's server-issued UUID.
+- AppUpdateManifestVerifier verifies the exact manifest bytes with the bundled RSA-3072 public key before parsing JSON, then enforces the v1 schema, matching release ID/channel/release number, package ID, version, content type, digest, size and signing-certificate fingerprint.
+- get-app-update-asset-url is called only after a signed manifest identifies the APK asset. The signed URL must be HTTPS and remain on the configured Supabase project host.
+- The downloaded APK is checked for exact byte count and SHA-256, then inspected with Android PackageManager for package ID, version name/code and the published APK signing-certificate digest.
+- Only after those checks does Android open the system package installer. Unknown-source permission is routed through Android Settings, and the final install still requires the device user to confirm. No silent installation or app downgrade path is implemented.
+
+The MainScreen exposes Check for updates and, where a newer native APK is present, Download & install. No update manifest is treated as trustworthy until RSA verification succeeds. The matching-key production setup described in APP_LIVE_UPDATES.md is required.
+
+Remaining live-update scope: the Admin backend supports signed ZIP content packages and remote config. Android currently validates and reports the signed package count, but it does not yet download, safely extract, hash-verify and atomically activate the ZIP package resources or apply remote config. Do not describe that content-package/update portion as complete. Native APK update flow requires a real published release and matching signing certificate before end-to-end production acceptance.
+
+## Current validation notes
+
+- The Android unit-test and assembleDebug CI stage passes on the shared branch after the Robolectric tests were pinned to API 34.
+- The KVM permission step fixes the hosted runner's earlier emulator boot timeout. The latest emulator run exposed an OTP UI test which needs to scroll its verify button into view before tapping while the numeric IME is open; the AuthScreen implementation itself filters to six ASCII digits.
+- The KVM permission is ephemeral to the GitHub runner and does not alter application/device permissions.
