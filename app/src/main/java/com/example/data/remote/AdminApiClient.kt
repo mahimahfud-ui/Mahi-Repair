@@ -123,10 +123,15 @@ data class CreateToolRequest(
     val slug: String,
     val category: String,
     val description: String,
-    @Json(name = "problem_description") val problemDescription: String = "",
-    @Json(name = "estimated_seconds") val estimatedSeconds: Int = 60,
-    val audience: String = "all_active_members",
-    @Json(name = "steps_json") val stepsJson: String? = null
+    val icon: String = "wrench",
+    @Json(name = "draft_recipe") val draftRecipe: Map<String, Any?>
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateToolRequest(
+    val name: String,
+    val description: String,
+    val category: String
 )
 
 @JsonClass(generateAdapter = true)
@@ -226,7 +231,7 @@ data class AdminAuditLogsResponse(
 // --- Admin API Client ---
 
 class AdminApiClient(
-    private val baseUrl: String = BuildConfig.SUPABASE_URL.trimEnd('/')
+    private val baseUrl: String = BuildConfig.MAHI_API_BASE_URL.trim().trimEnd('/')
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -383,6 +388,34 @@ class AdminApiClient(
         }
     }
 
+    // Update an existing draft. Published releases remain immutable until the next publish.
+    suspend fun updateTool(toolId: String, requestData: UpdateToolRequest, authToken: String): Result<AdminToolItem> = withContext(Dispatchers.IO) {
+        val url = "$baseUrl/api/v1/tools/${java.net.URLEncoder.encode(toolId, "UTF-8")}"
+        val bodyJson = moshi.adapter(UpdateToolRequest::class.java).toJson(requestData)
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
+            .put(bodyJson.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            okHttpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                val parsed = moshi.adapter(AdminToolResponse::class.java).fromJson(responseBody)
+                if (response.isSuccessful && parsed?.data != null) {
+                    Result.success(parsed.data)
+                } else {
+                    Result.failure(IOException(parsed?.error?.message ?: "Failed to update draft tool (HTTP ${response.code})."))
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     // 6. Publish Tool (Server canonicalizes & signs with RSA-3072 key)
     suspend fun publishTool(toolId: String, authToken: String): Result<AdminToolItem> = withContext(Dispatchers.IO) {
         val url = "$baseUrl/api/v1/tools/$toolId/publish"
@@ -418,7 +451,7 @@ class AdminApiClient(
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
             .addHeader("Content-Type", "application/json")
-            .post("{}".toRequestBody(jsonMediaType))
+            .put("{}".toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -551,7 +584,7 @@ class AdminApiClient(
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
             .addHeader("Content-Type", "application/json")
-            .post("{}".toRequestBody(jsonMediaType))
+            .put("{\"revoked\":true}".toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -598,7 +631,7 @@ class AdminApiClient(
 
     // 14. Get Audit Logs
     suspend fun getAuditLogs(authToken: String): Result<List<AdminAuditLogItem>> = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/api/v1/admin/audit-logs"
+        val url = "$baseUrl/api/v1/analytics/audit-logs"
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
