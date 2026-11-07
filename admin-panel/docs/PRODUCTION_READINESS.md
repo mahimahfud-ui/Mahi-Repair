@@ -1,109 +1,106 @@
+
 # Mahi Repair — production readiness
 
-This checklist separates code/CI evidence from checks that must be performed against the actual production Cloud Run, Supabase and Android environments. A passing CI workflow is not a production acceptance test. Status below was refreshed against integration candidate `8e111d9eab9cce1e44efdbdf0dfe42015dc26f18` on 2026-11-06.
+Updated: 2026-11-07
+Candidate branch: integration/mahi-repair-release-candidate
+Candidate head: 65f31853db6c8c6d10d1299cefc564da12781b24
 
-## Implemented in the branch and covered by current-head CI
+This checklist separates source implementation and CI evidence from acceptance in the actual production Cloud Run, Supabase and Android environments. Passing CI is not a production acceptance test.
 
-- [x] Separate native Android client, private Next.js Admin Panel and Supabase backend.
-- [x] Minimal Android home with one RUN REPAIR action and a published-tool picker after the user taps it.
-- [x] Invite-only email OTP auth implementation with account creation disabled.
-- [x] Android Keystore-backed AES-GCM session storage and serialized refresh-token rotation implementation.
-- [x] Server-issued device identity and server-side member/device authorization implementation.
+## Implemented in the candidate
+
+- [x] Separate native Android client, private Next.js Owner Admin Panel and Supabase backend.
+- [x] Android home screen with a single RUN REPAIR action and published-tool picker.
+- [x] Invite-only Android member email OTP implementation; account creation disabled.
+- [x] Android Keystore-backed encrypted session storage and serialized refresh-token rotation implementation.
+- [x] Server-issued device UUID and server-side member/device authorization.
 - [x] Canonical recipe v1 schema, strict parameter validation and shared contract fixtures.
 - [x] Canonical JSON serialization and RSA-SHA256 detached signing implementation.
-- [x] Android signature-verification implementation and fresh online authorization before execution.
-- [x] Native action allowlist; no remote script, shell, DEX, JAR, APK or arbitrary code execution by design.
-- [x] Private per-member/per-device Realtime Broadcast migration source and Android foreground WebSocket listener.
-- [x] Opaque Realtime events only; Android refetches and verifies the authorized catalogue. Launch/foreground/reconnect and WorkManager sync provide recovery.
-- [x] Candidate Android unit tests pass, including the Room v4→v5 pending-report migration, and the debug APK assembles successfully.
-- [ ] Candidate Android Compose UI emulator tests are still running; do not treat the APK as a verified artifact until this gate passes.
-- [ ] Candidate source and generated-debug-APK privileged-secret scans and artifact upload are pending the successful Compose gate.
-- [x] Supabase Edge Functions CI passed for the unchanged Agent 2 backend source: all 16 function entrypoints/shared modules type-check and Deno contract tests pass.
-- [x] Candidate Admin CI passed: dependency audit, scaffold/security checks, TypeScript, ESLint, Vitest and Next.js production build.
-- [x] Node.js 22.23.4 is pinned for Cloud Run/Admin Panel builds and CI.
-- [x] Protected production workflow source exists for migration preview/apply and JWT-verified deployment of the 15 application Edge Functions, with a separate signature-verified Auth email hook.
+- [x] Android signature verification and fresh online authorization before execution.
+- [x] Native action allowlist; no remote scripts, shell commands, DEX, JAR, APK or arbitrary code execution.
+- [x] Private per-member/per-device Realtime Broadcast source and Android foreground listener; events are opaque invalidation hints only.
+- [x] Durable Android report outbox, immutable request JSON and retry worker.
+- [x] Server-side idempotent report RPC with stable report UUID and request fingerprint.
+- [x] Supabase migrations for RLS, private Realtime, report idempotency, atomic catalogue/device transactions and admin audit.
+- [x] Candidate migration adds composite index device_tool_syncs(tool_id, version), removing the redundant tool_id-only index.
+- [x] Local database tests cover Owner/Member RLS, direct-write denial, RPC privileges, report retry/conflict and index shape.
+- [x] Candidate Auth Send Email Hook source verifies Standard Webhooks signatures and has Resend primary / Brevo fallback contract tests.
+- [x] Protected production workflow source is manual and requires main-branch confirmation / protected environment; no production deploy was run.
 
-Candidate commit: 8e111d9eab9cce1e44efdbdf0dfe42015dc26f18.
+## Latest candidate CI status
 
-Evidence:
-- [Android CI — Compose gate in progress](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42269775221)
-- [Admin Panel CI — passed](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42269775264)
-- [Supabase Edge Functions CI — passed on unchanged backend source](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42264240682)
+Exact current candidate SHA: 65f31853db6c8c6d10d1299cefc564da12781b24.
 
-No candidate APK artifact has been published from the latest Android run yet.
+- [ ] Android CI #42359332992 — unit tests and debug APK assembly passed; Compose emulator test is still running. Source/APK scan and artifact upload are pending the Compose gate.
+- [x] Admin Panel CI #42359333024 — dependency/security audit, scaffold checks, TypeScript, ESLint, Vitest and Next.js production build passed.
+- [x] Supabase Edge Functions CI #42359332985 — all candidate Edge Function entrypoints, Deno type checks and contract/source tests passed.
+- [x] Supabase Database CI #42359332983 — all eight candidate migrations applied to a fresh ephemeral local Supabase stack; all 18 pgTAP assertions passed. The log reports All tests successful.
 
-The APK artifact is a debug build using an ephemeral debug keystore. It is not a signed production release APK/AAB.
+Links:
+- Android: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42359332992
+- Admin: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42359333024
+- Edge Functions: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42359332985
+- Database: https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42359332983
+
+The previously uploaded debug APK artifact #13567644352 is from code commit 3207acb104a1ee390ba0a9fa621ae234d5bcfd01, not the current index-migration commit. It is debug-signed with an ephemeral CI key and is not a production release APK/AAB.
 
 ## Production configuration still required
 
-- [ ] Establish the production Cloud Run service and record its canonical HTTPS URL; the service has not been provisioned or smoke-tested.
-- [ ] Verify production Cloud Run TLS/HTTPS, health, owner sign-in and exact environment configuration.
-- [ ] Generate a real RSA-3072 key pair. Add only the PKCS#8 private key directly to Supabase Edge Function Secrets as RECIPE_SIGNING_PRIVATE_KEY_PEM; configure the matching X.509 public PEM in the Android release build. The checked-in public-key value remains a placeholder.
-- [ ] Configure the protected GitHub supabase-production environment with a required reviewer, secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD, and variable ADMIN_ORIGIN.
-- [ ] Verify the private signing secret exists in Supabase before deployment without logging its value.
-- [ ] Configure Supabase Auth Site URL and the actual Admin Panel /auth/callback redirect allow list.
-- [ ] Verify the owner Auth account and manually bootstrap only that account to owner; new profiles intentionally default to member.
-- [ ] Review and apply 20261106120000_private_realtime_catalog_broadcast.sql using the protected production workflow.
-- [ ] Disable Supabase Realtime Allow public access and verify private realtime.messages RLS against owner/member/own-device/revoked-device cases.
-- [ ] Deploy the PR-branch Edge Function updates through the protected workflow; all 15 application functions remain JWT-verified and the signed Auth email hook verifies its Standard Webhooks signature.
-- [ ] Verify production database migration history, function deployment status and RLS policy behavior after deployment.
+- [ ] Generate a real RSA-3072 keypair. Keep only the PKCS#8 private key in Supabase Edge Function Secrets as RECIPE_SIGNING_PRIVATE_KEY_PEM; configure only the matching X.509 public key in Android release build configuration. The checked-in public key remains a placeholder.
+- [ ] Provision the production Cloud Run Admin Panel service and record its canonical HTTPS origin.
+- [ ] Configure the Cloud Run server-only ADMIN_OWNER_EMAIL and bootstrap the existing Owner Auth account with a strong random 8–12 digit PIN/password. Verify profile role=owner and status=active.
+- [ ] Set the exact HTTPS ADMIN_ORIGIN in Supabase Edge Function Secrets.
+- [ ] Configure the Supabase production site URL and exact Admin /auth/callback redirect allow-list.
+- [ ] Configure and verify Resend and Brevo sender domains, SPF/DKIM/DMARC, API secrets and AUTH_EMAIL_FROM.
+- [ ] Deploy send-auth-email with its signature-only JWT exception, generate SEND_EMAIL_HOOK_SECRET and configure it directly in Supabase Edge Function Secrets.
+- [ ] Activate the Send Email Auth Hook only after provider inbox tests; send both Android member OTP and Admin/member invitation tests.
+- [ ] Enable Supabase Auth leaked-password protection and review token/password rate limits.
+- [ ] Review candidate production migration 20261107091600_add_device_tool_syncs_tool_version_index.sql through the protected workflow; it has not been applied to production.
+- [ ] Keep production Realtime private and validate member/owner/revoked-device policy behavior after deployment.
+- [ ] Configure protected GitHub production environment secrets/variables and required reviewer.
+- [ ] Generate a separate Android upload keystore and produce a release-signed APK/AAB. Do not use the ephemeral CI debug key as a release key.
 
-## End-to-end acceptance tests still required
+## End-to-end acceptance still required
 
-- [ ] Owner login on the production Cloud Run origin.
-- [ ] Invite a member as owner; deliver and complete the member OTP flow.
-- [ ] Register the Android device and verify ownership binding and duplicate registration behavior.
-- [ ] Create a tool, validate its recipe, publish it and verify the committed immutable version in Supabase.
-- [ ] Verify private per-device Realtime event delivery; ensure events contain no recipe/payload and only trigger a fresh authorized fetch.
-- [ ] Install a release-signed APK on a physical Android device and sign in as the invited member.
-- [ ] Verify the full catalogue, detached RSA signature and exact canonical UTF-8 payload before parsing or execution.
-- [ ] Execute each supported native diagnostic action with valid/invalid parameters and permission/confirmation cases.
-- [ ] Submit a repair report and verify the persisted report in the Admin Panel.
-- [ ] Disable/unpublish a tool and verify the server refuses fresh retrieval/execution.
-- [ ] Revoke a device and verify server-side authorization is denied even if the client retains cached data.
-- [ ] Test foreground connection, background recovery, internet interruption/reconnect, expired JWT, rotated refresh token, duplicate/missed events, suspended member and multiple devices.
-- [ ] Test offline mode: cached display may be available according to product policy, but no new server authorization or execution may be inferred while disconnected; revalidate online before execution.
-- [ ] Establish signing-key rotation/revocation and secure backup procedure.
-- [ ] Complete monitoring/alerting, backup/restore rehearsal, telemetry privacy/retention/deletion policy and operational recovery runbook.
+- [ ] Owner login on the production Cloud Run HTTPS origin with the PIN.
+- [ ] Confirm a Member account is denied entry to Owner Admin routes.
+- [ ] Invite a Member and receive/verify the six-digit OTP using the live Auth email hook.
+- [ ] Register a physical Android device and verify ownership binding and duplicate registration behavior.
+- [ ] Create a repair tool, validate the recipe, publish it and verify the immutable signed version in Supabase.
+- [ ] Verify private per-device Realtime event delivery; payloads must contain no recipe and only trigger authenticated refetch.
+- [ ] Install the release-signed APK on a physical Android device and sign in as the invited Member.
+- [ ] Verify the authorized catalogue, exact canonical UTF-8 payload and detached RSA signature before execution.
+- [ ] Execute the supported native diagnostic actions with valid/invalid parameters and permission/confirmation cases.
+- [ ] Submit a report and verify it appears in Admin.
+- [ ] Disable/unpublish a tool and verify online retrieval/execution is denied.
+- [ ] Revoke a device and verify server authorization is denied even if local cached data remains.
+- [ ] Test refresh-token expiry/rotation, network interruption/reconnect, missed/duplicate events, suspended Member and multiple devices.
+- [ ] Complete physical-device compatibility, offline/reconnect and update-install acceptance.
+- [ ] Establish key rotation/revocation, backup/restore, telemetry privacy/retention and operational recovery procedures.
+
+## Live project snapshot
+
+Production Supabase project shwqsljicmhflnvjqjah reports ACTIVE_HEALTHY, region ap-south-1, PostgreSQL 17. Seven migrations are currently applied, nine core public tables have RLS enabled, and fifteen application Edge Functions are active with verify_jwt=true.
+
+Production currently has one active Owner and one active Member, but zero devices, tools, signed versions, assignments, device sync rows and repair runs. The Member catalogue is empty. The production send-auth-email function and Auth Hook are not yet active.
+
+The live Performance Advisor reports the unindexed device_tool_syncs(tool_id, version) foreign key; candidate migration fixes this, but has not been applied to production. The live Security Advisor reports leaked-password protection disabled.
+
+## Staging and hosting limitations
+
+The Primary Supabase organization is Free plan. Database branching was blocked because Pro is required; a quoted branch cost was $0.01344/hour. A separate free project was blocked by the two-active-Free-project limit. No project was paused/deleted and no plan upgraded. GitHub database CI is an ephemeral local stack and is not hosted staging.
+
+The existing Render service mahi-repair-admin-preview still tracks security-hardening/run-repair and is an old preview, not the current production Admin Panel. The deployment guide specifies Google Cloud Run. No Cloud Run production service or health check is verified.
 
 ## Security acceptance boundaries
 
-- CI source/APK scans are marker scans for known privileged-secret patterns; they do not replace a complete secret review or runtime inspection.
-- Deno type checks and contract tests do not prove production Edge Function deployment or database RLS behavior.
-- A private Realtime subscription is a notification channel only. Every catalogue fetch and execution must still be authorized by the server for the active member and non-revoked device.
-- Revocation cannot be observed by an offline device until it reconnects. The server must deny the next online fetch/run request.
-- The APK artifact currently available from CI is debug-signed with an ephemeral key. No release signing proof is recorded.
-- The Cloud Run production service and its runtime settings have not yet been provisioned or smoke-tested.
-- A remote recipe may only combine capabilities already compiled into the installed APK. Adding Kotlin behavior or an Android permission requires an app update.
+- Source/APK scans are marker scans for known privileged-secret patterns; they do not replace a full secret review or runtime inspection.
+- Deno type checks and contract tests do not prove production Edge Function deployment or live Auth Hook activation.
+- A Realtime event is not authorization. Every catalogue fetch and execution must be reauthorized by the server.
+- Revocation cannot be observed by an offline device until it reconnects; the next online request must be denied.
+- The debug APK artifact is not a release-signed package.
+- Remote recipes may combine only capabilities already compiled into the installed APK. New native capabilities or Android permissions require an app update.
 
 ## Release decision
 
-**NOT PRODUCTION READY.** Candidate Admin and Supabase CI are green and Android unit/build checks pass, but the Android Compose emulator gate is still running. In addition, the recipe public-key placeholder, production signing key, release keystore, Cloud Run provisioning, live Supabase migrations/RLS/Realtime, provider secrets/Auth Hook activation, real Owner/member/device workflows and physical-device acceptance remain unverified. Keep PR #8 draft and do not merge/deploy or announce production availability until every required gate above has evidence.
-
-
-## Shared Auth email delivery
-
-- [x] Project-level Send Email Auth Hook source implemented with Standard Webhooks signature verification.
-- [x] Resend primary and Brevo fallback sender implemented; OTP and token-hash verification link are included without changing the Auth-provided redirect.
-- [x] Unit/contract tests cover Android OTP, Admin callback preservation, email-change token mapping and provider fallback.
-- [x] Protected deployment workflow source includes the hook function with JWT verification disabled; it retains manual production and protected-environment gates.
-- [ ] Verify Resend and Brevo sender domains and DNS records.
-- [ ] Add Resend and Brevo API/sender secrets directly in Supabase Edge Function Secrets.
-- [ ] Deploy from main using the protected production workflow.
-- [ ] Generate the Supabase HTTP Hook secret in Authentication → Hooks, add it as SEND_EMAIL_HOOK_SECRET, then save/enable the hook.
-- [ ] Run live Owner Magic Link, Android Member OTP, invitation and Resend-to-Brevo fallback acceptance tests.
-
-See AUTH_EMAIL_DELIVERY.md for the full setup. Code and CI do not mean the production hook is enabled.
-
-
-## Latest candidate CI and live-state refresh — 2026-11-07
-
-Candidate `3207acb104a1ee390ba0a9fa621ae234d5bcfd01` has a fully green CI matrix:
-- Android #42356155144: unit tests, assembleDebug, 6/6 Compose UI tests, source/APK secret scans and debug APK upload passed.
-- Admin Panel #42356155163: production build and static/security checks passed.
-- Supabase Edge Functions #42356155152: all 16 candidate function entrypoints and contract tests passed.
-- Supabase Database #42356155031: all seven migrations and 17 pgTAP checks passed on a fresh ephemeral local Supabase stack.
-
-The debug APK artifact is [#13567644352](https://github.com/mahimahfud-ui/Mahi-Repair/actions/runs/42356155144/artifacts/13567644352); it is not release-signed. The live database has 15 active JWT-verified application functions, one active Owner and one active Member, but no registered devices or published tools/recipe versions. `send-auth-email` remains code-only in this candidate and is not yet deployed or enabled in the live Auth project.
-
-The live Supabase security advisor still flags leaked-password protection as disabled; the performance advisor flags the missing `device_tool_syncs(tool_id, version)` covering index. Cloud Run is not provisioned, and the Android RSA recipe-signing key and production upload keystore are not configured. Do not mark production readiness until the checklist above has real environment evidence.
+NOT PRODUCTION READY. Three candidate workflow suites pass on the current commit, but Android Compose CI is still running. Even after all CI is green, RSA signing, live email delivery, Cloud Run, leaked-password protection, production migration approval, release signing, physical-device testing and the complete Owner/Member/device/repair/report journey remain outstanding. Keep PR #8 draft and do not merge or deploy until the required gates have evidence and approval.
