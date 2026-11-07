@@ -17,9 +17,9 @@
 - Added owner-verified `GET /api/health` readiness response and owner-authenticated `GET /api/ops` snapshot.
 - Added 30-second operational polling with exponential backoff up to five minutes. The snapshot uses real profiles, devices, repair-run and audit-log counts; it does not invent support-session or online state.
 - Invitation history now displays existing `member.invited` audit records. The UI explicitly distinguishes invite-request acceptance by Supabase Auth from email delivery or member acceptance.
-- Device inventory exposes only fields actually sent by Android: server device ID, label, app version, Android version/API, last check-in and revocation state.
+- Device inventory exposes only fields actually sent by Android: server device ID, label, app version, Android version/API, last check-in and revocation state. It also shows the last version stored by the real `device_tool_syncs` catalog endpoint. Its `synced_at` value is the row's first-recorded timestamp because the current Edge Function does not refresh it on upsert; this is historical sync telemetry, not proof of current access or hardware compatibility.
 - Repair-run history and persistent administrative audit history are visible to Owners.
-- Added polling-delay unit tests and updated Render preview branch/health-check configuration.
+- Added polling-delay unit tests, `/api/ops` route-level authorization/response tests using a mocked Supabase client, and updated Render preview branch/health-check configuration.
 
 ## Existing actions retained
 

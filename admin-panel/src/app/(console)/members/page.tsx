@@ -12,6 +12,7 @@ export default async function MembersPage() {
     { data: members, error },
     { data: devices, error: deviceError },
     { data: invitations, error: invitationError },
+    { data: deviceToolSyncs, error: deviceToolSyncError },
   ] = await Promise.all([
     supabase.from('profiles')
       .select('id,email,display_name,role,status,created_at')
@@ -25,9 +26,25 @@ export default async function MembersPage() {
       .eq('action', 'member.invited')
       .order('created_at', { ascending: false })
       .limit(50),
+    supabase.from('device_tool_syncs')
+      .select('device_id,tool_id,version,synced_at')
+      .order('synced_at', { ascending: false })
+      .limit(500),
   ]);
 
+  const syncedToolIds = [...new Set((deviceToolSyncs ?? []).map((sync) => sync.tool_id))];
+  const { data: syncedTools, error: syncedToolError } = syncedToolIds.length
+    ? await supabase.from('repair_tools').select('id,name,slug,status').in('id', syncedToolIds)
+    : { data: [], error: null };
+
   const memberById = new Map((members ?? []).map((member) => [member.id, member]));
+  const toolById = new Map((syncedTools ?? []).map((tool) => [tool.id, tool]));
+  const syncsByDevice = new Map<string, Array<{ device_id: string; tool_id: string; version: number; synced_at: string }>>();
+  for (const sync of deviceToolSyncs ?? []) {
+    const rows = syncsByDevice.get(sync.device_id) ?? [];
+    rows.push(sync);
+    syncsByDevice.set(sync.device_id, rows);
+  }
 
   return (
     <ConsoleShell active="/members" title="Members & Devices" subtitle="Invite trusted users and control account/device access">
@@ -143,6 +160,7 @@ export default async function MembersPage() {
                   <th className="p-4 text-left">MEMBER</th>
                   <th className="p-4 text-left">APP / ANDROID</th>
                   <th className="p-4 text-left">LAST CHECK-IN</th>
+                  <th className="p-4 text-left">RECORDED CATALOGUE SYNC</th>
                   <th className="p-4 text-left">ACCESS / CONTROL</th>
                 </tr>
               </thead>
@@ -158,6 +176,27 @@ export default async function MembersPage() {
                       <td className="p-4">{member?.email || device.user_id}</td>
                       <td className="p-4">{device.app_version} / Android {device.android_version} (API {device.android_api ?? '—'})</td>
                       <td className="whitespace-nowrap p-4 muted">{formatDate(device.last_seen_at)}</td>
+                      <td className="p-4">
+                        {deviceToolSyncError || syncedToolError ? (
+                          <span className="text-red-300">Catalogue sync history unavailable</span>
+                        ) : (syncsByDevice.get(device.id) ?? []).length ? (
+                          <div className="min-w-[220px] space-y-2">
+                            {(syncsByDevice.get(device.id) ?? []).map((sync) => {
+                              const tool = toolById.get(sync.tool_id);
+                              return (
+                                <div key={sync.tool_id}>
+                                  <div>{tool?.name || sync.tool_id}</div>
+                                  <div className="text-[10px] muted">
+                                    v{sync.version} · {tool?.status || 'Unknown status'} · first recorded {formatDate(sync.synced_at)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="muted">No recorded tool sync</span>
+                        )}
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <span>{device.revoked_at ? 'REVOKED' : 'NOT REVOKED'}</span>
@@ -178,7 +217,7 @@ export default async function MembersPage() {
           <p className="p-6 text-center text-xs muted">No Android devices have registered.</p>
         )}
         <p className="border-t border-[#252830] p-4 text-[11px] muted">
-          The Android registration contract supplies device label, app version, Android version/API, last check-in and revocation. Manufacturer/model, pairing state, battery, storage and hardware capability telemetry are not available and are intentionally omitted.
+          The Android registration contract supplies device label, app version, Android version/API, last check-in and revocation. The catalogue column shows the version most recently upserted by the real device sync endpoint. The synced_at value is the row's first-recorded timestamp (the current Edge Function does not refresh it on upsert); this is historical sync telemetry, not proof of current access or hardware compatibility. Manufacturer/model, pairing state, battery, storage and detailed hardware capability telemetry are not uploaded and are intentionally omitted.
         </p>
       </div>
     </ConsoleShell>

@@ -77,7 +77,7 @@ export function LiveOpsDashboard() {
       } catch {
         if (!active) return;
         failures += 1;
-        setError('Live refresh is temporarily unavailable. Existing server-rendered data remains unchanged.');
+        setError('Live refresh is temporarily unavailable. The last successful backend snapshot remains visible.');
         schedule(getLiveOpsPollDelay(failures));
       } finally {
         if (active) setRefreshing(false);

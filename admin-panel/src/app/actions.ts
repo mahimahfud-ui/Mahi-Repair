@@ -30,7 +30,7 @@ export async function requestOwnerSignInLink(emailInput: string) {
   }
 
   const requestHeaders = await headers();
-  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const configuredOrigin = process.env['NEXT_PUBLIC_APP_URL']?.trim();
   let origin: string;
 
   try {
