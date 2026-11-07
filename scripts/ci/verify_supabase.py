@@ -35,6 +35,7 @@ MIGRATIONS = (
     "20261106153000_backend_report_idempotency_and_atomic_catalog.sql",
     "20261106160000_transactional_admin_mutations_audit.sql",
     "20261106170000_atomic_member_catalog_and_device_registration.sql",
+    "20261107091600_add_device_tool_syncs_tool_version_index.sql",
 )
 
 EXPECTED_DENO_TESTS = (

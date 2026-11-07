@@ -2,10 +2,34 @@ name: Android CI
 
 on:
   push:
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".env.example"
+      - "scripts/ci/verify_android_backup.py"
+      - "scripts/ci/secret_scan.py"
+      - ".github/workflows/android-ci.yml"
   pull_request:
     branches:
       - main
       - security-hardening/run-repair
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".env.example"
+      - "scripts/ci/verify_android_backup.py"
+      - "scripts/ci/secret_scan.py"
+      - ".github/workflows/android-ci.yml"
   workflow_dispatch:
 
 permissions:

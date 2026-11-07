@@ -6,7 +6,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(17);
+SELECT plan(18);
 
 -- Synthetic Owner and Member accounts. The auth trigger creates their profiles.
 INSERT INTO auth.users (
@@ -325,6 +325,26 @@ SELECT is(
   ),
   1,
   'first submission and retry produce exactly one stored report'
+);
+
+-- 18: The composite FK is covered without retaining its redundant tool-only index.
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'device_tool_syncs'
+      AND indexname = 'device_tool_syncs_tool_version_idx'
+      AND indexdef LIKE '%(tool_id, version)%'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'device_tool_syncs'
+      AND indexname = 'device_tool_syncs_tool_id_idx'
+  ),
+  'device syncs has a composite tool/version index for its foreign key'
 );
 
 SELECT * FROM finish();
