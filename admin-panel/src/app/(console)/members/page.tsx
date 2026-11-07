@@ -1,7 +1,7 @@
 import { ConsoleShell } from '@/components/console-shell';
 import { requireOwner } from '@/lib/auth/require-owner';
 import { formatDate } from '@/lib/utils';
-import { UserPlus, Smartphone, MailClock } from 'lucide-react';
+import { UserPlus, Smartphone, Mail } from 'lucide-react';
 import { inviteMember, setMemberStatus, setDeviceRevoked } from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
