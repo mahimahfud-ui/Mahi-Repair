@@ -12,7 +12,6 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.example.BuildConfig
 import com.example.domain.actions.ActionRegistry
 import com.example.domain.models.ActionType
 import com.example.domain.models.RecipeStep
@@ -47,7 +46,7 @@ class RemoteSupportService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var actionRegistry: ActionRegistry? = null
     private var sessionId: String? = null
-    private var backendUrl: String = BuildConfig.REMOTE_SUPPORT_API_BASE_URL.trimEnd('/')
+    private var backendUrl: String = "https://mahi-repair-admin.onrender.com"
     private var authToken: String? = null
 
     companion object {
@@ -195,6 +194,7 @@ class RemoteSupportService : Service() {
                 val cmd = json.getJSONObject("command")
                 val commandId = cmd.getString("id")
                 val actionStr = cmd.getString("action")
+                val stepName = cmd.optString("name", actionStr)
                 val paramsJson = cmd.optJSONObject("params") ?: JSONObject()
 
                 val params = mutableMapOf<String, Any?>()
@@ -217,7 +217,7 @@ class RemoteSupportService : Service() {
                 }
 
                 val recipeStep = RecipeStep(
-                    id = commandId,
+                    name = stepName,
                     action = actionType,
                     params = params
                 )
