@@ -39,18 +39,26 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
-  // Restore cooldown from sessionStorage on mount
+  // Restore cooldown from sessionStorage after mount without a synchronous effect update.
   useEffect(() => {
+    let restoreTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const stored = sessionStorage.getItem(SESSION_STORAGE_COOLDOWN_KEY);
       if (stored) {
-        const expiry = parseInt(stored, 10);
-        const remaining = Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
-        if (remaining > 0) setCooldown(remaining);
+        const expiry = Number.parseInt(stored, 10);
+        const remaining = Number.isFinite(expiry)
+          ? Math.max(0, Math.ceil((expiry - Date.now()) / 1000))
+          : 0;
+        if (remaining > 0) {
+          restoreTimer = setTimeout(() => setCooldown(remaining), 0);
+        }
       }
     } catch {
-      // Ignore
+      // Ignore unavailable sessionStorage.
     }
+    return () => {
+      if (restoreTimer !== undefined) clearTimeout(restoreTimer);
+    };
   }, []);
 
   // Cooldown interval ticker
