@@ -46,7 +46,6 @@ remoteSupportRouter.post('/sessions', authenticateToken, requireOwner, async (re
   }
 
   const session = await db.createRemoteSession(device.id, req.user!.id);
-  getSignaling(session.id); // initialize signaling
 
   await db.addAuditLog({
     actorId: req.user!.id,
