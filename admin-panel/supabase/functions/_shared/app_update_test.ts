@@ -9,7 +9,7 @@ const validRelease = {
   mandatory: false,
   releaseNotes: 'Initial signed remote configuration',
   remoteConfig: {
-    featureFlags: { "new-diagnostics": true },
+    featureFlags: { new-diagnostics: true },
     repairTools: { 'run-repair': true },
     ui: { announcement: { title: 'Update ready', body: 'New repair guidance is available.', tone: 'info' } },
     toolMetadata: {},
@@ -22,7 +22,7 @@ const validRelease = {
 Deno.test('app update contract accepts typed data-only remote configuration', () => {
   const parsed = AppUpdateInputSchema.safeParse(validRelease);
   if (!parsed.success) throw new Error(parsed.error.message);
-  if (parsed.data.remoteConfig.featureFlags.new-diagnostics !== true) {
+  if (parsed.data.remoteConfig.featureFlags["new-diagnostics"] !== true) {
     throw new Error('Feature flag was not preserved.');
   }
 });
