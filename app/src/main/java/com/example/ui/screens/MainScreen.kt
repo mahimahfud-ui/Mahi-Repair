@@ -277,7 +277,7 @@ fun MainScreen(
     if (state.isToolPickerOpen) {
         AlertDialog(
             onDismissRequest = onDismissToolPicker,
-            title = { Text("Choose a repair", color = MahiTextPrimary, fontWeight = FontWeight.SemiBold) },
+            title = { Text("Choose a repair", color = MahiTextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("tool_picker_title")) },
             text = {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                     items(state.tools, key = { it.id }) { tool ->
