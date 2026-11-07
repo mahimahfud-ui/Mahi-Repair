@@ -148,7 +148,7 @@ export interface RepairHistoryItem {
 export interface AuthSession {
   isAuthenticated: boolean;
   email: string;
-  role: 'member' | 'owner';
+  role: 'member';
   isOfflineMode: boolean;
 }
 

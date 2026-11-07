@@ -5,18 +5,31 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
 import com.example.data.local.UserSession
+import com.example.data.local.RepairHistoryEntity
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import com.example.domain.engine.ExecutionEvent
+import com.example.domain.engine.PermissionExecutionResult
+import com.example.security.RuntimePermissionContract
 import com.example.domain.models.RepairTool
 import com.example.domain.models.RepairRunReport
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+
+data class PermissionLaunchRequest(
+    val permissionName: String,
+    val androidPermission: String,
+    val wasRequestedBefore: Boolean
+)
 
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
@@ -29,7 +42,10 @@ data class MainUiState(
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
-    val otpSentForEmail: String? = null
+    val otpSentForEmail: String? = null,
+    val history: List<RepairHistoryEntity> = emptyList(),
+    val lastSyncTimestamp: Long = 0L,
+    val pendingReportCount: Int = 0
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -46,6 +62,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
     private val _otpSentForEmail = MutableStateFlow<String?>(null)
+    private val _history = MutableStateFlow<List<RepairHistoryEntity>>(emptyList())
+    private val _lastSyncTimestamp = MutableStateFlow(0L)
+    private val _pendingReportCount = MutableStateFlow(0)
     private val executionMutex = Mutex()
 
     val uiState: StateFlow<MainUiState> = combine(
@@ -59,7 +78,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         engine.engineState,
         _authStatusMessage,
         _isAuthLoading,
-        _otpSentForEmail
+        _otpSentForEmail,
+        _history,
+        _lastSyncTimestamp,
+        _pendingReportCount
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
@@ -72,7 +94,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             executionState = values[7] as ExecutionEvent,
             authStatusMessage = values[8] as String?,
             isAuthLoading = values[9] as Boolean,
-            otpSentForEmail = values[10] as String?
+            otpSentForEmail = values[10] as String?,
+            history = values[11] as List<RepairHistoryEntity>,
+            lastSyncTimestamp = values[12] as Long,
+            pendingReportCount = values[13] as Int
         )
     }.stateIn(
         viewModelScope,
@@ -82,7 +107,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            toolRepo.lastSyncFlow.collect { timestamp -> _lastSyncTimestamp.value = timestamp }
+        }
+        viewModelScope.launch {
+            toolRepo.pendingReportCountFlow.collect { count -> _pendingReportCount.value = count }
+        }
+        viewModelScope.launch {
             authRepo.sessionFlow.collectLatest { session ->
+                if (session.isAuthenticated) {
+                    app.historyRepository.getHistoryFlow(session.email).collect { records ->
+                        _history.value = records
+                    }
+                } else {
+                    _history.value = emptyList()
+                }
+            }
+        }
+        viewModelScope.launch {
+            toolRepo.accessDeniedMessage.collectLatest { message ->
+                if (!message.isNullOrBlank()) _authStatusMessage.value = message
+            }
+        }
+        viewModelScope.launch {
+            authRepo.sessionFlow.collect { session ->
                 if (session.isAuthenticated) {
                     refreshTools()
                 } else {
@@ -173,11 +220,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 val uploadResult = toolRepo.recordRepairRun(report)
+                _pendingReportCount.value = toolRepo.pendingReportCount()
                 _repairStatusMessage.value = if (uploadResult.isSuccess) {
-                    "Repair completed."
+                    "Repair completed. Report saved on this device and queued for secure upload."
                 } else {
-                    "The repair finished, but its report could not be sent. Check your connection."
+                    "The repair finished, but its report could not be saved locally."
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 _canRetryAvailability.value = true
                 _repairStatusMessage.value = when {
@@ -194,6 +244,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun prepareRuntimePermissionRequest(permissionName: String): PermissionLaunchRequest? {
+        val prompt = engine.engineState.value as? ExecutionEvent.PromptUserAction ?: return null
+        if (prompt.type != com.example.domain.actions.UserActionType.PERMISSION ||
+            prompt.payload["permission"] != permissionName
+        ) return null
+
+        val spec = RuntimePermissionContract.resolve(permissionName) ?: return null
+        val androidPermission = spec.platformPermission ?: run {
+            engine.submitPermissionResult(PermissionExecutionResult.GRANTED)
+            return null
+        }
+        if (ContextCompat.checkSelfPermission(getApplication(), androidPermission) == PackageManager.PERMISSION_GRANTED) {
+            engine.submitPermissionResult(PermissionExecutionResult.GRANTED)
+            return null
+        }
+
+        val wasRequestedBefore = app.preferencesManager.wasRuntimePermissionRequested(permissionName)
+        app.preferencesManager.markRuntimePermissionRequested(permissionName)
+        return PermissionLaunchRequest(permissionName, androidPermission, wasRequestedBefore)
+    }
+
+    fun onRuntimePermissionResult(
+        permissionName: String,
+        granted: Boolean,
+        permanentlyDenied: Boolean
+    ) {
+        val prompt = engine.engineState.value as? ExecutionEvent.PromptUserAction ?: return
+        if (prompt.type != com.example.domain.actions.UserActionType.PERMISSION ||
+            prompt.payload["permission"] != permissionName
+        ) return
+        val result = when {
+            granted -> PermissionExecutionResult.GRANTED
+            permanentlyDenied -> PermissionExecutionResult.PERMANENTLY_DENIED
+            else -> PermissionExecutionResult.DENIED
+        }
+        engine.submitPermissionResult(result)
+    }
+
+    fun onCancelRuntimePermission() {
+        engine.submitPermissionResult(PermissionExecutionResult.CANCELLED)
+    }
+
     fun onSubmitUserAction(approved: Boolean) {
         engine.submitUserActionResponse(approved)
     }
@@ -202,11 +294,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         engine.reset()
     }
 
+    fun onSignOut() {
+        viewModelScope.launch {
+            try {
+                authRepo.signOut()
+                _otpSentForEmail.value = null
+                _authStatusMessage.value = null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // AuthRepository clears the local credentials even when remote sign-out fails.
+            }
+        }
+    }
+
     fun onRequestEmailOtp(email: String) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authStatusMessage.value = null
-            val result = authRepo.requestEmailOtp(email)
+            val result = try {
+                authRepo.requestEmailOtp(email)
+            } catch (cancelled: CancellationException) {
+                _isAuthLoading.value = false
+                throw cancelled
+            }
             _isAuthLoading.value = false
             if (result.isSuccess) {
                 _otpSentForEmail.value = email
@@ -222,9 +333,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authStatusMessage.value = null
-            val result = authRepo.verifyEmailOtp(email, otp)
+            val result = try {
+                authRepo.verifyEmailOtp(email, otp)
+            } catch (cancelled: CancellationException) {
+                _isAuthLoading.value = false
+                throw cancelled
+            }
             _isAuthLoading.value = false
             if (result.isSuccess) {
+                toolRepo.clearAccessDeniedMessage()
+                toolRepo.enqueuePendingReportUploads()
                 _authStatusMessage.value = "Welcome to Mahi Repair!"
                 _otpSentForEmail.value = null
             } else {

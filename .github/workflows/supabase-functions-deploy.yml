@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Apply migrations and deploy 16 Edge Functions
+    name: Apply reviewed migrations and deploy protected Edge Functions
     if: github.ref == 'refs/heads/main' && inputs.confirm_production == 'DEPLOY'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -32,10 +32,12 @@ jobs:
 
     steps:
       - name: Checkout main
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
 
       - name: Set up Supabase CLI v2.122.1
-        uses: supabase/setup-cli@v3
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3
         with:
           version: 2.122.1
 
@@ -47,35 +49,47 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SUPABASE_ACCESS_TOKEN}" || {
+          test -n "$SUPABASE_ACCESS_TOKEN" || {
             echo "::error::Add SUPABASE_ACCESS_TOKEN to the supabase-production GitHub environment."
             exit 1
           }
-          test -n "${SUPABASE_DB_PASSWORD}" || {
+          test -n "$SUPABASE_DB_PASSWORD" || {
             echo "::error::Add SUPABASE_DB_PASSWORD to the supabase-production GitHub environment."
             exit 1
           }
-          test -n "${ADMIN_ORIGIN}" || {
-            echo "::error::Set the ADMIN_ORIGIN GitHub environment variable to the exact HTTPS Render origin."
+          test -n "$ADMIN_ORIGIN" || {
+            echo "::error::Set ADMIN_ORIGIN to the exact HTTPS Admin Panel origin."
             exit 1
           }
-          python - <<'PY'
+          python3 - <<'PY'
           import os
           from urllib.parse import urlparse
+
           value = os.environ["ADMIN_ORIGIN"]
           parsed = urlparse(value)
-          if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-              raise SystemExit("ADMIN_ORIGIN must be one exact HTTPS origin without a path, query or fragment.")
+          if (
+              parsed.scheme != "https"
+              or not parsed.netloc
+              or parsed.path != ""
+              or parsed.query
+              or parsed.fragment
+              or value != f"https://{parsed.netloc}"
+              or "@" in parsed.netloc
+          ):
+              raise SystemExit(
+                  "ADMIN_ORIGIN must be the exact canonical HTTPS origin "
+                  "(scheme + host + optional port only; no trailing slash, path, query or fragment)."
+              )
           PY
+          python3 ../scripts/ci/verify_supabase.py
 
       - name: Link the production Supabase project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          supabase link --project-ref "$PROJECT_REF"
+        run: supabase link --project-ref "$PROJECT_REF"
 
-      - name: Verify signing private key is already stored in Supabase
+      - name: Verify signing private key already exists in Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         shell: bash
@@ -83,12 +97,11 @@ jobs:
           set -euo pipefail
           secret_names="$(supabase secrets list)"
           if ! grep -Fq "RECIPE_SIGNING_PRIVATE_KEY_PEM" <<< "$secret_names"; then
-            echo "::error::Add RECIPE_SIGNING_PRIVATE_KEY_PEM directly in Supabase Dashboard → Edge Function Secrets before deployment."
+            echo "::error::Provision RECIPE_SIGNING_PRIVATE_KEY_PEM directly in Supabase Edge Function Secrets before deployment."
             exit 1
           fi
 
-
-      - name: Verify email delivery secrets exist in Supabase
+      - name: Verify Auth email delivery provider secrets exist in Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         shell: bash
@@ -101,35 +114,38 @@ jobs:
             BREVO_API_KEY
             BREVO_FROM_EMAIL
           )
+          missing=()
           for secret_name in "${required_secrets[@]}"; do
-            if ! grep -Fq "${secret_name}" <<< "${secret_names}"; then
-              echo "::error::Add ${secret_name} directly in Supabase Dashboard → Edge Function Secrets before deployment."
-              exit 1
+            if ! grep -Fq "$secret_name" <<< "$secret_names"; then
+              missing+=("$secret_name")
             fi
           done
+          if (("${#missing[@]}" > 0)); then
+            printf '::error::Missing Supabase email provider secret names: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          # SEND_EMAIL_HOOK_SECRET is generated later in the Supabase Auth Hook
+          # dashboard. Do not require it until the hook is created.
 
-      - name: Configure the Admin Panel origin in Supabase
+      - name: Configure the exact Admin Panel origin in Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ADMIN_ORIGIN: ${{ vars.ADMIN_ORIGIN }}
-        run: |
-          supabase secrets set "ADMIN_ORIGIN=$ADMIN_ORIGIN"
+        run: supabase secrets set "ADMIN_ORIGIN=$ADMIN_ORIGIN"
 
       - name: Preview pending database migrations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          supabase db push --linked --dry-run
+        run: supabase db push --linked --dry-run
 
       - name: Apply reviewed database migrations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          supabase db push --linked --yes
+        run: supabase db push --linked --yes
 
-      - name: Deploy all 15 Edge Functions with JWT verification enabled
+      - name: Deploy all 16 Edge Functions using their reviewed JWT policy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         shell: bash
@@ -151,21 +167,19 @@ jobs:
             get-signed-repair-tool
             register-device
             submit-repair-run
+            send-auth-email
           )
           for function in "${functions[@]}"; do
-            echo "::group::Deploying ${function}"
-            supabase functions deploy "${function}" --project-ref "$PROJECT_REF"
+            echo "::group::Deploying $function"
+            # send-auth-email has verify_jwt=false in supabase/config.toml and
+            # validates the Standard Webhooks signature itself. The other 15
+            # protected application functions retain verify_jwt=true.
+            supabase functions deploy "$function" --project-ref "$PROJECT_REF"
             echo "::endgroup::"
           done
-
-      - name: Deploy the signed Supabase Auth email hook
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy send-auth-email --no-verify-jwt --project-ref "$PROJECT_REF"
 
       - name: Verify deployed migration history
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          supabase migration list --linked
+        run: supabase migration list --linked

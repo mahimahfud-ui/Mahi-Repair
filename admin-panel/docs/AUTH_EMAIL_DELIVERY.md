@@ -47,13 +47,13 @@ SUPABASE_URL is injected by Supabase Edge Functions; do not create a custom secr
 
 ## Deploy and enable the hook
 
-The protected production workflow remains gated to main, an explicit DEPLOY input and the protected supabase-production environment. It checks required secret names without printing values, deploys the 15 application functions with JWT verification, then deploys send-auth-email with JWT verification disabled. The hook function verifies the Standard Webhooks signature itself.
+The protected production workflow remains gated to main, an explicit DEPLOY input and the protected supabase-production environment. It checks required secret names without printing values, deploys all 16 functions from the reviewed function inventory. The 15 application functions require JWT verification. `send-auth-email` is the sole exception: `config.toml` sets `verify_jwt = false` because Supabase Auth signs its HTTP Hook requests; the function verifies the Standard Webhooks signature itself. The CLI deploy command does not use `--no-verify-jwt`.
 
 Prepare and enable the hook in this order:
 
 1. Verify the sending domain and sender address in both Resend and Brevo.
 2. Add RESEND_API_KEY, RESEND_FROM_EMAIL, BREVO_API_KEY and BREVO_FROM_EMAIL directly in Supabase Edge Function Secrets.
-3. Run the protected production workflow from main with its required reviewer approval and DEPLOY input. It verifies provider secret names and deploys the signed hook endpoint with JWT verification disabled. The hook is not registered in Auth yet, so no Auth emails use it at this point.
+3. Run the protected production workflow from main with its required reviewer approval and DEPLOY input. It verifies provider secret names and deploys the signed hook endpoint using its scoped `verify_jwt = false` config setting (without a CLI JWT-disable flag). The hook is not registered in Auth yet, so no Auth emails use it at this point.
 4. Open Supabase Dashboard → Authentication → Hooks. Start a new Send Email hook, choose HTTP and set the endpoint to https://shwqsljicmhflnvjqjah.supabase.co/functions/v1/send-auth-email.
 5. Click Generate Secret and copy the full v1,whsec_... value, but do not click Create/Save yet.
 6. Add that value as SEND_EMAIL_HOOK_SECRET directly in Supabase Edge Function Secrets.

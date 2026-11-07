@@ -4,53 +4,120 @@ on:
   push:
     paths:
       - "admin-panel/supabase/functions/**"
+      - "admin-panel/supabase/migrations/**"
+      - "admin-panel/supabase/config.toml"
+      - "contract-tests/**"
+      - "scripts/ci/**"
       - ".github/workflows/supabase-functions-ci.yml"
+      - ".github/workflows/supabase-functions-deploy.yml"
   pull_request:
     branches:
       - main
+      - security-hardening/run-repair
     paths:
       - "admin-panel/supabase/functions/**"
+      - "admin-panel/supabase/migrations/**"
+      - "admin-panel/supabase/config.toml"
+      - "contract-tests/**"
+      - "scripts/ci/**"
       - ".github/workflows/supabase-functions-ci.yml"
+      - ".github/workflows/supabase-functions-deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: supabase-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   check:
-    name: Deno type-check all Edge Functions
+    name: Edge Function, contract and migration integrity
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
+      # PR #5 remains separate. This read-only overlay exists only in the runner
+      # until the target tree contains the complete reviewed Agent 2 migration set.
+      - name: Combine reviewed Agent 2 backend source for CI validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          final_migration="admin-panel/supabase/migrations/20261106170000_atomic_member_catalog_and_device_registration.sql"
+          if [[ ! -f "$final_migration" ]]; then
+            expected_backend_sha="83a050413cff9f15a3fd0f881ff3e978287e533d"
+            git fetch --no-tags origin refs/heads/agent/supabase-backend-realtime
+            actual_backend_sha="$(git rev-parse FETCH_HEAD)"
+            if [[ "$actual_backend_sha" != "$expected_backend_sha" ]]; then
+              echo "::error::Agent 2 backend branch changed from reviewed SHA $expected_backend_sha to $actual_backend_sha. Review the new backend head and update the pin before testing."
+              exit 1
+            fi
+            git checkout "$actual_backend_sha" -- \
+              admin-panel/supabase/functions \
+              admin-panel/supabase/migrations
+            echo "Validated against Agent 2 backend commit $actual_backend_sha."
+          else
+            echo "The target tree already contains the complete Agent 2 migration inventory; no source overlay needed."
+          fi
+          test -f "$final_migration"
+
+      - name: Test the production JWT-verification deployment guard
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+
+      - name: Verify Supabase function/migration inventory and deployment gates
+        run: python3 scripts/ci/verify_supabase.py
+
+      - name: Scan combined source for privileged credentials
+        run: python3 scripts/ci/secret_scan.py --source
+
+      - name: Set up Deno 2
+        uses: denoland/setup-deno@909cc5acb0fdd60627fb858598759246509fa755 # v2.0.2
         with:
-          deno-version: v2.x
+          deno-version: 2.x
           cache: true
-          cache-hash: ${{ hashFiles('admin-panel/supabase/functions/**/deno.json', 'admin-panel/supabase/functions/**/*.ts') }}
+          cache-hash: ${{ hashFiles('admin-panel/supabase/functions/**/*.ts', 'admin-panel/supabase/migrations/**/*.sql', 'admin-panel/supabase/config.toml', 'contract-tests/**') }}
 
-      - name: Verify function source inventory
+      - name: Discover all 16 Edge Function entrypoints and recursive Deno tests
+        id: inventory
         shell: bash
         run: |
-          count="$(find admin-panel/supabase/functions -mindepth 2 -maxdepth 2 -name index.ts -type f | wc -l)"
-          echo "Found ${count} Edge Function entrypoints."
-          test "${count}" -eq 16
+          set -euo pipefail
+          mapfile -t functions < <(find admin-panel/supabase/functions -mindepth 2 -maxdepth 2 -type f -name index.ts | sort)
+          mapfile -t tests < <(find admin-panel/supabase/functions -type f -name '*_test.ts' | sort)
+          test "${#functions[@]}" -eq 16
+          test "${#tests[@]}" -ge 8
+          printf 'Validated %s Edge Function entrypoints and discovered %s recursive Deno test files.\\n' "${#functions[@]}" "${#tests[@]}"
+          printf '%s\\n' "${functions[@]}"
+          printf '%s\\n' "${tests[@]}"
 
-      - name: Type-check every Edge Function entrypoint
+      - name: Deno type-check all Edge Function entrypoints
         shell: bash
         run: |
-          mapfile -t functions < <(find admin-panel/supabase/functions -mindepth 2 -maxdepth 2 -name index.ts -type f | sort)
+          set -euo pipefail
+          mapfile -t functions < <(find admin-panel/supabase/functions -mindepth 2 -maxdepth 2 -type f -name index.ts | sort)
           deno check "${functions[@]}"
 
-      - name: Type-check shared Edge Function modules and contract tests
-        run: deno check admin-panel/supabase/functions/_shared/http.ts admin-panel/supabase/functions/_shared/recipe.ts admin-panel/supabase/functions/_shared/sign.ts admin-panel/supabase/functions/_shared/run-report.ts admin-panel/supabase/functions/_shared/recipe_test.ts admin-panel/supabase/functions/_shared/run_report_test.ts admin-panel/supabase/functions/send-auth-email/mailer.ts admin-panel/supabase/functions/send-auth-email/index_test.ts
+      - name: Type-check shared modules and every discovered Deno test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tests < <(find admin-panel/supabase/functions -type f -name '*_test.ts' | sort)
+          deno check \
+            admin-panel/supabase/functions/_shared/http.ts \
+            admin-panel/supabase/functions/_shared/recipe.ts \
+            admin-panel/supabase/functions/_shared/sign.ts \
+            admin-panel/supabase/functions/_shared/run-report.ts \
+            "${tests[@]}"
 
-      - name: Run canonical Run Repair contract test
-        run: deno test --allow-read=contract-tests admin-panel/supabase/functions/_shared/recipe_test.ts admin-panel/supabase/functions/_shared/run_report_test.ts admin-panel/supabase/functions/send-auth-email/index_test.ts
+      - name: Run all recursive Deno contract tests with required read permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tests < <(find admin-panel/supabase/functions -type f -name '*_test.ts' | sort)
+          test "${#tests[@]}" -ge 7
+          deno test \
+            --allow-read=contract-tests,admin-panel/supabase/migrations,admin-panel/supabase/functions \
+            "${tests[@]}"

@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import com.example.domain.models.ActionType
 import com.example.domain.models.RecipeStep
 import com.example.domain.models.StepStatus
+import com.example.security.RuntimePermissionContract
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -130,8 +132,8 @@ class ActionRegistry(private val context: Context) {
             }
             ActionType.REQUEST_OWN_APP_PERMISSION -> {
                 val permission = getStringParam(p, "permission")
-                if (permission.isNullOrBlank()) {
-                    Result.failure(IllegalArgumentException("Action REQUEST_OWN_APP_PERMISSION requires 'permission'"))
+                if (permission.isNullOrBlank() || !RuntimePermissionContract.isAllowlisted(permission)) {
+                    Result.failure(IllegalArgumentException("Action REQUEST_OWN_APP_PERMISSION contains an unsupported permission"))
                 } else {
                     Result.success(Unit)
                 }
@@ -160,6 +162,8 @@ class ActionRegistry(private val context: Context) {
                 ActionType.VERIFY_INTERNET -> executeVerifyInternet(step.params)
                 ActionType.VERIFY_DNS -> executeVerifyDns(step.params)
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             ActionResult(
                 status = StepStatus.FAILED,
@@ -507,43 +511,34 @@ class ActionRegistry(private val context: Context) {
 
     // --- Action 11: REQUEST_OWN_APP_PERMISSION ---
     private fun executeRequestPermission(params: Map<String, Any?>): ActionResult {
-        val permissionName = getStringParam(params, "permission") ?: "POST_NOTIFICATIONS"
-        val androidPermission = when (permissionName) {
-            "POST_NOTIFICATIONS" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                android.Manifest.permission.POST_NOTIFICATIONS
-            } else null
-            "CAMERA" -> android.Manifest.permission.CAMERA
-            "ACCESS_FINE_LOCATION" -> android.Manifest.permission.ACCESS_FINE_LOCATION
-            "READ_MEDIA_IMAGES" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                android.Manifest.permission.READ_MEDIA_IMAGES
-            } else {
-                android.Manifest.permission.READ_EXTERNAL_STORAGE
-            }
-            else -> permissionName
-        }
-
-        if (androidPermission == null) {
-            return ActionResult(
+        val permissionName = getStringParam(params, "permission")
+            ?: return ActionResult(StepStatus.FAILED, "The requested app permission is missing.")
+        val spec = RuntimePermissionContract.resolve(permissionName)
+            ?: return ActionResult(StepStatus.FAILED, "This repair requested an unsupported Android permission.")
+        val androidPermission = spec.platformPermission
+            ?: return ActionResult(
                 status = StepStatus.COMPLETED,
                 message = "Permission $permissionName is not required on this Android version.",
-                details = mapOf("permission" to permissionName, "granted" to "true")
+                details = mapOf("permission" to permissionName, "granted" to "true", "notRequired" to "true")
             )
-        }
 
         val isGranted = ContextCompat.checkSelfPermission(context, androidPermission) == PackageManager.PERMISSION_GRANTED
         return if (isGranted) {
             ActionResult(
                 status = StepStatus.COMPLETED,
-                message = "Permission $permissionName is granted.",
+                message = "Permission $permissionName is already granted.",
                 details = mapOf("permission" to permissionName, "granted" to "true")
             )
         } else {
             ActionResult(
                 status = StepStatus.WAITING_USER,
-                message = "Permission $permissionName requires user approval.",
+                message = "Android must confirm permission $permissionName before this repair can continue.",
                 requiresUserAction = true,
                 userActionType = UserActionType.PERMISSION,
-                userActionPayload = mapOf("permission" to permissionName, "androidPermission" to androidPermission)
+                userActionPayload = mapOf(
+                    "permission" to permissionName,
+                    "androidPermission" to androidPermission
+                )
             )
         }
     }

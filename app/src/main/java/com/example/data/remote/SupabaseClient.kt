@@ -16,6 +16,7 @@ import com.example.data.remote.dto.SubmitRunResponse
 import com.example.data.remote.dto.VerifyOtpRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,6 +27,8 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class InvalidAuthSessionException(message: String) : IOException(message)
+
+class ServerAuthorizationException(val statusCode: Int, message: String) : IOException(message)
 
 class SupabaseClient(
     private val baseUrl: String = BuildConfig.SUPABASE_URL.trimEnd('/'),
@@ -77,9 +80,13 @@ class SupabaseClient(
                     Result.success(Unit)
                 } else {
                     val errBody = it.body?.string() ?: ""
-                    Result.failure(IOException("Failed to send OTP (HTTP ${it.code}): $errBody"))
+                    Result.failure(IOException("Failed to send OTP (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -113,9 +120,11 @@ class SupabaseClient(
                         ?: return@withContext Result.failure(IOException("Empty session response"))
                     Result.success(session)
                 } else {
-                    Result.failure(IOException("OTP verification failed (HTTP ${it.code}): $resBody"))
+                    Result.failure(IOException("OTP verification failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -158,6 +167,8 @@ class SupabaseClient(
                     Result.failure(IOException("Session refresh failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -182,6 +193,8 @@ class SupabaseClient(
                 if (it.isSuccessful || it.code == 401) Result.success(Unit)
                 else Result.failure(IOException("Server sign-out failed (HTTP ${it.code})."))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -216,9 +229,11 @@ class SupabaseClient(
                         ?: return@withContext Result.failure(IOException("Empty device registration response"))
                     Result.success(parsed.data.deviceId)
                 } else {
-                    Result.failure(IOException("Device registration failed (HTTP ${it.code}): $resBody"))
+                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "This account or device is not authorized.")) else Result.failure(IOException("Device registration failed (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -250,11 +265,13 @@ class SupabaseClient(
                 val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
                     val envelope = moshi.adapter(GetToolsResponse::class.java).fromJson(resBody)
-                    Result.success(envelope?.data ?: emptyList())
+                    if (envelope == null) Result.failure(IOException("Repair catalog response was empty or malformed.")) else Result.success(envelope.data)
                 } else {
-                    Result.failure(IOException("Failed to fetch tools (HTTP ${it.code}): $resBody"))
+                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "Access to the repair catalog was denied.")) else Result.failure(IOException("Failed to fetch repair tools (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -289,25 +306,46 @@ class SupabaseClient(
                         ?: return@withContext Result.failure(IOException("Empty signed recipe response"))
                     Result.success(recipe)
                 } else {
-                    Result.failure(IOException("Failed to fetch signed recipe (HTTP ${it.code}): $resBody"))
+                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "This repair is no longer authorized for this device.")) else Result.failure(IOException("Failed to fetch signed repair (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
+    /** Persist and replay the same compact server request for every idempotent retry. */
+    fun encodeSubmitRunRequest(report: SubmitRunRequest): String =
+        moshi.adapter(SubmitRunRequest::class.java).toJson(report)
+
+    fun decodeSubmitRunRequest(payloadJson: String): SubmitRunRequest =
+        requireNotNull(moshi.adapter(SubmitRunRequest::class.java).fromJson(payloadJson)) {
+            "The queued repair request is malformed."
+        }
+
     /**
      * Submit repair run execution report to Supabase backend.
+     * A serialized body may be supplied by the durable outbox to preserve exact retries.
      */
-    suspend fun submitRepairRun(report: SubmitRunRequest, authToken: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun submitRepairRun(
+        report: SubmitRunRequest,
+        authToken: String,
+        serializedRequestJson: String? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
             return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
         }
 
         val url = "$baseUrl/functions/v1/submit-repair-run"
         val adapter = moshi.adapter(SubmitRunRequest::class.java)
-        val bodyJson = adapter.toJson(report)
+        val bodyJson = serializedRequestJson ?: adapter.toJson(report)
+        val persistedRequest = adapter.fromJson(bodyJson)
+            ?: return@withContext Result.failure(IOException("The queued repair request is malformed."))
+        if (persistedRequest.runId != report.runId) {
+            return@withContext Result.failure(IOException("The queued repair request ID does not match its outbox key."))
+        }
 
         val request = Request.Builder()
             .url(url)
@@ -323,11 +361,17 @@ class SupabaseClient(
                 val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
                     val parsed = moshi.adapter(SubmitRunResponse::class.java).fromJson(resBody)
-                    Result.success(parsed?.data?.runId ?: "")
+                        ?: return@withContext Result.failure(IOException("Report acceptance response was empty."))
+                    if (!parsed.data.accepted || parsed.data.runId != report.runId) {
+                        return@withContext Result.failure(IOException("Server did not confirm acceptance of this repair report."))
+                    }
+                    Result.success(parsed.data.runId)
                 } else {
-                    Result.failure(IOException("Failed to submit run report (HTTP ${it.code}): $resBody"))
+                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "The server denied this report submission.")) else Result.failure(IOException("Failed to submit run report (HTTP ${it.code})."))
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }

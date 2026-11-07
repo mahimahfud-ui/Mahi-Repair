@@ -1,6 +1,8 @@
 package com.example.sync
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +33,25 @@ class SupabaseRealtimeClientTest {
 
         assertNull(unknown)
         assertNull(notBroadcast)
+    }
+
+    @Test
+    fun realtimeDeduplicatorRejectsMissingIdsAndRepeatedEvents() {
+        val deduplicator = RealtimeEventDeduplicator()
+        assertFalse(deduplicator.shouldProcess(null))
+        assertFalse(deduplicator.shouldProcess(""))
+        assertTrue(deduplicator.shouldProcess("event-1"))
+        assertFalse(deduplicator.shouldProcess("event-1"))
+        assertTrue(deduplicator.shouldProcess("event-2"))
+    }
+
+    @Test
+    fun realtimeDeduplicatorBoundsItsMemoryAndAllowsOldIdsAfterEviction() {
+        val deduplicator = RealtimeEventDeduplicator(capacity = 2)
+        assertTrue(deduplicator.shouldProcess("event-1"))
+        assertTrue(deduplicator.shouldProcess("event-2"))
+        assertTrue(deduplicator.shouldProcess("event-3"))
+        assertTrue(deduplicator.shouldProcess("event-1"))
     }
 
     @Test

@@ -1,0 +1,62 @@
+name: Supabase Database CI
+
+on:
+  push:
+    branches:
+      - main
+      - security-hardening/run-repair
+      - integration/mahi-repair-release-candidate
+    paths:
+      - "admin-panel/supabase/migrations/**"
+      - "admin-panel/supabase/tests/**"
+      - "admin-panel/supabase/config.toml"
+      - ".github/workflows/supabase-database-ci.yml"
+  pull_request:
+    branches:
+      - main
+      - security-hardening/run-repair
+    paths:
+      - "admin-panel/supabase/migrations/**"
+      - "admin-panel/supabase/tests/**"
+      - "admin-panel/supabase/config.toml"
+      - ".github/workflows/supabase-database-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-database-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: Fresh migrations, RLS and report idempotency
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: admin-panel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Uses a disposable Docker-backed local Supabase stack. No project ref,
+      # database password, production secret or remote link is supplied.
+      - name: Start isolated local Supabase stack
+        run: supabase start
+
+      - name: Recreate database and apply every tracked migration
+        run: supabase db reset
+
+      - name: Run pgTAP RLS and idempotency acceptance tests
+        run: supabase test db
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop --no-backup

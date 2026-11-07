@@ -12,28 +12,18 @@ import { ActionRegistry } from './engine/ActionRegistry';
 import { RecipeExecutionEngine } from './engine/RecipeExecutionEngine';
 import { AuthScreen } from './components/AuthScreen';
 import { MainScreen } from './components/MainScreen';
-import { AdminConsole } from './components/AdminConsole';
 
 const LOCAL_STORAGE_KEY_HISTORY = 'mahi_repair_history_v1';
 const LOCAL_STORAGE_KEY_CONFIG = 'mahi_repair_backend_config_v1';
-const LOCAL_STORAGE_KEY_SESSION = 'mahi_repair_session_v1';
 
 export const App: React.FC = () => {
   // Session state
-  const [session, setSession] = useState<AuthSession>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // Fallback
-    }
-    // Default to active authenticated demo user for instant accessibility
-    return {
-      isAuthenticated: true,
-      email: 'alex.owner@example.com',
-      role: 'owner',
-      isOfflineMode: true,
-    };
+  // The root Vite app is a legacy member preview, never an Owner console.
+  const [session, setSession] = useState<AuthSession>({
+    isAuthenticated: false,
+    email: '',
+    role: 'member',
+    isOfflineMode: false,
   });
 
   // Tools catalog
@@ -95,7 +85,6 @@ export const App: React.FC = () => {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
-  const [viewMode, setViewMode] = useState<'client' | 'admin'>('client');
 
   // Engine ref
   const engineRef = useRef<RecipeExecutionEngine | null>(null);
@@ -135,14 +124,6 @@ export const App: React.FC = () => {
 
   const handleLogin = (newSession: AuthSession) => {
     setSession(newSession);
-    try {
-      localStorage.setItem(
-        LOCAL_STORAGE_KEY_SESSION,
-        JSON.stringify(newSession)
-      );
-    } catch {
-      // Ignore
-    }
   };
 
   const handleSignOut = () => {
@@ -153,11 +134,6 @@ export const App: React.FC = () => {
       isOfflineMode: false,
     };
     setSession(defaultLoggedOut);
-    try {
-      localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION);
-    } catch {
-      // Ignore
-    }
   };
 
   const handleSync = () => {
@@ -213,16 +189,6 @@ export const App: React.FC = () => {
     return <AuthScreen onLogin={handleLogin} />;
   }
 
-  if (viewMode === 'admin') {
-    return (
-      <AdminConsole
-        tools={tools}
-        onUpdateTools={(newTools) => setTools(newTools)}
-        onSwitchToClient={() => setViewMode('client')}
-      />
-    );
-  }
-
   return (
     <MainScreen
       session={session}
@@ -239,7 +205,6 @@ export const App: React.FC = () => {
       onClearHistory={handleClearHistory}
       onSaveBackendConfig={handleSaveBackendConfig}
       onSignOut={handleSignOut}
-      onSwitchToAdmin={() => setViewMode('admin')}
     />
   );
 };
