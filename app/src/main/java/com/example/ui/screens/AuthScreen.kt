@@ -10,10 +10,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +51,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -70,17 +79,25 @@ fun AuthScreen(
 ) {
     var emailInput by remember { mutableStateOf("") }
     var otpInput by remember { mutableStateOf("") }
+    val statusMessage = state.authStatusMessage
+    val statusIsError = statusMessage?.let { message ->
+        listOf("error", "failed", "invalid", "expired", "unauthorized", "denied", "unable", "couldn't")
+            .any { marker -> message.contains(marker, ignoreCase = true) }
+    } == true
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MahiBlack)
-            .padding(24.dp)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .imePadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
             .testTag("auth_screen"),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -207,7 +224,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(18.dp))
 
                         Button(
-                            onClick = { onRequestOtp(emailInput) },
+                            onClick = { onRequestOtp(emailInput.trim()) },
                             enabled = emailInput.isNotBlank() && !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
@@ -246,7 +263,7 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = otpInput,
-                            onValueChange = { if (it.length <= 6) otpInput = it },
+                            onValueChange = { value -> otpInput = value.filter { it in '0'..'9' }.take(6) },
                             label = { Text("6-Digit Code") },
                             leadingIcon = {
                                 Icon(Icons.Default.Key, contentDescription = null, tint = MahiTextSecondary)
@@ -294,24 +311,27 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedButton(
-                            onClick = { onRequestOtp(state.otpSentForEmail ?: emailInput) },
+                            onClick = { onRequestOtp(state.otpSentForEmail ?: emailInput.trim()) },
+                            enabled = !state.isAuthLoading,
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, MahiCardStroke),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("resend_otp_button")
                         ) {
                             Text("Resend Code", color = MahiTextSecondary, fontSize = 12.sp)
                         }
                     }
 
                     // Status / error notification
-                    AnimatedVisibility(visible = state.authStatusMessage != null) {
+                    AnimatedVisibility(visible = statusMessage != null) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = state.authStatusMessage ?: "",
-                            color = if (state.authStatusMessage?.contains("error", ignoreCase = true) == true) MahiRedPrimary else MahiTextSecondary,
+                            text = statusMessage.orEmpty(),
+                            color = if (statusIsError) MahiRedPrimary else MahiTextSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            }
                         )
                     }
                 }

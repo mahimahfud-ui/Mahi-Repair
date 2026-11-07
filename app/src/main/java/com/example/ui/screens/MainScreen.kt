@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -84,6 +88,7 @@ fun MainScreen(
         ) {
             Column(
                 modifier = Modifier
+                    .widthIn(max = 560.dp)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -272,11 +277,12 @@ fun MainScreen(
 @Composable
 private fun DeviceDiagnosticsCard(isDeviceRegistered: Boolean) {
     val context = LocalContext.current
+    val compactActions = LocalConfiguration.current.screenWidthDp < 400
     var snapshot by remember(context) { mutableStateOf(DeviceIntelligence.collect(context)) }
     var expanded by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().animateContentSize(animationSpec = tween(durationMillis = 180)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF191B23)),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30323D))
@@ -298,12 +304,21 @@ private fun DeviceDiagnosticsCard(isDeviceRegistered: Boolean) {
                         fontSize = 11.sp
                     )
                 }
-                TextButton(onClick = { snapshot = DeviceIntelligence.collect(context) }) {
-                    Text("REFRESH", color = MahiRedPrimary, fontSize = 10.sp)
+                if (!compactActions) {
+                    DeviceDiagnosticsActions(
+                        expanded = expanded,
+                        onRefresh = { snapshot = DeviceIntelligence.collect(context) },
+                        onToggleDetails = { expanded = !expanded }
+                    )
                 }
-                TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "HIDE" else "DETAILS", color = MahiTextSecondary, fontSize = 10.sp)
-                }
+            }
+            if (compactActions) {
+                DeviceDiagnosticsActions(
+                    expanded = expanded,
+                    modifier = Modifier.fillMaxWidth(),
+                    onRefresh = { snapshot = DeviceIntelligence.collect(context) },
+                    onToggleDetails = { expanded = !expanded }
+                )
             }
             Text(
                 text = "${snapshot.manufacturer} ${snapshot.model} · Android ${snapshot.androidVersion} (API ${snapshot.sdkInt})",
@@ -343,6 +358,33 @@ private fun DeviceDiagnosticsCard(isDeviceRegistered: Boolean) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DeviceDiagnosticsActions(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit,
+    onToggleDetails: () -> Unit
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = onRefresh,
+            modifier = Modifier.testTag("device_refresh_button")
+        ) {
+            Text("REFRESH", color = MahiRedPrimary, fontSize = 10.sp)
+        }
+        TextButton(
+            onClick = onToggleDetails,
+            modifier = Modifier.testTag("device_details_button")
+        ) {
+            Text(if (expanded) "HIDE" else "DETAILS", color = MahiTextSecondary, fontSize = 10.sp)
         }
     }
 }

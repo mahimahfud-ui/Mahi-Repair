@@ -5,11 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -531,39 +533,61 @@ private fun UserActionPromptSection(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCancel,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MahiCardStroke),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp)
-            ) {
-                Text(
-                    text = "Skip / Cancel",
-                    color = MahiTextSecondary,
-                    fontSize = 13.sp
-                )
-            }
-
-            Button(
-                onClick = onConfirm,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp)
-            ) {
-                Text(
-                    text = if (event.type == UserActionType.GUIDE) "I've Done This" else "Allow & Continue",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
+        // Keep both actions easy to tap and readable on narrow phones.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (maxWidth < 340.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MahiCardStroke),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("user_action_cancel")
+                    ) {
+                        Text(
+                            text = "Skip / Cancel",
+                            color = MahiTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("user_action_confirm")
+                    ) {
+                        Text(
+                            text = if (event.type == UserActionType.GUIDE) "I've Done This" else "Allow & Continue",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MahiCardStroke),
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("user_action_cancel")
+                    ) {
+                        Text("Skip / Cancel", color = MahiTextSecondary, fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary),
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("user_action_confirm")
+                    ) {
+                        Text(
+                            text = if (event.type == UserActionType.GUIDE) "I've Done This" else "Allow & Continue",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
             }
         }
     }

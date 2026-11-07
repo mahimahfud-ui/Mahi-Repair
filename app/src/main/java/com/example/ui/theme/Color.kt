@@ -18,7 +18,7 @@ val MahiRedGlow = Color(0x55FF3B30)
 // Text & Neutral colors
 val MahiTextPrimary = Color(0xFFF6F7F9)
 val MahiTextSecondary = Color(0xFF9CA3AF)
-val MahiTextMuted = Color(0xFF6B7280)
+val MahiTextMuted = Color(0xFF858E9F)
 
 // Status indicators
 val MahiSuccessGreen = Color(0xFF34C759)
