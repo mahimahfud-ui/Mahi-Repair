@@ -2,7 +2,5 @@
   "name": "Mahi Repair",
   "description": "Personal Android repair toolkit connecting to Mahi Repair Cloud to diagnose and repair device issues.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
