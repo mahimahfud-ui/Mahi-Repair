@@ -29,13 +29,13 @@ object SyncManager {
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
-            val periodicRequest = PeriodicWorkRequestBuilder<ToolSyncWorker>(6, TimeUnit.HOURS)
+            val periodicRequest = PeriodicWorkRequestBuilder<ToolSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 PERIODIC_SYNC_WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 periodicRequest
             )
         } catch (_: Exception) {
