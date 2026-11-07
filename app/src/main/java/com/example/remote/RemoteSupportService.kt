@@ -12,6 +12,7 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.example.BuildConfig
 import com.example.domain.actions.ActionRegistry
 import com.example.domain.models.ActionType
 import com.example.domain.models.RecipeStep
@@ -46,7 +47,7 @@ class RemoteSupportService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var actionRegistry: ActionRegistry? = null
     private var sessionId: String? = null
-    private var backendUrl: String = "https://mahi-repair-admin.onrender.com"
+    private var backendUrl: String = BuildConfig.REMOTE_SUPPORT_API_BASE_URL.trimEnd('/')
     private var authToken: String? = null
 
     companion object {
@@ -98,6 +99,12 @@ class RemoteSupportService : Service() {
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(EXTRA_PROJECTION_DATA)
+            }
+
+            if (resultCode != android.app.Activity.RESULT_OK || projectionData == null) {
+                // A fresh, explicit MediaProjection consent result is required for every session.
+                stopSelf(startId)
+                return START_NOT_STICKY
             }
 
             if (resultCode != android.app.Activity.RESULT_OK || projectionData == null) {
@@ -211,7 +218,6 @@ class RemoteSupportService : Service() {
                 val cmd = json.getJSONObject("command")
                 val commandId = cmd.getString("id")
                 val actionStr = cmd.getString("action")
-                val stepName = cmd.optString("name", actionStr)
                 val paramsJson = cmd.optJSONObject("params") ?: JSONObject()
 
                 val params = mutableMapOf<String, Any?>()
@@ -234,7 +240,7 @@ class RemoteSupportService : Service() {
                 }
 
                 val recipeStep = RecipeStep(
-                    name = stepName,
+                    id = commandId,
                     action = actionType,
                     params = params
                 )
