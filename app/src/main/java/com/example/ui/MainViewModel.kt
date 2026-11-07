@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
 import com.example.BuildConfig
 import com.example.security.VerifiedAppUpdateRelease
+import com.example.security.VerifiedRemoteAnnouncement
+import com.example.security.VerifiedRemoteConfig
 import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairTool
@@ -27,7 +29,9 @@ data class AppUpdateUiState(
     val isInstalling: Boolean = false,
     val release: VerifiedAppUpdateRelease? = null,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val isApplyingDataUpdate: Boolean = false,
+    val downloadProgress: Float? = null
 )
 
 data class MainUiState(
@@ -43,7 +47,8 @@ data class MainUiState(
     val isAuthLoading: Boolean = false,
     val otpSentForEmail: String? = null,
     val isDeviceRegistered: Boolean = false,
-    val appUpdate: AppUpdateUiState = AppUpdateUiState()
+    val appUpdate: AppUpdateUiState = AppUpdateUiState(),
+    val remoteAnnouncement: VerifiedRemoteAnnouncement? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -77,7 +82,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isAuthLoading,
         _otpSentForEmail,
         app.preferencesManager.deviceIdFlow,
-        _appUpdate
+        _appUpdate,
+        app.appUpdateContentInstaller.activeRemoteConfigFlow
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
@@ -92,7 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isAuthLoading = values[9] as Boolean,
             otpSentForEmail = values[10] as String?,
             isDeviceRegistered = !(values[11] as String?).isNullOrBlank(),
-            appUpdate = values[12] as AppUpdateUiState
+            appUpdate = values[12] as AppUpdateUiState,
+            remoteAnnouncement = (values[13] as VerifiedRemoteConfig?)?.announcement
         )
     }.stateIn(
         viewModelScope,
@@ -246,8 +253,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val installedVersion = BuildConfig.VERSION_CODE.toLong()
             val message = when {
                 release == null -> "No signed stable release is currently published."
+                release.isNativeUpdateAvailable(installedVersion) && release.hasDataUpdate ->
+                    "A signed Android and data update are available."
                 release.isNativeUpdateAvailable(installedVersion) ->
                     "A signed Android update is available."
+                release.hasDataUpdate ->
+                    "A signed configuration/content update is available."
                 release.requiresUpdate(installedVersion) ->
                     "This app version is below the minimum supported version, but no compatible APK is available. Contact the Owner."
                 release.contentPackageCount > 0 ->
@@ -273,6 +284,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 error = result.exceptionOrNull()?.message
                     ?: if (result.isFailure) "The update could not be installed." else null
             )
+        }
+    }
+
+
+    fun onApplyDataUpdate() {
+        val release = _appUpdate.value.release ?: return
+        if (!release.hasDataUpdate || _appUpdate.value.isChecking ||
+            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate
+        ) return
+
+        _appUpdate.value = _appUpdate.value.copy(
+            isApplyingDataUpdate = true,
+            downloadProgress = 0f,
+            message = null,
+            error = null
+        )
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.applyDataUpdate(release) { progress ->
+                _appUpdate.value = _appUpdate.value.copy(downloadProgress = progress.coerceIn(0f, 1f))
+            }
+            _appUpdate.value = _appUpdate.value.copy(
+                isApplyingDataUpdate = false,
+                downloadProgress = null,
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message
+                    ?: if (result.isFailure) "The signed data update could not be activated." else null
+            )
+            if (result.isSuccess) refreshTools()
+        }
+    }
+
+    fun onRollbackDataUpdate() {
+        if (_appUpdate.value.isApplyingDataUpdate) return
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.rollbackDataUpdate()
+            _appUpdate.value = _appUpdate.value.copy(
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message
+            )
+            if (result.isSuccess) refreshTools()
         }
     }
 

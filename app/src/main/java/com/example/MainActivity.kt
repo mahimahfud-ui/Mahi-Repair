@@ -86,7 +86,8 @@ fun MahiRepairApp(
             onDismissExecution = { viewModel.onDismissExecution() },
             onSignOut = { viewModel.onSignOut() },
             onCheckForAppUpdates = { viewModel.onCheckForAppUpdates() },
-            onInstallAppUpdate = { viewModel.onInstallAppUpdate() }
+            onInstallAppUpdate = { viewModel.onInstallAppUpdate() },
+            onApplyDataUpdate = { viewModel.onApplyDataUpdate() }
         )
     }
 }

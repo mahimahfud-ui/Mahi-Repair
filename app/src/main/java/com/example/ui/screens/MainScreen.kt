@@ -72,7 +72,8 @@ fun MainScreen(
     onDismissExecution: () -> Unit,
     onSignOut: () -> Unit = {},
     onCheckForAppUpdates: () -> Unit = {},
-    onInstallAppUpdate: () -> Unit = {}
+    onInstallAppUpdate: () -> Unit = {},
+    onApplyDataUpdate: () -> Unit = {}
 ) {
     val canRun = state.tools.isNotEmpty() &&
         !state.isToolsLoading &&
@@ -201,10 +202,27 @@ fun MainScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                state.remoteAnnouncement?.let { announcement ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF191B23)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30323D))
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                            Text(announcement.title, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(announcement.body, color = MahiTextSecondary, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 AppUpdateCard(
                     state = state.appUpdate,
                     onCheckForUpdates = onCheckForAppUpdates,
-                    onInstallUpdate = onInstallAppUpdate
+                    onInstallUpdate = onInstallAppUpdate,
+                    onApplyDataUpdate = onApplyDataUpdate
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -414,11 +432,13 @@ private fun DeviceDiagnosticLine(label: String, value: String) {
 private fun AppUpdateCard(
     state: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
-    onInstallUpdate: () -> Unit
+    onInstallUpdate: () -> Unit,
+    onApplyDataUpdate: () -> Unit
 ) {
     val installedVersion = BuildConfig.VERSION_CODE.toLong()
     val release = state.release
     val updateAvailable = release?.isNativeUpdateAvailable(installedVersion) == true
+    val dataUpdateAvailable = release?.hasDataUpdate == true
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -443,7 +463,7 @@ private fun AppUpdateCard(
             )
             Button(
                 onClick = onCheckForUpdates,
-                enabled = !state.isChecking && !state.isInstalling,
+                enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
                 modifier = Modifier.fillMaxWidth().testTag("check_app_updates_button"),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -459,9 +479,13 @@ private fun AppUpdateCard(
                 }
             }
 
-            if (release != null && updateAvailable) {
+            if (release != null && (updateAvailable || dataUpdateAvailable)) {
                 Text(
-                    "Version ${release.appVersionName} (${release.appVersionCode}) is available",
+                    if (updateAvailable) {
+                        "Version ${release.appVersionName} (${release.appVersionCode}) is available"
+                    } else {
+                        "Signed data release #${release.releaseNumber} is available"
+                    },
                     color = MahiTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp
@@ -476,35 +500,61 @@ private fun AppUpdateCard(
                 if (release.releaseNotes.isNotBlank()) {
                     Text(release.releaseNotes, color = MahiTextSecondary, fontSize = 11.sp)
                 }
-                Button(
-                    onClick = onInstallUpdate,
-                    enabled = !state.isChecking && !state.isInstalling && release.nativeApk != null,
-                    modifier = Modifier.fillMaxWidth().testTag("install_app_update_button"),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
-                ) {
-                    if (state.isInstalling) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("DOWNLOAD & INSTALL", color = Color.White, fontSize = 11.sp)
+                if (updateAvailable) {
+                    Button(
+                        onClick = onInstallUpdate,
+                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        modifier = Modifier.fillMaxWidth().testTag("install_app_update_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
+                    ) {
+                        if (state.isInstalling) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("DOWNLOAD & INSTALL APK", color = Color.White, fontSize = 11.sp)
+                        }
                     }
+                    Text(
+                        "The APK is verified before Android's system installer opens. You must approve installation on this device.",
+                        color = MahiTextMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                Text(
-                    "The APK is verified before Android's system installer opens. You must approve the installation on this device.",
-                    color = MahiTextMuted,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
-            if (state.message != null) {
-                Text(state.message, color = MahiTextSecondary, fontSize = 11.sp)
-            }
-            if (state.error != null) {
-                Text(state.error, color = Color(0xFFFF8585), fontSize = 11.sp)
+                if (dataUpdateAvailable) {
+                    Button(
+                        onClick = onApplyDataUpdate,
+                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        modifier = Modifier.fillMaxWidth().testTag("apply_data_update_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
+                    ) {
+                        if (state.isApplyingDataUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("DOWNLOAD & APPLY DATA", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+                    state.downloadProgress?.let { progress ->
+                        Text(
+                            "Verified download progress: ${(progress * 100).toInt()}%",
+                            color = MahiTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Text(
+                        "Only signed configuration and declared JSON/image resources are activated. Downloaded scripts and executable code are not supported.",
+                        color = MahiTextMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }

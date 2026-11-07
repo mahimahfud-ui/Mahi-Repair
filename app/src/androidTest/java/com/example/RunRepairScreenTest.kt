@@ -15,6 +15,7 @@ import com.example.ui.MainUiState
 import com.example.ui.AppUpdateUiState
 import com.example.security.VerifiedAppUpdateRelease
 import com.example.security.VerifiedNativeApk
+import com.example.security.VerifiedRemoteConfig
 import com.example.ui.screens.MainScreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -157,6 +158,16 @@ class RunRepairScreenTest {
             minSupportedAppVersionCode = 1L,
             mandatory = false,
             releaseNotes = "Security and stability improvements.",
+            remoteConfig = VerifiedRemoteConfig(
+                rawJson = "{}",
+                featureFlags = emptyMap(),
+                repairTools = emptyMap(),
+                toolMetadata = emptyMap(),
+                announcement = null,
+                minAndroidApi = 26,
+                maxAndroidApi = 100
+            ),
+            packages = emptyList(),
             contentPackageCount = 0,
             nativeApk = VerifiedNativeApk(
                 assetId = "android-apk",
