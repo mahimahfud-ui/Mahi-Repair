@@ -7,6 +7,7 @@ import com.example.data.local.PreferencesManager
 import com.example.data.remote.SupabaseClient
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.AppUpdateRepository
+import com.example.data.repository.AppUpdateContentInstaller
 import com.example.data.repository.HistoryRepository
 import com.example.data.repository.ToolRepository
 import com.example.domain.actions.ActionRegistry
@@ -40,6 +41,7 @@ class MahiRepairApplication : Application() {
     lateinit var authRepository: AuthRepository private set
     lateinit var toolRepository: ToolRepository private set
     lateinit var appUpdateRepository: AppUpdateRepository private set
+    lateinit var appUpdateContentInstaller: AppUpdateContentInstaller private set
     lateinit var historyRepository: HistoryRepository private set
     lateinit var actionRegistry: ActionRegistry private set
     lateinit var recipeExecutionEngine: RecipeExecutionEngine private set
@@ -53,8 +55,15 @@ class MahiRepairApplication : Application() {
         preferencesManager = PreferencesManager(this)
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
-        toolRepository = ToolRepository(database, preferencesManager, supabaseClient, authRepository)
-        appUpdateRepository = AppUpdateRepository(this, supabaseClient, toolRepository)
+        appUpdateContentInstaller = AppUpdateContentInstaller(this)
+        toolRepository = ToolRepository(
+            database,
+            preferencesManager,
+            supabaseClient,
+            authRepository,
+            appUpdateContentInstaller
+        )
+        appUpdateRepository = AppUpdateRepository(this, supabaseClient, toolRepository, appUpdateContentInstaller)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)

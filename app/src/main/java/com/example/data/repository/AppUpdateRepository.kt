@@ -29,7 +29,8 @@ import kotlinx.coroutines.withContext
 class AppUpdateRepository(
     context: Context,
     private val supabaseClient: SupabaseClient,
-    private val toolRepository: ToolRepository
+    private val toolRepository: ToolRepository,
+    private val contentInstaller: AppUpdateContentInstaller
 ) {
     private val appContext = context.applicationContext
     private val downloadClient = OkHttpClient.Builder()
@@ -172,6 +173,141 @@ class AppUpdateRepository(
                 Result.failure(error)
             }
         }
+
+
+    /**
+     * Fetch each declared package through the authenticated asset endpoint, verify its
+     * outer SHA-256, then install only manifest-declared JSON/image entries. The active
+     * release pointer is switched atomically after every package is verified.
+     */
+    suspend fun applyDataUpdate(
+        release: VerifiedAppUpdateRelease,
+        onProgress: (Float) -> Unit = {}
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val downloaded = linkedMapOf<String, File>()
+        try {
+            require(release.hasDataUpdate) { "This release does not contain a data update." }
+            val api = Build.VERSION.SDK_INT
+            require(api in release.remoteConfig.minAndroidApi..release.remoteConfig.maxAndroidApi) {
+                "This release is not compatible with this Android version."
+            }
+            val identity = toolRepository.getRealtimeIdentity().getOrElse { cause ->
+                throw IllegalStateException("Your device could not be revalidated for this update.", cause)
+            }
+            val totalBytes = release.packages.sumOf { it.sizeBytes }.coerceAtLeast(1L)
+            var completedBytes = 0L
+            onProgress(0f)
+
+            release.packages.forEach { pkg ->
+                val asset = supabaseClient.getAppUpdateAssetUrl(
+                    deviceId = identity.deviceId,
+                    releaseId = release.releaseId,
+                    assetId = pkg.assetId,
+                    authToken = identity.accessToken
+                ).getOrThrow()
+                require(
+                    asset.assetId == pkg.assetId &&
+                    asset.sha256 == pkg.sha256 &&
+                    asset.sizeBytes == pkg.sizeBytes &&
+                    asset.contentType == pkg.contentType &&
+                    asset.contentType == AppUpdateManifestVerifier.ZIP_CONTENT_TYPE
+                ) { "Content package metadata does not match the signed manifest." }
+                require(asset.expiresInSeconds in 1..90) {
+                    "Content package download authorization has an invalid lifetime."
+                }
+
+                val baseUrl = BuildConfig.SUPABASE_URL.toHttpUrlOrNull()
+                    ?: throw IllegalStateException("The Supabase project URL is not configured.")
+                val signedUrl = asset.signedUrl.toHttpUrlOrNull()
+                    ?: throw IllegalStateException("The content package download URL is invalid.")
+                require(signedUrl.isHttps && signedUrl.host == baseUrl.host && signedUrl.port == baseUrl.port) {
+                    "The content package URL does not belong to the configured Supabase project."
+                }
+
+                val folder = File(appContext.cacheDir, "app-updates")
+                require(folder.mkdirs() || folder.isDirectory) { "The private content update cache could not be created." }
+                val archive = File(folder, "${release.releaseId}-${pkg.assetId}.zip")
+                archive.delete()
+                downloadVerifiedContentAsset(
+                    signedUrl.toString(),
+                    archive,
+                    pkg.sizeBytes,
+                    pkg.sha256
+                ) { received ->
+                    onProgress(((completedBytes + received).toFloat() / totalBytes).coerceIn(0f, 0.99f))
+                }
+                completedBytes += pkg.sizeBytes
+                downloaded[pkg.assetId] = archive
+                onProgress((completedBytes.toFloat() / totalBytes).coerceIn(0f, 0.99f))
+            }
+
+            contentInstaller.activate(release, downloaded)
+            onProgress(1f)
+            Result.success(
+                if (release.packages.isEmpty()) {
+                    "Signed remote configuration activated."
+                } else {
+                    "Verified content package(s) and configuration activated. The previous release is retained for rollback."
+                }
+            )
+        } catch (error: Exception) {
+            Result.failure(error)
+        } finally {
+            downloaded.values.forEach { it.delete() }
+        }
+    }
+
+    private fun downloadVerifiedContentAsset(
+        signedUrl: String,
+        outputFile: File,
+        expectedSize: Long,
+        expectedSha256: String,
+        onBytesReceived: (Long) -> Unit
+    ) {
+        require(expectedSize in 1L..AppUpdateManifestVerifier.MAX_CONTENT_PACKAGE_BYTES) {
+            "The content package size is outside the permitted limit."
+        }
+        val response = downloadClient.newCall(Request.Builder().url(signedUrl).get().build()).execute()
+        response.use {
+            if (!it.isSuccessful) throw IllegalStateException("Content package download failed (HTTP ${it.code}).")
+            val body = it.body ?: throw IllegalStateException("Content package download was empty.")
+            val declaredLength = body.contentLength()
+            if (declaredLength >= 0L && declaredLength != expectedSize) {
+                throw IllegalStateException("Content package size does not match its signed manifest.")
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+            var received = 0L
+            body.byteStream().use { input ->
+                outputFile.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        received += count
+                        require(received <= expectedSize) { "Content package exceeded its signed size limit." }
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                        onBytesReceived(received)
+                    }
+                }
+            }
+            require(received == expectedSize) { "Content package download is incomplete." }
+            val actual = digest.digest().joinToString("") { byte -> "%02x".format(Locale.US, byte.toInt() and 0xff) }
+            require(MessageDigest.isEqual(
+                actual.toByteArray(Charsets.US_ASCII),
+                expectedSha256.toByteArray(Charsets.US_ASCII)
+            )) { "Content package SHA-256 verification failed." }
+        }
+    }
+
+    suspend fun rollbackDataUpdate(): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(contentInstaller.rollback()) {
+                "No previously activated content release is available for rollback."
+            }
+            "The previous signed content/configuration release has been restored."
+        }
+    }
 
     private fun downloadAndVerifySha256(
         signedUrl: String,
