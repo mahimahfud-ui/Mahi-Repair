@@ -21,6 +21,16 @@ class SupabaseRealtimeClientTest {
     }
 
     @Test
+    fun parsesOpaqueAppUpdatePublishedEvent() {
+        val parsed = SupabaseRealtimeClient.parseBroadcastMessage(
+            """{"topic":"realtime:mahi-repair:member:member-id:device:device-id","event":"broadcast","payload":{"event":"app_update_published","payload":{"event_id":"release-event-1"}}}"""
+        )
+
+        assertEquals("app_update_published", parsed?.name)
+        assertEquals("release-event-1", parsed?.eventId)
+    }
+
+    @Test
     fun ignoresUnrecognizedEventsAndNonBroadcastFrames() {
         val unknown = SupabaseRealtimeClient.parseBroadcastMessage(
             """{"event":"broadcast","payload":{"event":"private_recipe_payload","payload":{"event_id":"event-123"}}}"""

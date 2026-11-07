@@ -4,7 +4,7 @@
 
 The Owner publishes a release in **App Update Manager**. The Admin Panel uploads ZIP/APK assets to the private `mahi-app-updates` Storage bucket, computes a SHA-256 digest server-side and submits a typed manifest to the `admin-publish-app-update` Edge Function. The function rechecks the active Owner, rate-limits publication, verifies every uploaded object and size/MIME, canonicalizes the manifest and signs it with the existing RSA-3072/SHA-256 release key. The SQL RPC inserts the immutable release row and audit record in one transaction.
 
-The database trigger broadcasts only an opaque `app_update_published` event to registered active member devices. Android must fetch the manifest from `get-app-update-manifest`, verify its detached RSA-SHA256 signature against the bundled public key and only then parse configuration. The asset endpoint checks the member and registered non-revoked device, confirms the asset belongs to the selected signed release, and returns a 90-second private Storage URL.
+The database trigger broadcasts only an opaque `app_update_published` event to registered active member devices. Android checks for the latest signed manifest when an authenticated session starts, when the app resumes, and when that private event arrives. The event itself contains no manifest or asset data; Android re-fetches the manifest from `get-app-update-manifest` and verifies its detached RSA-SHA256 signature against the bundled public key before parsing. The asset endpoint checks the member and registered non-revoked device, confirms the asset belongs to the selected signed release, and returns a 90-second private Storage URL.
 
 ## Manifest contract
 
@@ -28,6 +28,22 @@ Do not mutate or delete a published row. Publish the earlier remote configuratio
 5. Upload only packages produced from a trusted release pipeline. The upload API calculates the outer file digest; the manifest's inner-entry digests must come from the same deterministic package build.
 6. Run signed-manifest verification and package-install tests on real Android hardware before making a mandatory release.
 
+## Android client status
+
+The Android app has a signed **native APK update path**:
+
+- It checks for a stable-channel release after an authenticated session starts, when the app resumes, and when the private `app_update_published` event arrives.
+- The event carries only an opaque event ID; Android fetches the manifest through the member-authenticated, registered-device endpoint.
+- It verifies the detached RSA signature over the exact manifest bytes before parsing.
+- It verifies that the release signing-certificate SHA-256 matches the currently installed app signer.
+- It validates APK package ID, version code/name, byte count, SHA-256 and single signing-certificate fingerprint.
+- It requests a short-lived private asset URL only after manifest verification and rechecks the downloaded bytes before opening Android's system installer.
+- Unknown-source permission and final installation approval remain under Android OS control. No silent install or downgrade is implemented.
+
+This does not silently install anything. A device user must review and approve the system installer prompt. The private event only triggers a fresh manifest check; it is not a delivery channel for the APK itself.
+
+The Android app does **not** yet download, safely extract, hash-verify and atomically activate ZIP content packages or apply remote-config values. These remain backend publication capabilities only.
+
 ## Important boundary
 
-The backend and Admin publication path do not by themselves update an installed Android app. The Android manifest verification, content-package download/extraction/atomic activation, native APK certificate verification and PackageInstaller UI must be implemented and device-tested before describing the whole live-update workflow as production-ready. A successful Edge Function or Admin build is not proof of that client lifecycle.
+The native APK path must pass current Android CI and be tested with a real release signed by the matching production key on a physical Android device before production rollout. A successful Admin/Edge Function build does not prove a real APK installs on a physical device. Content packages and remote configuration are not end-to-end complete.

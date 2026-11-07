@@ -25,7 +25,7 @@ export default async function UpdatesPage({
     >
       {params.published === '1' ? (
         <div role="status" className="panel mb-5 border border-emerald-500/30 p-4 text-sm text-emerald-200">
-          Release signed and published. Android clients will verify the manifest before applying data updates.
+          Signed release published. Registered Android devices check for signed native APK updates when the app opens or resumes and when the private update event arrives. Installation still requires device-user approval. ZIP content packages and remote config are not yet applied by the app.
         </div>
       ) : null}
 

@@ -224,7 +224,8 @@ class SupabaseRealtimeClient(
         private val SUPPORTED_EVENTS = setOf(
             "catalog_changed",
             "member_access_changed",
-            "device_revoked"
+            "device_revoked",
+            "app_update_published"
         )
 
         internal fun parseBroadcastMessage(message: String): RepairRealtimeEvent? {

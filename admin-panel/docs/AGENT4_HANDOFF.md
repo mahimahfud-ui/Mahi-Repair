@@ -19,7 +19,7 @@
 - Invitation history now displays existing `member.invited` audit records. The UI explicitly distinguishes invite-request acceptance by Supabase Auth from email delivery or member acceptance.
 - Device inventory exposes only fields actually sent by Android: server device ID, label, app version, Android version/API, last check-in and revocation state. It also shows the last version stored by the real `device_tool_syncs` catalog endpoint. Its `synced_at` value is the row's first-recorded timestamp because the current Edge Function does not refresh it on upsert; this is historical sync telemetry, not proof of current access or hardware compatibility.
 - Repair-run history and persistent administrative audit history are visible to Owners.
-- Added the Owner App Update Manager at `/updates`: signed immutable manifest publication, private ZIP/APK upload, server-side SHA-256 calculation and release history. The form uses the current Android `applicationId` and now binds APK `versionCode` to the selected app version code; content package versions are explicitly editable.
+- Added the Owner App Update Manager at `/updates`: signed immutable manifest publication, private ZIP/APK upload, server-side SHA-256 calculation and release history. The form uses the current Android `applicationId`, binds APK `versionCode` to the selected app version code, and allows explicit content-package versions. Agent2 added native APK manifest/signature verification and system installer hand-off, with fresh manifest checks on app launch/resume and private update broadcasts.
 - Added polling-delay unit tests, `/api/ops` route-level authorization/response tests using a mocked Supabase client, and updated Render preview branch/health-check configuration.
 
 ## Existing actions retained
@@ -38,7 +38,7 @@ The device registration contract does not contain manufacturer/model, pairing st
 
 The current backend and Android app do not contain support-session state, consent workflow, WebRTC signaling, STUN/TURN credentials or Android MediaProjection screen capture. There is no real remote video to display. See `REMOTE_SUPPORT_GAP_ANALYSIS.md` before implementing this as a new cross-platform feature.
 
-The signed app-update publication backend exists, but the Android client is not yet end-to-end integrated: its current private Realtime event allowlist does not include `app_update_published`, and there is no verified client workflow for fetching/verifying a manifest, validating/unzipping content packages, certificate-checking an APK and handing it to Android PackageInstaller. Do not mark live app updates as end-to-end complete until those client paths are implemented and tested on a real device. See `APP_LIVE_UPDATES.md`.
+The signed app-update backend has a native APK client path. Android checks for a signed release when an authenticated session starts, when the app resumes, and when the private `app_update_published` event arrives; it verifies the RSA-signed manifest, matches the declared certificate digest to the installed app signer, downloads the asset through a short-lived private URL, checks size/SHA-256/package/version/single signer and opens Android's installer for user approval. The UI does not silently install or downgrade. ZIP content packages and remote-config values are not downloaded or applied by Android yet. A real production-signed APK still needs physical-device acceptance. See `APP_LIVE_UPDATES.md`.
 
 ## Required Agent 4 follow-up
 
