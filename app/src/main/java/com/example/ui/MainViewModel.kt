@@ -1,6 +1,8 @@
 package com.example.ui
 
 import android.app.Application
+import android.os.Build
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
@@ -147,11 +149,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val engine = com.example.domain.intelligence.DeviceIntelligenceEngine(getApplication())
-                val profile = engine.collectHardwareProfile()
+                val (hardwareProfile, fieldAvailability) = engine.collectHardwareProfile()
                 val telemetry = engine.collectDynamicTelemetry()
-                // Synchronized with backend device intelligence registry
-            } catch (_: Exception) {
-                // Background telemetry error silently tolerated
+                val identity = toolRepo.getRealtimeIdentity().getOrElse { cause ->
+                    Log.w("MahiDeviceProfile", "Device profile upload skipped because device authorization failed.", cause)
+                    return@launch
+                }
+
+                val upload = com.example.data.remote.DeviceIntelligenceApiClient().upload(
+                    accessToken = identity.accessToken,
+                    deviceId = identity.deviceId,
+                    deviceLabel = "${hardwareProfile.brand} ${hardwareProfile.model}".trim().take(100),
+                    appVersion = BuildConfig.VERSION_NAME,
+                    androidVersion = Build.VERSION.RELEASE,
+                    androidApi = Build.VERSION.SDK_INT,
+                    hardwareProfile = hardwareProfile,
+                    telemetry = telemetry,
+                    fieldAvailability = fieldAvailability
+                )
+                upload.exceptionOrNull()?.let { cause ->
+                    Log.w("MahiDeviceProfile", "Device profile upload failed; local repair features remain available.", cause)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("MahiDeviceProfile", "Device profile collection or upload failed.", error)
             }
         }
     }
