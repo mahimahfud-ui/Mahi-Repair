@@ -152,7 +152,9 @@ router.post('/register', authenticateToken, async (req: AuthenticatedRequest, re
   }
 
   // Generate server-issued UUID device identity
-  const newDeviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Preserve the authenticated Android client's existing server-issued device ID
+  // when synchronizing its extended intelligence profile to this API.
+  const newDeviceId = parsed.data.device_id || `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const newDevice: DeviceRecord = {
     id: newDeviceId,
     userId: user.id,

@@ -209,7 +209,7 @@ class DeviceIntelligenceEngine(private val context: Context) {
             brand = brand,
             model = model,
             commercialModelName = model, // Report observed model without fabrication
-            modelIdentifier = Build.ID,
+            modelIdentifier = Build.MODEL.ifBlank { "UNKNOWN" },
             productName = product,
             deviceCodename = deviceCodename,
             hardware = hardware,

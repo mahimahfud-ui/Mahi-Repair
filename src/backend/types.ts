@@ -169,9 +169,10 @@ export interface RemoteCommandRecord {
   action: string;
   params: Record<string, unknown>;
   signature: string;
+  canonicalPayload: string;
   nonce: string;
   expiresAt: string;
-  status: 'PENDING' | 'ACKNOWLEDGED' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'REJECTED';
+  status: 'PENDING' | 'ACKNOWLEDGED' | 'EXECUTING' | 'WAITING_USER' | 'COMPLETED' | 'FAILED' | 'REJECTED';
   result?: unknown;
   error?: string;
   createdAt: string;

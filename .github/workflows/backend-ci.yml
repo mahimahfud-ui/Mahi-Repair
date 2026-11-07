@@ -1,0 +1,59 @@
+name: Backend CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: TypeScript backend and web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Regenerate root npm lockfile from the declared manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --no-progress
+
+      - name: Commit normalized root lockfile to this feature branch
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build: sync root npm lockfile [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Install root dependencies from the regenerated lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund --no-progress
+
+      - name: TypeScript and production build
+        run: npm run build
+
+      - name: Upload normalized root package lock
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-root-package-lock
+          path: package-lock.json
+          retention-days: 1

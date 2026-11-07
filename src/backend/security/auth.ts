@@ -59,63 +59,102 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     return;
   }
 
-  // Check App Check header if provided
-  const appCheckToken = req.headers['x-firebase-appcheck'] as string | undefined;
-  if (appCheckToken) {
-    req.appCheckVerified = true;
+  // Never infer identity from token text, email-shaped strings, demo substrings,
+  // or hard-coded Owner names. Verify the access token with Supabase Auth.
+  const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, '');
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+  if (
+    !supabaseUrl?.startsWith('https://') ||
+    supabaseUrl.includes('placeholder.supabase.co') ||
+    !anonKey ||
+    anonKey === 'placeholder-anon-key'
+  ) {
+    res.status(503).json({
+      error: {
+        code: 'AUTH_PROVIDER_NOT_CONFIGURED',
+        message: 'Authentication verification is not configured on this server.',
+      },
+    });
+    return;
   }
 
-  // Resolve user identity from token
-  // Supports Firebase ID tokens, email bearer strings, or registered user IDs
-  let user: UserProfile | null = null;
+  let identity: { id?: string; email?: string };
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: 'GET',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(8000),
+    });
 
-  // Try direct ID or email lookup in staging database
-  user = await db.getProfile(token);
+    if (response.status === 401 || response.status === 403) {
+      res.status(401).json({
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'The supplied authentication session is invalid or expired.',
+        },
+      });
+      return;
+    }
 
-  if (!user && token.includes('@')) {
-    user = await db.getProfile(token);
+    if (!response.ok) {
+      res.status(503).json({
+        error: {
+          code: 'AUTH_PROVIDER_UNAVAILABLE',
+          message: 'Authentication could not be verified. Please retry.',
+        },
+      });
+      return;
+    }
+
+    identity = await response.json() as { id?: string; email?: string };
+  } catch {
+    res.status(503).json({
+      error: {
+        code: 'AUTH_PROVIDER_UNAVAILABLE',
+        message: 'Authentication could not be verified. Please retry.',
+      },
+    });
+    return;
   }
 
-  // If token is standard owner test token or demo session
-  if (!user && (token.includes('alex.owner') || token.includes('mahin'))) {
-    user = await db.getProfile('alex.owner@example.com') || await db.getProfile('mahinmhfd@gmail.com');
-  }
-
-  // Fallback for demo member session token
-  if (!user && token.includes('demo')) {
-    user = await db.getProfile('member_demo');
-  }
-
-  if (!user) {
+  if (!identity.id || !identity.email) {
     res.status(401).json({
       error: {
-        code: 'UNAUTHORIZED_TOKEN',
-        message: 'The provided access token could not be verified or user profile does not exist.',
+        code: 'INVALID_IDENTITY',
+        message: 'The verified authentication response did not contain a usable identity.',
       },
     });
     return;
   }
 
-  if (user.status === 'revoked') {
+  // Profiles carry server-assigned roles. Match by verified Auth UID first,
+  // then by the verified email for existing pre-UID profile records.
+  const user = await db.getProfile(identity.id) ?? await db.getProfile(identity.email);
+  if (!user || user.email.toLowerCase() !== identity.email.toLowerCase()) {
     res.status(403).json({
       error: {
-        code: 'ACCOUNT_REVOKED',
-        message: 'This account has been revoked by the administrator.',
+        code: 'PROFILE_NOT_PROVISIONED',
+        message: 'This authenticated account has no authorized Mahi Repair profile.',
       },
     });
     return;
   }
 
-  if (user.status === 'suspended') {
+  if (user.status !== 'active') {
     res.status(403).json({
       error: {
-        code: 'ACCOUNT_SUSPENDED',
-        message: 'This account is temporarily suspended.',
+        code: user.status === 'revoked' ? 'ACCOUNT_REVOKED' : 'ACCOUNT_INACTIVE',
+        message: 'This account is not active.',
       },
     });
     return;
   }
 
+  // A caller-supplied App Check header is not evidence of verification.
+  // Set appCheckVerified only after a real server-side App Check verification is added.
   req.user = user;
   next();
 }

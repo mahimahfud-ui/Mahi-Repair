@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { signCanonicalPayload, toCanonicalJson } from '../crypto/signer';
 import {
   ActionDefinitions,
+  ActionRiskMap,
+  ConfirmationRequiredActions,
   SupportedActionName,
   RemoteSupportSessionRecord,
   RemoteCommandRecord,
@@ -13,21 +15,12 @@ import {
 
 export const remoteSupportRouter = Router();
 
-// In-memory signaling cache for low-latency WebRTC negotiation
-interface SessionSignalingData {
-  offer?: { sdp: string; type: string };
-  answer?: { sdp: string; type: string };
-  candidates: Array<{ candidate: string; sdpMid?: string; sdpMLineIndex?: number; from: 'owner' | 'device' }>;
-}
-const signalingCache = new Map<string, SessionSignalingData>();
-
-function getSignaling(sessionId: string): SessionSignalingData {
-  let sig = signalingCache.get(sessionId);
-  if (!sig) {
-    sig = { candidates: [] };
-    signalingCache.set(sessionId, sig);
-  }
-  return sig;
+async function getSessionAccess(session: RemoteSupportSessionRecord, user: { id: string; role: string }) {
+  const device = await db.getDevice(session.deviceId);
+  return {
+    isOwner: user.role === 'owner' && user.id === session.ownerId,
+    isDeviceUser: Boolean(device && device.userId === user.id),
+  };
 }
 
 // POST /api/v1/remote-support/sessions - Owner creates a remote support session
@@ -53,14 +46,13 @@ remoteSupportRouter.post('/sessions', authenticateToken, requireOwner, async (re
   }
 
   const session = await db.createRemoteSession(device.id, req.user!.id);
-  getSignaling(session.id); // initialize signaling
 
   await db.addAuditLog({
     actorId: req.user!.id,
     action: 'remote_session.created',
     targetType: 'remote_session',
     targetId: session.id,
-    details: { deviceId: device.id, pairingCode: session.pairingCode },
+    details: { deviceId: device.id },
   });
 
   res.status(201).json({
@@ -121,7 +113,7 @@ remoteSupportRouter.post('/join', authenticateToken, async (req: AuthenticatedRe
 
   // Verify device identity
   const device = await db.getDevice(parsed.data.device_id);
-  if (!device || (device.userId !== user.id && user.role !== 'owner')) {
+  if (!device || device.userId !== user.id) {
     res.status(403).json({ error: { code: 'DEVICE_UNAUTHORIZED', message: 'Device authorization mismatch.' } });
     return;
   }
@@ -144,11 +136,18 @@ remoteSupportRouter.post('/join', authenticateToken, async (req: AuthenticatedRe
 // POST /api/v1/remote-support/:id/signal - Send WebRTC Offer, Answer, or ICE Candidate
 const SignalSchema = z.object({
   type: z.enum(['offer', 'answer', 'ice-candidate', 'ping']),
-  sdp: z.string().optional(),
-  candidate: z.string().optional(),
-  sdpMid: z.string().optional(),
-  sdpMLineIndex: z.number().int().optional(),
-}).passthrough();
+  sdp: z.string().max(100_000).optional(),
+  candidate: z.string().max(4_000).optional(),
+  sdpMid: z.string().max(100).optional(),
+  sdpMLineIndex: z.number().int().min(0).max(255).optional(),
+}).strict().superRefine((value, context) => {
+  if ((value.type === 'offer' || value.type === 'answer') && !value.sdp) {
+    context.addIssue({ code: 'custom', path: ['sdp'], message: 'SDP is required for offers and answers.' });
+  }
+  if (value.type === 'ice-candidate' && !value.candidate) {
+    context.addIssue({ code: 'custom', path: ['candidate'], message: 'ICE candidate is required.' });
+  }
+});
 
 remoteSupportRouter.post('/:id/signal', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -166,24 +165,30 @@ remoteSupportRouter.post('/:id/signal', authenticateToken, async (req: Authentic
   }
 
   const user = req.user!;
-  const fromRole = user.role === 'owner' ? 'owner' : 'device';
-  const sig = getSignaling(sessionId);
+  const access = await getSessionAccess(session, user);
+  if (!access.isOwner && !access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'SESSION_FORBIDDEN', message: 'This account is not a participant in the support session.' } });
+    return;
+  }
+  const fromRole = access.isOwner ? 'owner' : 'device';
+  const candidates = session.iceCandidates ?? [];
 
   if (parsed.data.type === 'offer') {
-    sig.offer = { sdp: parsed.data.sdp || '', type: 'offer' };
+    session.webrtcOffer = parsed.data.sdp;
   } else if (parsed.data.type === 'answer') {
-    sig.answer = { sdp: parsed.data.sdp || '', type: 'answer' };
+    session.webrtcAnswer = parsed.data.sdp;
     session.status = 'SCREEN_SHARING';
-    await db.saveRemoteSession(session);
   } else if (parsed.data.type === 'ice-candidate' && parsed.data.candidate) {
-    sig.candidates.push({
+    candidates.push({
       candidate: parsed.data.candidate,
       sdpMid: parsed.data.sdpMid,
       sdpMLineIndex: parsed.data.sdpMLineIndex,
       from: fromRole,
     });
+    session.iceCandidates = candidates.slice(-256);
   }
 
+  await db.saveRemoteSession(session);
   res.json({ data: { received: true, timestamp: Date.now() } });
 });
 
@@ -198,12 +203,14 @@ remoteSupportRouter.get('/:id/signal', authenticateToken, async (req: Authentica
   }
 
   const user = req.user!;
-  const myRole = user.role === 'owner' ? 'owner' : 'device';
-  const sig = getSignaling(sessionId);
-
-  // Return opposite peer's signals
-  const peerCandidates = sig.candidates.filter((c) => c.from !== myRole);
-  const peerSdp = myRole === 'owner' ? sig.answer : sig.offer;
+  const access = await getSessionAccess(session, user);
+  if (!access.isOwner && !access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'SESSION_FORBIDDEN', message: 'This account is not a participant in the support session.' } });
+    return;
+  }
+  const myRole = access.isOwner ? 'owner' : 'device';
+  const peerCandidates = (session.iceCandidates ?? []).filter((candidate) => candidate.from !== myRole).slice(-128);
+  const peerSdp = myRole === 'owner' ? session.webrtcAnswer : session.webrtcOffer;
 
   res.json({
     data: {
@@ -227,6 +234,12 @@ remoteSupportRouter.post('/:id/screen-share-status', authenticateToken, async (r
 
   if (!session || session.status === 'TERMINATED') {
     res.status(404).json({ error: { code: 'SESSION_NOT_FOUND', message: 'Active session not found.' } });
+    return;
+  }
+
+  const screenDevice = await db.getDevice(session.deviceId);
+  if (!screenDevice || screenDevice.userId !== req.user!.id) {
+    res.status(403).json({ error: { code: 'DEVICE_FORBIDDEN', message: 'Only the paired device owner can update screen-sharing status.' } });
     return;
   }
 
@@ -261,6 +274,16 @@ remoteSupportRouter.post('/:id/command', authenticateToken, requireOwner, async 
     return;
   }
 
+  if (session.status !== 'DEVICE_CONNECTED' && session.status !== 'SCREEN_SHARING') {
+    res.status(409).json({ error: { code: 'DEVICE_NOT_CONNECTED', message: 'The device must join and approve the support session before commands can be dispatched.' } });
+    return;
+  }
+
+  if (session.ownerId !== req.user!.id) {
+    res.status(403).json({ error: { code: 'SESSION_FORBIDDEN', message: 'Only the Owner who created this session can dispatch commands.' } });
+    return;
+  }
+
   const parsed = RemoteCommandInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json({ error: { code: 'INVALID_COMMAND', issues: parsed.error.issues } });
@@ -290,8 +313,20 @@ remoteSupportRouter.post('/:id/command', authenticateToken, requireOwner, async 
     return;
   }
 
+  const actionRisk = ActionRiskMap[actionName];
+  if (actionRisk !== 'read_only' || ConfirmationRequiredActions.has(actionName)) {
+    res.status(409).json({
+      error: {
+        code: 'FOREGROUND_USER_CONFIRMATION_REQUIRED',
+        message: 'This action requires a foreground confirmation flow on the Android device and cannot be executed by the background remote service.',
+        risk: actionRisk,
+      },
+    });
+    return;
+  }
+
   const now = new Date();
-  const commandId = `cmd_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
+  const commandId = `cmd_${crypto.randomUUID()}`;
   const nonce = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(now.getTime() + 5 * 60 * 1000).toISOString(); // 5-minute expiry
 
@@ -317,6 +352,7 @@ remoteSupportRouter.post('/:id/command', authenticateToken, requireOwner, async 
     action: actionName,
     params: parsed.data.params,
     signature,
+    canonicalPayload: canonical,
     nonce,
     expiresAt,
     status: 'PENDING',
@@ -350,14 +386,20 @@ remoteSupportRouter.get('/:id/commands', authenticateToken, async (req: Authenti
     return;
   }
 
-  const commands = await db.getRemoteCommands(sessionId);
+  const access = await getSessionAccess(session, req.user!);
+  if (!access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'DEVICE_FORBIDDEN', message: 'Only the paired device owner can retrieve commands.' } });
+    return;
+  }
+
+  const commands = (await db.getRemoteCommands(sessionId)).filter((command) => command.status === 'PENDING');
   res.json({ data: commands });
 });
 
 // POST /api/v1/remote-support/:id/command-result - Phone submits step outcome
 const CommandResultSchema = z.object({
   command_id: z.string().min(1).max(128),
-  status: z.enum(['COMPLETED', 'FAILED', 'REJECTED']),
+  status: z.enum(['COMPLETED', 'FAILED', 'REJECTED', 'WAITING_USER']),
   result: z.unknown().optional(),
   error: z.string().max(500).optional(),
 }).strict();
@@ -371,6 +413,12 @@ remoteSupportRouter.post('/:id/command-result', authenticateToken, async (req: A
     return;
   }
 
+  const access = await getSessionAccess(session, req.user!);
+  if (!access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'DEVICE_FORBIDDEN', message: 'Only the paired device owner can submit command results.' } });
+    return;
+  }
+
   const parsed = CommandResultSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json({ error: { code: 'INVALID_RESULT_PAYLOAD', issues: parsed.error.issues } });
@@ -381,6 +429,11 @@ remoteSupportRouter.post('/:id/command-result', authenticateToken, async (req: A
   const cmd = commands.find((c) => c.id === parsed.data.command_id);
   if (!cmd) {
     res.status(404).json({ error: { code: 'COMMAND_NOT_FOUND', message: 'Command not found.' } });
+    return;
+  }
+
+  if (cmd.deviceId !== session.deviceId || cmd.status !== 'PENDING') {
+    res.status(409).json({ error: { code: 'COMMAND_NOT_PENDING', message: 'The command is not pending for this device.' } });
     return;
   }
 
@@ -403,13 +456,16 @@ remoteSupportRouter.post('/:id/terminate', authenticateToken, async (req: Authen
     return;
   }
 
+  const access = await getSessionAccess(session, req.user!);
+  if (!access.isOwner && !access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'SESSION_FORBIDDEN', message: 'This account is not a participant in the support session.' } });
+    return;
+  }
+
   session.status = 'TERMINATED';
   session.terminatedAt = new Date().toISOString();
   session.terminatedBy = req.user!.id;
   await db.saveRemoteSession(session);
-
-  // Clear signaling cache
-  signalingCache.delete(sessionId);
 
   // Unlink device active session
   const device = await db.getDevice(session.deviceId);

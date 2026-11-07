@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -187,6 +188,7 @@ fun AdminScreen(
 
     // Dialog States
     var showCreateToolDialog by rememberSaveable { mutableStateOf(false) }
+    var editingTool by remember { mutableStateOf<AdminToolItem?>(null) }
     var showInviteMemberDialog by rememberSaveable { mutableStateOf(false) }
     var showChangePinDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -454,6 +456,7 @@ fun AdminScreen(
                     maxWidth = maxContentWidth,
                     authToken = authToken,
                     onNewTool = { showCreateToolDialog = true },
+                    onEdit = { editingTool = it },
                     onPublish = { toolId ->
                         scope.launch {
                             adminClient.publishTool(toolId, authToken).onSuccess {
@@ -542,11 +545,79 @@ fun AdminScreen(
         }
     }
 
+    // --- EDIT TOOL DIALOG ---
+    editingTool?.let { selectedTool ->
+        var editedName by rememberSaveable(selectedTool.id) { mutableStateOf(selectedTool.name) }
+        var editedDescription by rememberSaveable(selectedTool.id) { mutableStateOf(selectedTool.description) }
+        var isSavingEdit by rememberSaveable(selectedTool.id) { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isSavingEdit) editingTool = null },
+            title = { Text("Edit Draft Tool", color = MahiTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Published releases remain unchanged. Publish a new version after updating the draft.", color = MahiTextSecondary, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = editedName,
+                        onValueChange = { editedName = it },
+                        label = { Text("Tool Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editedDescription,
+                        onValueChange = { editedDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = editedName.isNotBlank() && !isSavingEdit,
+                    onClick = {
+                        isSavingEdit = true
+                        scope.launch {
+                            adminClient.updateTool(
+                                selectedTool.id,
+                                com.example.data.remote.UpdateToolRequest(
+                                    name = editedName.trim(),
+                                    description = editedDescription.trim(),
+                                    category = selectedTool.category.lowercase()
+                                ),
+                                authToken
+                            ).onSuccess {
+                                statusFeedback = "Draft updated. Publish to create a new signed release."
+                                editingTool = null
+                                refreshAdminData()
+                            }.onFailure {
+                                statusFeedback = it.message ?: "Draft update failed."
+                            }
+                            isSavingEdit = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
+                ) {
+                    if (isSavingEdit) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    else Text("Save Draft")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!isSavingEdit) editingTool = null }) {
+                    Text("Cancel", color = MahiTextMuted)
+                }
+            },
+            containerColor = MahiCardSurface
+        )
+    }
+
     // --- CREATE TOOL DIALOG ---
     if (showCreateToolDialog) {
         var name by rememberSaveable { mutableStateOf("") }
         var slug by rememberSaveable { mutableStateOf("") }
-        var category by rememberSaveable { mutableStateOf("GENERAL") }
+        var category by rememberSaveable { mutableStateOf("connectivity") }
         var description by rememberSaveable { mutableStateOf("") }
         var problemDescription by rememberSaveable { mutableStateOf("") }
         var estimatedSeconds by rememberSaveable { mutableStateOf("60") }
@@ -612,8 +683,26 @@ fun AdminScreen(
                                         slug = slug.trim(),
                                         category = category,
                                         description = description.trim(),
-                                        problemDescription = problemDescription.trim(),
-                                        estimatedSeconds = estimatedSeconds.toIntOrNull() ?: 60
+                                        draftRecipe = mapOf(
+                                            "schemaVersion" to 1,
+                                            "toolId" to slug.trim(),
+                                            "title" to name.trim(),
+                                            "version" to 1,
+                                            "category" to category,
+                                            "minAndroidApi" to 26,
+                                            "minAppVersion" to "1.0.0",
+                                            "estimatedSeconds" to (estimatedSeconds.toIntOrNull() ?: 60),
+                                            "changelog" to problemDescription.trim().ifBlank { "Initial draft" },
+                                            "steps" to listOf(
+                                                mapOf(
+                                                    "id" to "initial-diagnostic",
+                                                    "action" to "CHECK_INTERNET",
+                                                    "params" to emptyMap<String, Any?>(),
+                                                    "risk" to "read_only",
+                                                    "requiresConfirmation" to false
+                                                )
+                                            )
+                                        )
                                     ),
                                     authToken
                                 ).onSuccess {
@@ -877,6 +966,7 @@ private fun AdminToolsPage(
     maxWidth: Dp,
     authToken: String,
     onNewTool: () -> Unit,
+    onEdit: (AdminToolItem) -> Unit,
     onPublish: (String) -> Unit,
     onDisable: (String) -> Unit
 ) {
@@ -930,6 +1020,7 @@ private fun AdminToolsPage(
             filtered.forEach { tool ->
                 AdminToolCard(
                     tool = tool,
+                    onEdit = { onEdit(tool) },
                     onPublish = { onPublish(tool.id) },
                     onDisable = { onDisable(tool.id) }
                 )
@@ -941,6 +1032,7 @@ private fun AdminToolsPage(
 @Composable
 private fun AdminToolCard(
     tool: AdminToolItem,
+    onEdit: () -> Unit,
     onPublish: () -> Unit,
     onDisable: () -> Unit
 ) {
@@ -979,6 +1071,13 @@ private fun AdminToolCard(
             ) {
                 Text("Audience: ${tool.audience.replace('_', ' ')}", color = MahiTextMuted, fontSize = 11.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onEdit,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Edit", fontSize = 11.sp)
+                    }
                     if (tool.status != "PUBLISHED") {
                         Button(
                             onClick = onPublish,
