@@ -80,6 +80,9 @@ class MahiRepairApplication : Application() {
             realtimeJob = null
             return
         }
+        // Recheck updates on each foreground transition so releases published while
+        // the app was backgrounded are visible even though its private socket was closed.
+        appUpdateEvents.tryEmit(Unit)
         if (realtimeJob?.isActive == true) return
 
         realtimeJob = applicationScope.launch {
