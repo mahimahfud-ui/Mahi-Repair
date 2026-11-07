@@ -111,7 +111,7 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithTag("tool_picker_title").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool_picker_network-tool-id").assertExists()
+        composeRule.onNodeWithTag("tool_picker_server-tool-id").assertExists()
         composeRule.onNodeWithTag("tool_picker_dns-tool-id").performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
     }
