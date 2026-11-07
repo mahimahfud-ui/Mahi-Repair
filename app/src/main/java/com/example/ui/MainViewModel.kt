@@ -211,15 +211,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_isAuthLoading.value) return
         viewModelScope.launch {
             _isAuthLoading.value = true
-            try {
-                authRepo.signOut()
-                toolRepo.clearLocalCatalog()
-                _otpSentForEmail.value = null
-                _authStatusMessage.value = null
-                _repairStatusMessage.value = null
-            } finally {
-                _isAuthLoading.value = false
+            val remoteSignOutFailure = runCatching { authRepo.signOut() }.exceptionOrNull()
+            val catalogClearFailure = runCatching { toolRepo.clearLocalCatalog() }.exceptionOrNull()
+
+            _otpSentForEmail.value = null
+            _repairStatusMessage.value = null
+            _authStatusMessage.value = when {
+                catalogClearFailure != null ->
+                    "Signed out, but local repair data could not be cleared. Reopen the app and retry."
+                remoteSignOutFailure != null ->
+                    "Signed out on this device. Server-side sign-out could not be confirmed."
+                else -> null
             }
+            _isAuthLoading.value = false
         }
     }
 

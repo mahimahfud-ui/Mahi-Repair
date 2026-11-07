@@ -108,6 +108,16 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
 
+      - name: Enable KVM access for the Android emulator
+        run: |
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::This runner does not expose the KVM device required for accelerated Android emulation."
+            exit 1
+          fi
+          sudo chmod 0666 /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+
       - name: Run Compose UI tests on an Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
