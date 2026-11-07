@@ -6,8 +6,10 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class InvitationLinkParserTest {
     @Test
     fun acceptsOnlyAnAppOwnedInvitationWithAWellFormedTokenHash() {
@@ -29,6 +31,6 @@ class InvitationLinkParserTest {
     fun rejectsMissingOrMalformedTokenHashes() {
         assertNull(InvitationLinkParser.parse(Uri.parse("mahirepair://invite")))
         assertNull(InvitationLinkParser.parse(Uri.parse("mahirepair://invite?token_hash=short")))
-        assertNull(InvitationLinkParser.parse(Uri.parse("mahirepair://invite?token_hash=${"c".repeat(64)}%2F")))
+        assertNull(InvitationLinkParser.parse(Uri.parse("mahirepair://invite?token_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc%2F")))
     }
 }
