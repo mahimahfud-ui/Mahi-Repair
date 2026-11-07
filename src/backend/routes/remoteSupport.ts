@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { signCanonicalPayload, toCanonicalJson } from '../crypto/signer';
 import {
   ActionDefinitions,
+  ActionRiskMap,
+  ConfirmationRequiredActions,
   SupportedActionName,
   RemoteSupportSessionRecord,
   RemoteCommandRecord,
@@ -273,6 +275,11 @@ remoteSupportRouter.post('/:id/command', authenticateToken, requireOwner, async 
     return;
   }
 
+  if (session.status !== 'DEVICE_CONNECTED' && session.status !== 'SCREEN_SHARING') {
+    res.status(409).json({ error: { code: 'DEVICE_NOT_CONNECTED', message: 'The device must join and approve the support session before commands can be dispatched.' } });
+    return;
+  }
+
   if (session.ownerId !== req.user!.id) {
     res.status(403).json({ error: { code: 'SESSION_FORBIDDEN', message: 'Only the Owner who created this session can dispatch commands.' } });
     return;
@@ -302,6 +309,18 @@ remoteSupportRouter.post('/:id/command', authenticateToken, requireOwner, async 
       error: {
         code: 'INVALID_ACTION_PARAMS',
         issues: paramCheck.error.issues,
+      },
+    });
+    return;
+  }
+
+  const actionRisk = ActionRiskMap[actionName];
+  if (actionRisk !== 'read_only' || ConfirmationRequiredActions.has(actionName)) {
+    res.status(409).json({
+      error: {
+        code: 'FOREGROUND_USER_CONFIRMATION_REQUIRED',
+        message: 'This action requires a foreground confirmation flow on the Android device and cannot be executed by the background remote service.',
+        risk: actionRisk,
       },
     });
     return;
