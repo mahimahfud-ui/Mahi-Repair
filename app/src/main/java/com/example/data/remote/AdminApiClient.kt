@@ -128,6 +128,13 @@ data class CreateToolRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class UpdateToolRequest(
+    val name: String,
+    val description: String,
+    val category: String
+)
+
+@JsonClass(generateAdapter = true)
 data class AdminMemberItem(
     val id: String,
     val email: String,
@@ -378,6 +385,34 @@ class AdminApiClient(
             throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // Update an existing draft. Published releases remain immutable until the next publish.
+    suspend fun updateTool(toolId: String, requestData: UpdateToolRequest, authToken: String): Result<AdminToolItem> = withContext(Dispatchers.IO) {
+        val url = "$baseUrl/api/v1/tools/${java.net.URLEncoder.encode(toolId, "UTF-8")}"
+        val bodyJson = moshi.adapter(UpdateToolRequest::class.java).toJson(requestData)
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
+            .put(bodyJson.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            okHttpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                val parsed = moshi.adapter(AdminToolResponse::class.java).fromJson(responseBody)
+                if (response.isSuccessful && parsed?.data != null) {
+                    Result.success(parsed.data)
+                } else {
+                    Result.failure(IOException(parsed?.error?.message ?: "Failed to update draft tool (HTTP ${response.code})."))
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
