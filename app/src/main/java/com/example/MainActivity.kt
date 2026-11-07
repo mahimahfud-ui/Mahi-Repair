@@ -1,5 +1,7 @@
 package com.example
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,6 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -18,19 +23,28 @@ import com.example.ui.theme.MahiBlack
 import com.example.ui.theme.MahiRepairTheme
 
 class MainActivity : ComponentActivity() {
+    private var invitationUri by mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        invitationUri = intent?.data
         setContent {
             MahiRepairTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MahiBlack
                 ) {
-                    MahiRepairApp()
+                    MahiRepairApp(invitationUri = invitationUri)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        invitationUri = intent.data
     }
 
     override fun onStart() {
@@ -46,9 +60,14 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MahiRepairApp(
+    invitationUri: Uri? = null,
     viewModel: MainViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(invitationUri) {
+        viewModel.onInvitationLink(invitationUri)
+    }
 
     if (!state.session.isAuthenticated) {
         AuthScreen(
@@ -64,7 +83,8 @@ fun MahiRepairApp(
             onSelectTool = { viewModel.onSelectTool(it) },
             onDismissToolPicker = { viewModel.onDismissToolPicker() },
             onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
-            onDismissExecution = { viewModel.onDismissExecution() }
+            onDismissExecution = { viewModel.onDismissExecution() },
+            onSignOut = { viewModel.onSignOut() }
         )
     }
 }

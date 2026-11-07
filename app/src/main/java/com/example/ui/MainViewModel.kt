@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
@@ -8,6 +9,7 @@ import com.example.data.local.UserSession
 import com.example.domain.engine.ExecutionEvent
 import com.example.domain.models.RepairTool
 import com.example.domain.models.RepairRunReport
+import com.example.security.InvitationLinkParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +31,8 @@ data class MainUiState(
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
-    val otpSentForEmail: String? = null
+    val otpSentForEmail: String? = null,
+    val isDeviceRegistered: Boolean = false
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,7 +62,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         engine.engineState,
         _authStatusMessage,
         _isAuthLoading,
-        _otpSentForEmail
+        _otpSentForEmail,
+        app.preferencesManager.deviceIdFlow
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
@@ -72,7 +76,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             executionState = values[7] as ExecutionEvent,
             authStatusMessage = values[8] as String?,
             isAuthLoading = values[9] as Boolean,
-            otpSentForEmail = values[10] as String?
+            otpSentForEmail = values[10] as String?,
+            isDeviceRegistered = !(values[11] as String?).isNullOrBlank()
         )
     }.stateIn(
         viewModelScope,
@@ -200,6 +205,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onDismissExecution() {
         engine.reset()
+    }
+
+    fun onSignOut() {
+        if (_isAuthLoading.value) return
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            try {
+                authRepo.signOut()
+                toolRepo.clearLocalCatalog()
+                _otpSentForEmail.value = null
+                _authStatusMessage.value = null
+                _repairStatusMessage.value = null
+            } finally {
+                _isAuthLoading.value = false
+            }
+        }
+    }
+
+    fun onInvitationLink(uri: Uri?) {
+        if (uri == null || uri.scheme != "mahirepair" || uri.host != "invite") return
+        val tokenHash = InvitationLinkParser.parse(uri)
+        if (tokenHash == null) {
+            _authStatusMessage.value =
+                "This invitation link is invalid. Enter your invited email to request a new access code."
+            return
+        }
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _authStatusMessage.value = null
+            try {
+                val result = authRepo.verifyInvitationToken(tokenHash)
+                if (result.isSuccess) {
+                    _otpSentForEmail.value = null
+                    _authStatusMessage.value = "Invitation verified. Your device will now be registered securely."
+                } else {
+                    _authStatusMessage.value = result.exceptionOrNull()?.message
+                        ?: "Invitation verification failed. Enter your invited email to request a new access code."
+                }
+            } finally {
+                _isAuthLoading.value = false
+            }
+        }
     }
 
     fun onRequestEmailOtp(email: String) {

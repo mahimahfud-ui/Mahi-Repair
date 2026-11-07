@@ -14,6 +14,7 @@ import com.example.data.remote.dto.SignedRecipeResponse
 import com.example.data.remote.dto.SubmitRunRequest
 import com.example.data.remote.dto.SubmitRunResponse
 import com.example.data.remote.dto.VerifyOtpRequest
+import com.example.data.remote.dto.VerifyInvitationTokenRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +119,46 @@ class SupabaseClient(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Consume a Supabase invitation token hash. AuthRepository persists the returned
+     * credentials only after Supabase Auth reports successful verification.
+     */
+    suspend fun verifyInvitationToken(tokenHash: String): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
+        }
+        if (!Regex("^[A-Za-z0-9_-]{16,512}$").matches(tokenHash)) {
+            return@withContext Result.failure(IllegalArgumentException("Invitation link is invalid."))
+        }
+
+        val bodyJson = moshi.adapter(VerifyInvitationTokenRequest::class.java)
+            .toJson(VerifyInvitationTokenRequest(tokenHash = tokenHash))
+        val request = Request.Builder()
+            .url("$baseUrl/auth/v1/verify")
+            .addHeader("apikey", anonKey)
+            .addHeader("Content-Type", "application/json")
+            .post(bodyJson.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                if (it.isSuccessful) {
+                    val body = it.body?.string().orEmpty()
+                    val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(body)
+                        ?: return@withContext Result.failure(IOException("Empty invitation verification response."))
+                    Result.success(session)
+                } else if (it.code == 400 || it.code == 401 || it.code == 404) {
+                    Result.failure(IOException("Invitation link is invalid, expired, or already used."))
+                } else {
+                    Result.failure(IOException("Invitation verification failed (HTTP ${it.code})."))
+                }
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 

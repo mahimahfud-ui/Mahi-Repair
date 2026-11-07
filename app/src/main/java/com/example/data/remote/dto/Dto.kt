@@ -17,6 +17,12 @@ data class VerifyOtpRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class VerifyInvitationTokenRequest(
+    @Json(name = "token_hash") val tokenHash: String,
+    val type: String = "invite"
+)
+
+@JsonClass(generateAdapter = true)
 data class RefreshTokenRequest(
     @Json(name = "refresh_token") val refreshToken: String
 )

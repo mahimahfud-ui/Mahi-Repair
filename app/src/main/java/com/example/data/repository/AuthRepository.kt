@@ -90,6 +90,68 @@ class AuthRepository(
     }
 
     /**
+     * Verify an invited user's one-time Supabase token hash and persist credentials
+     * only after the Auth endpoint confirms successful verification.
+     */
+    suspend fun verifyInvitationToken(tokenHash: String): Result<UserSession> {
+        val cleanHash = tokenHash.trim()
+        if (!Regex("^[A-Za-z0-9_-]{16,512}$").matches(cleanHash)) {
+            return Result.failure(IllegalArgumentException("This invitation link is invalid. Enter your invited email to request a new code."))
+        }
+        if (!supabaseClient.isConfigured()) {
+            return Result.failure(IllegalStateException("Repair service is temporarily unavailable. Please try again later."))
+        }
+
+        val verification = supabaseClient.verifyInvitationToken(cleanHash)
+        if (verification.isFailure) {
+            return Result.failure(
+                IllegalStateException(
+                    "This invitation link is invalid, expired, or already used. Enter your invited email to request a new code.",
+                    verification.exceptionOrNull()
+                )
+            )
+        }
+
+        val response = verification.getOrThrow()
+        val email = response.user?.email?.trim()?.lowercase()
+            ?.takeIf { android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() }
+            ?: return Result.failure(IllegalStateException("The verified invitation did not include a valid account email."))
+        val accessToken = response.accessToken?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(IllegalStateException("Invitation verification did not return an access token."))
+        val refreshToken = response.refreshToken?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(IllegalStateException("Invitation verification did not return a refresh token."))
+        val expiresIn = response.expiresIn?.takeIf { it > 0L }
+            ?: return Result.failure(IllegalStateException("Invitation verification returned an invalid session lifetime."))
+        val expiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
+        val role = response.user?.appMetadata?.get("role")?.takeIf { it.isNotBlank() } ?: "member"
+        if (role != "member") {
+            return Result.failure(IllegalStateException("This invitation is not a member invitation for the Android app."))
+        }
+
+        return try {
+            preferencesManager.saveSession(
+                email = email,
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresAtMillis = expiresAt,
+                role = role
+            )
+            Result.success(
+                UserSession(
+                    email = email,
+                    token = accessToken,
+                    role = role,
+                    isAuthenticated = true,
+                    refreshToken = refreshToken,
+                    expiresAtMillis = expiresAt
+                )
+            )
+        } catch (error: Exception) {
+            Result.failure(IllegalStateException("Could not securely store the invitation session on this device.", error))
+        }
+    }
+
+    /**
      * Return a usable session and serialize refreshes so concurrent sync/repair requests
      * never race each other while Supabase rotates refresh tokens.
      */

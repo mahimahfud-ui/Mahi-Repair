@@ -13,6 +13,7 @@ import com.example.domain.models.ToolCategory
 import com.example.ui.MainUiState
 import com.example.ui.screens.MainScreen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,7 +64,7 @@ class RunRepairScreenTest {
         composeRule.onNodeWithTag("tools_list").assertDoesNotExist()
         composeRule.onNodeWithTag("sync_button").assertDoesNotExist()
         composeRule.onNodeWithTag("history_button").assertDoesNotExist()
-        composeRule.onNodeWithTag("sign_out_button").assertDoesNotExist()
+        composeRule.onNodeWithTag("sign_out_button").assertExists().assertIsDisplayed()
         composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("Network Diagnostics").assertDoesNotExist()
         composeRule.onNodeWithText("DNS Troubleshooting").assertDoesNotExist()
@@ -116,6 +117,26 @@ class RunRepairScreenTest {
         composeRule.onNodeWithText("v1", substring = true).assertExists()
         composeRule.onNodeWithText("DNS Troubleshooting").performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
+    }
+
+    @Test
+    fun signOutButtonInvokesTheSignOutAction() {
+        var signOutCalled = false
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(isToolsLoading = false),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {},
+                onSignOut = { signOutCalled = true }
+            )
+        }
+
+        composeRule.onNodeWithTag("sign_out_button").performClick()
+        composeRule.runOnIdle { assertTrue(signOutCalled) }
     }
 
     @Test

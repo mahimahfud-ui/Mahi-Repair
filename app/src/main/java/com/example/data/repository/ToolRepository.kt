@@ -60,14 +60,14 @@ class ToolRepository(
         deviceRegistrationMutex.withLock {
             val savedId = preferencesManager.deviceIdFlow.first()
             val savedOwner = preferencesManager.deviceOwnerEmailFlow.first()
-            if (!savedId.isNullOrBlank() && savedOwner.equals(ownerEmail, ignoreCase = true)) {
-                UUID.fromString(savedId)
-                return@withLock savedId
+            val sameOwnerDeviceId = savedId?.takeIf {
+                it.isNotBlank() && savedOwner.equals(ownerEmail, ignoreCase = true)
             }
-            if (!savedId.isNullOrBlank()) preferencesManager.clearDeviceId()
 
+            // Existing device identities must heartbeat on every app start/sync. A 403
+            // for a revoked UUID is not converted into a fresh registration.
             val request = RegisterDeviceRequest(
-                deviceId = null,
+                deviceId = sameOwnerDeviceId,
                 deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}".take(60),
                 appVersion = BuildConfig.VERSION_NAME,
                 androidVersion = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString(),
@@ -75,15 +75,23 @@ class ToolRepository(
             )
             val result = supabaseClient.registerDevice(request, accessToken)
             val deviceId = result.getOrElse { cause ->
-                throw IllegalStateException("This device could not be authorized by the repair service.", cause)
+                throw IllegalStateException(
+                    if (sameOwnerDeviceId != null) {
+                        "This device could not be revalidated. It may have been revoked by the Owner."
+                    } else {
+                        "This device could not be authorized by the repair service."
+                    },
+                    cause
+                )
             }.takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("The repair service returned an invalid device identity.")
 
             UUID.fromString(deviceId)
-            preferencesManager.saveDeviceId(deviceId, ownerEmail)
+            if (sameOwnerDeviceId == null || !sameOwnerDeviceId.equals(deviceId, ignoreCase = true)) {
+                preferencesManager.saveDeviceId(deviceId, ownerEmail)
+            }
             deviceId
         }
-
     private fun verifySignatureAlgorithm(algorithm: String) {
         RecipeContractVerifier.requireSupportedSignatureAlgorithm(algorithm)
     }
