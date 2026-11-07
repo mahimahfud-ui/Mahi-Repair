@@ -217,7 +217,7 @@ export default async function MembersPage() {
           <p className="p-6 text-center text-xs muted">No Android devices have registered.</p>
         )}
         <p className="border-t border-[#252830] p-4 text-[11px] muted">
-          The Android registration contract supplies device label, app version, Android version/API, last check-in and revocation. The catalogue column shows the version most recently upserted by the real device sync endpoint. The synced_at value is the row's first-recorded timestamp (the current Edge Function does not refresh it on upsert); this is historical sync telemetry, not proof of current access or hardware compatibility. Manufacturer/model, pairing state, battery, storage and detailed hardware capability telemetry are not uploaded and are intentionally omitted.
+          The Android registration contract supplies device label, app version, Android version/API, last check-in and revocation. The catalogue column shows the version most recently upserted by the real device sync endpoint. The synced_at value is the row&apos;s first-recorded timestamp (the current Edge Function does not refresh it on upsert); this is historical sync telemetry, not proof of current access or hardware compatibility. Manufacturer/model, pairing state, battery, storage and detailed hardware capability telemetry are not uploaded and are intentionally omitted.
         </p>
       </div>
     </ConsoleShell>

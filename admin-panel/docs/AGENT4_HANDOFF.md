@@ -19,6 +19,7 @@
 - Invitation history now displays existing `member.invited` audit records. The UI explicitly distinguishes invite-request acceptance by Supabase Auth from email delivery or member acceptance.
 - Device inventory exposes only fields actually sent by Android: server device ID, label, app version, Android version/API, last check-in and revocation state. It also shows the last version stored by the real `device_tool_syncs` catalog endpoint. Its `synced_at` value is the row's first-recorded timestamp because the current Edge Function does not refresh it on upsert; this is historical sync telemetry, not proof of current access or hardware compatibility.
 - Repair-run history and persistent administrative audit history are visible to Owners.
+- Added the Owner App Update Manager at `/updates`: signed immutable manifest publication, private ZIP/APK upload, server-side SHA-256 calculation and release history. The form uses the current Android `applicationId` and now binds APK `versionCode` to the selected app version code; content package versions are explicitly editable.
 - Added polling-delay unit tests, `/api/ops` route-level authorization/response tests using a mocked Supabase client, and updated Render preview branch/health-check configuration.
 
 ## Existing actions retained
@@ -36,6 +37,8 @@ Current Agent 1 APIs do not provide invitation email-delivery status, invitation
 The device registration contract does not contain manufacturer/model, pairing state, battery, storage or detailed hardware capability fields. Do not infer those from the device label or last-seen timestamp.
 
 The current backend and Android app do not contain support-session state, consent workflow, WebRTC signaling, STUN/TURN credentials or Android MediaProjection screen capture. There is no real remote video to display. See `REMOTE_SUPPORT_GAP_ANALYSIS.md` before implementing this as a new cross-platform feature.
+
+The signed app-update publication backend exists, but the Android client is not yet end-to-end integrated: its current private Realtime event allowlist does not include `app_update_published`, and there is no verified client workflow for fetching/verifying a manifest, validating/unzipping content packages, certificate-checking an APK and handing it to Android PackageInstaller. Do not mark live app updates as end-to-end complete until those client paths are implemented and tested on a real device. See `APP_LIVE_UPDATES.md`.
 
 ## Required Agent 4 follow-up
 
