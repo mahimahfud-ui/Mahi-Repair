@@ -48,7 +48,7 @@ class RemoteSupportService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var actionRegistry: ActionRegistry? = null
     private var sessionId: String? = null
-    private var backendUrl: String = BuildConfig.REMOTE_SUPPORT_API_BASE_URL.trimEnd('/')
+    private var backendUrl: String = BuildConfig.MAHI_API_BASE_URL.trim().trimEnd('/')
     private var authToken: String? = null
 
     companion object {
@@ -83,7 +83,7 @@ class RemoteSupportService : Service() {
             authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN)?.takeIf { it.isNotBlank() }
 
             val requestedBackend = intent.getStringExtra(EXTRA_BACKEND_URL)?.trim()?.trimEnd('/')
-            val configuredBackend = BuildConfig.REMOTE_SUPPORT_API_BASE_URL.trim().trimEnd('/')
+            val configuredBackend = BuildConfig.MAHI_API_BASE_URL.trim().trimEnd('/')
             backendUrl = requestedBackend?.takeIf { it.startsWith("https://") } ?: configuredBackend
 
             // Fail closed when credentials or an actual HTTPS backend are not configured.

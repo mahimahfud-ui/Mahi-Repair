@@ -226,7 +226,7 @@ data class AdminAuditLogsResponse(
 // --- Admin API Client ---
 
 class AdminApiClient(
-    private val baseUrl: String = BuildConfig.SUPABASE_URL.trimEnd('/')
+    private val baseUrl: String = BuildConfig.MAHI_API_BASE_URL.trim().trimEnd('/')
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
