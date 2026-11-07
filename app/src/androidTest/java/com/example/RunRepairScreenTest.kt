@@ -68,7 +68,10 @@ class RunRepairScreenTest {
         composeRule.onNodeWithTag("tools_list").assertDoesNotExist()
         composeRule.onNodeWithTag("sync_button").assertDoesNotExist()
         composeRule.onNodeWithTag("history_button").assertDoesNotExist()
-        composeRule.onNodeWithTag("sign_out_button").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithTag("sign_out_button")
+            .performScrollTo()
+            .assertExists()
+            .assertIsDisplayed()
         composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("Network Diagnostics").assertDoesNotExist()
         composeRule.onNodeWithText("DNS Troubleshooting").assertDoesNotExist()
@@ -139,7 +142,7 @@ class RunRepairScreenTest {
             )
         }
 
-        composeRule.onNodeWithTag("sign_out_button").performClick()
+        composeRule.onNodeWithTag("sign_out_button").performScrollTo().assertIsDisplayed().performClick()
         composeRule.runOnIdle { assertTrue(signOutCalled) }
     }
 
