@@ -61,7 +61,7 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
 
   // Never infer identity from token text, email-shaped strings, demo substrings,
   // or hard-coded Owner names. Verify the access token with Supabase Auth.
-  const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\\/+$/, '');
+  const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, '');
   const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
   if (
     !supabaseUrl?.startsWith('https://') ||
