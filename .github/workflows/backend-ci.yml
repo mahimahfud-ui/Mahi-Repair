@@ -30,8 +30,19 @@ jobs:
           node-version: '22'
           package-manager-cache: false
 
-      - name: Install root dependencies
-        run: npm ci --no-audit --no-fund --no-progress
+      - name: Regenerate root npm lockfile from the declared manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --no-progress
+
+      - name: Install root dependencies from the regenerated lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund --no-progress
 
       - name: TypeScript and production build
         run: npm run build
+
+      - name: Upload normalized root package lock
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-root-package-lock
+          path: package-lock.json
+          retention-days: 1
