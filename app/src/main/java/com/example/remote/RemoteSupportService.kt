@@ -17,6 +17,7 @@ import com.example.domain.actions.ActionRegistry
 import com.example.domain.models.ActionType
 import com.example.domain.models.RecipeStep
 import com.example.domain.models.StepStatus
+import com.example.security.RsaSignatureVerifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -202,7 +203,7 @@ class RemoteSupportService : Service() {
     }
 
     private suspend fun pollAndExecuteCommand(currentSessionId: String) = withContext(Dispatchers.IO) {
-        val url = URL("$backendUrl/api/v1/remote-support/$currentSessionId/commands/pending")
+        val url = URL("$backendUrl/api/v1/remote-support/$currentSessionId/commands")
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 5000
@@ -210,33 +211,64 @@ class RemoteSupportService : Service() {
             authToken?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
 
-        if (conn.responseCode == 200) {
+        try {
+            if (conn.responseCode != 200) return@withContext
             val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(responseText)
-            val success = json.optBoolean("success", false)
-            if (success && json.has("command") && !json.isNull("command")) {
-                val cmd = json.getJSONObject("command")
-                val commandId = cmd.getString("id")
-                val actionStr = cmd.getString("action")
-                val paramsJson = cmd.optJSONObject("params") ?: JSONObject()
+            val commands = JSONObject(responseText).optJSONArray("data") ?: return@withContext
 
+            for (index in 0 until commands.length()) {
+                val cmd = commands.optJSONObject(index) ?: continue
+                if (cmd.optString("status") != "PENDING") continue
+
+                val commandId = cmd.optString("id")
+                val canonicalPayload = cmd.optString("canonicalPayload")
+                val signature = cmd.optString("signature")
+
+                if (commandId.isBlank() || canonicalPayload.isBlank() ||
+                    !RsaSignatureVerifier.verify(canonicalPayload, signature)
+                ) {
+                    if (commandId.isNotBlank()) {
+                        submitCommandResult(currentSessionId, commandId, "REJECTED", "Command signature is missing or invalid.")
+                    }
+                    continue
+                }
+
+                val signedCommand = try {
+                    JSONObject(canonicalPayload)
+                } catch (_: Exception) {
+                    submitCommandResult(currentSessionId, commandId, "REJECTED", "Signed command payload is invalid.")
+                    continue
+                }
+
+                val signedExpiry = signedCommand.optString("expiresAt")
+                val isExpired = runCatching {
+                    java.time.Instant.parse(signedExpiry).isBefore(java.time.Instant.now())
+                }.getOrDefault(true)
+                val signedCommandId = signedCommand.optString("commandId")
+                val signedSessionId = signedCommand.optString("sessionId")
+                val signedDeviceId = signedCommand.optString("deviceId")
+                if (isExpired || signedCommandId != commandId ||
+                    signedSessionId != currentSessionId ||
+                    signedDeviceId.isBlank() ||
+                    signedDeviceId != cmd.optString("deviceId")
+                ) {
+                    submitCommandResult(currentSessionId, commandId, "REJECTED", "Command binding or expiry verification failed.")
+                    continue
+                }
+
+                val actionStr = signedCommand.optString("action")
+                val paramsJson = signedCommand.optJSONObject("params") ?: JSONObject()
                 val params = mutableMapOf<String, Any?>()
                 val keys = paramsJson.keys()
                 while (keys.hasNext()) {
-                    val k = keys.next()
-                    params[k] = paramsJson.opt(k)
+                    val key = keys.next()
+                    params[key] = paramsJson.opt(key)
                 }
 
-                // Strictly validate action type
-                val actionType = try {
-                    ActionType.valueOf(actionStr)
-                } catch (e: Exception) {
-                    null
-                }
-
+                val actionType = ActionType.fromIdentifier(actionStr)
                 if (actionType == null) {
-                    submitCommandResult(currentSessionId, commandId, "FAILED", "Rejected unallowlisted action: $actionStr")
-                    return@withContext
+                    submitCommandResult(currentSessionId, commandId, "REJECTED", "Action is not in the native allowlist.")
+                    continue
                 }
 
                 val recipeStep = RecipeStep(
@@ -245,25 +277,30 @@ class RemoteSupportService : Service() {
                     params = params
                 )
 
-                // Validate step
                 val validation = actionRegistry?.validateStep(recipeStep)
                 if (validation?.isFailure == true) {
-                    submitCommandResult(currentSessionId, commandId, "FAILED", validation.exceptionOrNull()?.message ?: "Validation failed")
-                    return@withContext
+                    submitCommandResult(
+                        currentSessionId,
+                        commandId,
+                        "REJECTED",
+                        validation.exceptionOrNull()?.message ?: "Native action validation failed."
+                    )
+                    continue
                 }
 
-                // Execute step
                 val result = actionRegistry?.executeAction(recipeStep)
-                val statusStr = when (result?.status) {
+                val status = when (result?.status) {
                     StepStatus.COMPLETED -> "COMPLETED"
                     StepStatus.FAILED -> "FAILED"
                     StepStatus.WAITING_USER -> "WAITING_USER"
-                    else -> "COMPLETED"
+                    else -> "FAILED"
                 }
-                submitCommandResult(currentSessionId, commandId, statusStr, result?.message ?: "Executed", result?.details)
+                submitCommandResult(currentSessionId, commandId, status, result?.message ?: "No action result.")
+                return@withContext
             }
+        } finally {
+            conn.disconnect()
         }
-        conn.disconnect()
     }
 
     private fun submitCommandResult(
@@ -284,20 +321,20 @@ class RemoteSupportService : Service() {
                 authToken?.let { setRequestProperty("Authorization", "Bearer $it") }
             }
 
+            val result = JSONObject().put("message", message)
+            if (details != null) result.put("details", JSONObject(details))
             val body = JSONObject().apply {
-                put("commandId", commandId)
+                put("command_id", commandId)
                 put("status", status)
-                put("message", message)
-                if (details != null) {
-                    put("details", JSONObject(details))
-                }
+                put("result", result)
+                if (status == "FAILED" || status == "REJECTED") put("error", message.take(500))
             }
 
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             conn.responseCode
             conn.disconnect()
-        } catch (e: Exception) {
-            // Ignore submission failure
+        } catch (_: Exception) {
+            // A failed acknowledgement is retried by the server's pending-command flow.
         }
     }
 
