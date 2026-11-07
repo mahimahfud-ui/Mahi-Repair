@@ -17,20 +17,68 @@
     },
     "Device": {
       "title": "Device",
-      "description": "Registered Android device associated with a member",
+      "description": "Registered Android device with hardware profile and diagnostic intelligence",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "userId": { "type": "string", "maxLength": 128 },
         "deviceLabel": { "type": "string", "maxLength": 100 },
+        "appInstallationId": { "type": "string", "maxLength": 128 },
         "appVersion": { "type": "string", "maxLength": 32 },
         "androidVersion": { "type": "string", "maxLength": 32 },
         "androidApi": { "type": "integer" },
+        "manufacturer": { "type": "string", "maxLength": 100 },
+        "brand": { "type": "string", "maxLength": 100 },
+        "model": { "type": "string", "maxLength": 100 },
+        "deviceCodename": { "type": "string", "maxLength": 100 },
+        "product": { "type": "string", "maxLength": 100 },
+        "hardware": { "type": "string", "maxLength": 100 },
+        "socManufacturer": { "type": "string", "maxLength": 100 },
+        "socModel": { "type": "string", "maxLength": 100 },
+        "securityPatch": { "type": "string", "maxLength": 32 },
+        "cpuAbis": { "type": "array" },
+        "cpuCoreCount": { "type": "integer" },
+        "totalRamBytes": { "type": "integer" },
+        "availableRamBytes": { "type": "integer" },
+        "internalStorageTotalBytes": { "type": "integer" },
+        "internalStorageAvailableBytes": { "type": "integer" },
+        "batteryLevel": { "type": "integer" },
+        "chargingState": { "type": "string", "maxLength": 30 },
+        "batteryTemperature": { "type": "number" },
+        "thermalStatus": { "type": "string", "maxLength": 50 },
+        "screenWidthPx": { "type": "integer" },
+        "screenHeightPx": { "type": "integer" },
+        "densityDpi": { "type": "integer" },
+        "refreshRateHz": { "type": "number" },
+        "supportedFeatures": { "type": "array" },
+        "availableSensors": { "type": "array" },
+        "grantedAppPermissions": { "type": "array" },
+        "networkState": { "type": "string", "maxLength": 50 },
+        "connectivityState": { "type": "string", "maxLength": 50 },
+        "profileVersion": { "type": "integer" },
+        "lastProfileUpdatedAt": { "type": "string", "format": "date-time" },
         "registeredAt": { "type": "string", "format": "date-time" },
         "lastSeenAt": { "type": "string", "format": "date-time" },
         "revokedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "appVersion", "androidVersion", "registeredAt", "lastSeenAt"]
+    },
+    "RemoteSupportSession": {
+      "title": "RemoteSupportSession",
+      "description": "Authenticated remote laptop-to-Android support session with WebRTC signaling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "pairingCode": { "type": "string", "maxLength": 16 },
+        "status": { "type": "string", "enum": ["WAITING_FOR_DEVICE", "DEVICE_CONNECTED", "SCREEN_SHARING", "TERMINATED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "terminatedAt": { "type": "string", "format": "date-time" },
+        "terminatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "deviceId", "ownerId", "pairingCode", "status", "createdAt", "expiresAt"]
     },
     "RepairTool": {
       "title": "RepairTool",
@@ -207,6 +255,10 @@
     "/admin_settings/{settingId}": {
       "schema": { "$ref": "#/entities/AdminSetting" },
       "description": "Server-side protected admin configuration"
+    },
+    "/remote_support_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/RemoteSupportSession" },
+      "description": "Active remote support WebRTC signaling sessions"
     }
   }
 }

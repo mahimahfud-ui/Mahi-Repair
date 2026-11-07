@@ -11,9 +11,12 @@ import {
   AdminAuditLogRecord,
   RecipeTestHistoryRecord,
   AdminPinConfig,
+  RemoteSupportSessionRecord,
+  RemoteCommandRecord,
 } from '../types';
 import { createInitialPinConfig } from '../security/pin';
 import { toCanonicalJson, signCanonicalPayload } from '../crypto/signer';
+import { categorizeToolsForDevice } from '../engine/compatibility';
 
 // Data storage abstraction supporting Cloud Firestore with resilient local persistence
 class MemoryStagingDb {
@@ -28,6 +31,8 @@ class MemoryStagingDb {
   auditLogs: AdminAuditLogRecord[] = [];
   testHistory: RecipeTestHistoryRecord[] = [];
   adminSettings: Map<string, AdminPinConfig> = new Map();
+  remoteSessions: Map<string, RemoteSupportSessionRecord> = new Map();
+  remoteCommands: Map<string, RemoteCommandRecord> = new Map();
 
   constructor() {
     const secretsDir = path.join(process.cwd(), '.server-secrets');
@@ -54,6 +59,8 @@ class MemoryStagingDb {
         auditLogs: this.auditLogs,
         testHistory: this.testHistory,
         adminSettings: Array.from(this.adminSettings.values()),
+        remoteSessions: Array.from(this.remoteSessions.values()),
+        remoteCommands: Array.from(this.remoteCommands.values()),
       };
       fs.writeFileSync(this.dataFile, JSON.stringify(state, null, 2), { mode: 0o600 });
     } catch {
@@ -76,6 +83,8 @@ class MemoryStagingDb {
         if (state.auditLogs) this.auditLogs = state.auditLogs;
         if (state.testHistory) this.testHistory = state.testHistory;
         if (state.adminSettings) state.adminSettings.forEach((s: AdminPinConfig) => this.adminSettings.set(s.id, s));
+        if (state.remoteSessions) state.remoteSessions.forEach((s: RemoteSupportSessionRecord) => this.remoteSessions.set(s.id, s));
+        if (state.remoteCommands) state.remoteCommands.forEach((c: RemoteCommandRecord) => this.remoteCommands.set(c.id, c));
       }
     } catch {
       // Start fresh
@@ -122,20 +131,195 @@ class MemoryStagingDb {
     const initialPin = createInitialPinConfig(owner1.id);
     this.adminSettings.set(initialPin.id, initialPin);
 
-    // Initial Demo Device
-    const demoDevice: DeviceRecord = {
+    // Initial Demo Devices
+    const demoDevice1: DeviceRecord = {
       id: 'DEMO-0001',
       userId: member1.id,
-      deviceLabel: 'Pixel 8 (Demo)',
-      appVersion: '1.0.0',
+      deviceLabel: 'Pixel 8 Pro (Demo)',
+      appInstallationId: 'fid_pixel8_pro_99a8b7',
+      appVersion: '1.2.0',
       androidVersion: '15',
       androidApi: 35,
       registeredAt: now,
       lastSeenAt: now,
+      profileVersion: 1,
+      lastProfileUpdatedAt: now,
+      hardwareProfile: {
+        manufacturer: 'Google',
+        brand: 'google',
+        model: 'Pixel 8 Pro',
+        commercialModelName: 'Pixel 8 Pro',
+        modelIdentifier: 'GC3VE',
+        productName: 'husky',
+        deviceCodename: 'husky',
+        hardware: 'zuma',
+        socManufacturer: 'Google',
+        socModel: 'Tensor G3',
+        cpuAbis: ['arm64-v8a'],
+        processorArchitecture: 'aarch64',
+        cpuCoreCount: 9,
+        androidRelease: '15',
+        androidSdk: 35,
+        securityPatchDate: '2024-10-05',
+        buildDisplayInfo: 'AP3A.241005.015',
+        screenWidthPx: 1344,
+        screenHeightPx: 2992,
+        densityDpi: 489,
+        refreshRateHz: 120,
+        supportedFeatures: [
+          'android.hardware.camera',
+          'android.hardware.camera.autofocus',
+          'android.hardware.wifi',
+          'android.hardware.bluetooth',
+          'android.hardware.nfc',
+          'android.hardware.biometrics',
+          'android.hardware.sensor.accelerometer',
+          'android.hardware.sensor.gyroscope',
+        ],
+        availableSensors: [
+          { type: 1, name: 'LSM6DSO Accelerometer', vendor: 'STMicroelectronics' },
+          { type: 4, name: 'LSM6DSO Gyroscope', vendor: 'STMicroelectronics' },
+          { type: 5, name: 'TCS3718 Light Sensor', vendor: 'AMS' },
+        ],
+        cameraAvailable: true,
+        profileConsentVersion: 1,
+        collectedAt: now,
+      },
+      telemetry: {
+        totalRamBytes: 12884901888, // 12GB
+        availableRamBytes: 5905580032, // 5.5GB
+        isLowMemory: false,
+        internalStorageTotalBytes: 256000000000,
+        internalStorageAvailableBytes: 168000000000,
+        storagePressure: 'NORMAL',
+        appSpecificStorageBytes: 42000000,
+        batteryLevel: 82,
+        chargingStatus: 'DISCHARGING',
+        powerSource: 'BATTERY',
+        batteryTemperature: 31.4,
+        batteryHealth: 'GOOD',
+        batteryCapacityEstimateMah: 5050,
+        batterySaverActive: false,
+        thermalStatus: 'NONE',
+        networkConnectivity: 'CONNECTED',
+        networkTransport: 'WIFI',
+        internetValidated: true,
+        dnsResolutionLatencyMs: 22,
+        httpsProbeLatencyMs: 65,
+        grantedPermissions: [
+          'android.permission.INTERNET',
+          'android.permission.ACCESS_NETWORK_STATE',
+          'android.permission.ACCESS_WIFI_STATE',
+          'android.permission.POST_NOTIFICATIONS',
+        ],
+        detectedRepairApps: [
+          { packageName: 'com.google.android.youtube', installed: true, versionName: '19.42.34' },
+          { packageName: 'com.facebook.katana', installed: false },
+          { packageName: 'com.android.vending', installed: true, versionName: '43.2.19' },
+        ],
+        lastTelemetryUpdatedAt: now,
+      },
+      fieldAvailability: {
+        commercialModelName: 'OBSERVED',
+        socModel: 'OBSERVED',
+        batteryHealth: 'OBSERVED',
+        batteryTemperature: 'OBSERVED',
+        totalRamBytes: 'OBSERVED',
+        internalStorageAvailableBytes: 'OBSERVED',
+      },
     };
-    this.devices.set(demoDevice.id, demoDevice);
 
-    // Seed Verified Catalog Tools with Signed v1 Payloads
+    const demoDevice2: DeviceRecord = {
+      id: 'DEMO-0002',
+      userId: member1.id,
+      deviceLabel: "Sarah's Galaxy S24 (Demo)",
+      appInstallationId: 'fid_galaxy_s24_22c3d4',
+      appVersion: '1.2.0',
+      androidVersion: '14',
+      androidApi: 34,
+      registeredAt: now,
+      lastSeenAt: now,
+      profileVersion: 1,
+      lastProfileUpdatedAt: now,
+      hardwareProfile: {
+        manufacturer: 'Samsung',
+        brand: 'samsung',
+        model: 'SM-S921B',
+        commercialModelName: 'Galaxy S24',
+        modelIdentifier: 'SM-S921B',
+        productName: 'e1s',
+        deviceCodename: 'e1s',
+        hardware: 's5e9945',
+        socManufacturer: 'Samsung',
+        socModel: 'Exynos 2400',
+        cpuAbis: ['arm64-v8a'],
+        processorArchitecture: 'aarch64',
+        cpuCoreCount: 10,
+        androidRelease: '14',
+        androidSdk: 34,
+        securityPatchDate: '2024-09-01',
+        buildDisplayInfo: 'UP1A.231005.007.S921BXXU3AXH7',
+        screenWidthPx: 1080,
+        screenHeightPx: 2340,
+        densityDpi: 416,
+        refreshRateHz: 120,
+        supportedFeatures: [
+          'android.hardware.camera',
+          'android.hardware.wifi',
+          'android.hardware.bluetooth',
+          'android.hardware.nfc',
+          'android.hardware.biometrics',
+          'android.hardware.sensor.accelerometer',
+        ],
+        availableSensors: [
+          { type: 1, name: 'LSM6DSO Accelerometer', vendor: 'STMicroelectronics' },
+          { type: 4, name: 'LSM6DSO Gyroscope', vendor: 'STMicroelectronics' },
+        ],
+        cameraAvailable: true,
+        profileConsentVersion: 1,
+        collectedAt: now,
+      },
+      telemetry: {
+        totalRamBytes: 8589934592, // 8GB
+        availableRamBytes: 3124580000,
+        isLowMemory: false,
+        internalStorageTotalBytes: 128000000000,
+        internalStorageAvailableBytes: 42000000000,
+        storagePressure: 'NORMAL',
+        batteryLevel: 65,
+        chargingStatus: 'DISCHARGING',
+        powerSource: 'BATTERY',
+        batteryTemperature: 33.1,
+        batteryHealth: 'GOOD',
+        batteryCapacityEstimateMah: 4000,
+        batterySaverActive: false,
+        thermalStatus: 'NONE',
+        networkConnectivity: 'CONNECTED',
+        networkTransport: 'WIFI',
+        internetValidated: true,
+        dnsResolutionLatencyMs: 28,
+        httpsProbeLatencyMs: 74,
+        grantedPermissions: [
+          'android.permission.INTERNET',
+          'android.permission.ACCESS_NETWORK_STATE',
+          'android.permission.ACCESS_WIFI_STATE',
+        ],
+        detectedRepairApps: [
+          { packageName: 'com.google.android.youtube', installed: true, versionName: '19.40.38' },
+        ],
+        lastTelemetryUpdatedAt: now,
+      },
+      fieldAvailability: {
+        commercialModelName: 'OBSERVED',
+        socModel: 'OBSERVED',
+        batteryHealth: 'OBSERVED',
+      },
+    };
+
+    this.devices.set(demoDevice1.id, demoDevice1);
+    this.devices.set(demoDevice2.id, demoDevice2);
+
+    // Seed Verified Catalog Tools with Signed v1 Payloads and Compatibility Metadata
     const initialToolsData = [
       {
         id: 'tool_dns_repair',
@@ -145,6 +329,15 @@ class MemoryStagingDb {
         description: 'Diagnoses domain lookup bottlenecks, verifies Cloudflare/Google DNS resolvers, and tests latency.',
         icon: 'globe',
         estimatedSeconds: 30,
+        compatibilityMetadata: {
+          minimumAndroidSdk: 23,
+          supportedActionIds: ['CHECK_INTERNET', 'DNS_LOOKUP', 'HTTPS_PROBE', 'VERIFY_DNS', 'VERIFY_INTERNET'],
+          networkPrerequisites: { requiresInternet: true },
+          riskLevel: 'read_only' as const,
+          userConfirmationRequired: false,
+          supportedRecipeVersions: [1],
+          rollbackOrRecoveryInstructions: 'Diagnostic read-only operation; safe to retry.',
+        },
         steps: [
           { id: 's1', action: 'CHECK_INTERNET', params: {}, risk: 'read_only', requiresConfirmation: false },
           { id: 's2', action: 'DNS_LOOKUP', params: { host: 'google.com' }, risk: 'read_only', requiresConfirmation: false },
@@ -161,6 +354,14 @@ class MemoryStagingDb {
         description: 'Checks YouTube app installation, probes connectivity, and guides storage cache cleaning.',
         icon: 'video',
         estimatedSeconds: 45,
+        compatibilityMetadata: {
+          minimumAndroidSdk: 24,
+          supportedActionIds: ['CHECK_APP_INSTALLED', 'CHECK_INTERNET', 'HTTPS_PROBE', 'OPEN_APP_DETAILS', 'OPEN_APP'],
+          riskLevel: 'guided' as const,
+          userConfirmationRequired: true,
+          supportedRecipeVersions: [1],
+          knownLimitations: ['Requires YouTube app installed or guidance to install from Google Play.'],
+        },
         steps: [
           { id: 'yt1', action: 'CHECK_APP_INSTALLED', params: { packageName: 'com.google.android.youtube' }, risk: 'read_only', requiresConfirmation: false },
           { id: 'yt2', action: 'CHECK_INTERNET', params: {}, risk: 'read_only', requiresConfirmation: false },
@@ -177,6 +378,14 @@ class MemoryStagingDb {
         description: 'Analyzes Wi-Fi link parameters, gateway response, and navigates to Android network settings.',
         icon: 'wifi',
         estimatedSeconds: 40,
+        compatibilityMetadata: {
+          minimumAndroidSdk: 23,
+          supportedActionIds: ['CHECK_INTERNET', 'DNS_LOOKUP', 'OPEN_ANDROID_SETTINGS', 'VERIFY_INTERNET'],
+          networkPrerequisites: { requiresWifi: true },
+          riskLevel: 'guided' as const,
+          userConfirmationRequired: true,
+          supportedRecipeVersions: [1],
+        },
         steps: [
           { id: 'wf1', action: 'CHECK_INTERNET', params: {}, risk: 'read_only', requiresConfirmation: false },
           { id: 'wf2', action: 'DNS_LOOKUP', params: { host: 'connectivitycheck.gstatic.com' }, risk: 'read_only', requiresConfirmation: false },
@@ -193,7 +402,7 @@ class MemoryStagingDb {
         title: item.name,
         version: 1,
         category: item.category,
-        minAndroidApi: 23,
+        minAndroidApi: item.compatibilityMetadata.minimumAndroidSdk,
         minAppVersion: '1.0.0',
         estimatedSeconds: item.estimatedSeconds,
         changelog: 'Initial production release v1',
@@ -211,10 +420,11 @@ class MemoryStagingDb {
         audience: 'all_active_members',
         version: 1,
         draftRecipe,
-        androidCompatibility: { minApi: 23 },
+        androidCompatibility: { minApi: item.compatibilityMetadata.minimumAndroidSdk },
+        compatibilityMetadata: item.compatibilityMetadata,
         minimumAppVersion: '1.0.0',
         estimatedSeconds: item.estimatedSeconds,
-        riskClassification: 'guided',
+        riskClassification: item.compatibilityMetadata.riskLevel,
         createdBy: owner1.id,
         createdAt: now,
         updatedAt: now,
@@ -430,6 +640,87 @@ class MemoryStagingDb {
       most_used_tools: mostUsedTools,
       common_failures: commonFailures,
     };
+  }
+
+  // Remote Support Session Methods
+  async createRemoteSession(deviceId: string, ownerId: string): Promise<RemoteSupportSessionRecord> {
+    const now = new Date();
+    const sessionId = `sess_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Generate human-friendly 6-digit pairing code
+    const pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+
+    const session: RemoteSupportSessionRecord = {
+      id: sessionId,
+      deviceId,
+      ownerId,
+      pairingCode,
+      status: 'WAITING_FOR_DEVICE',
+      createdAt: now.toISOString(),
+      expiresAt,
+    };
+
+    this.remoteSessions.set(session.id, session);
+    // Mark on device
+    const device = this.devices.get(deviceId);
+    if (device) {
+      device.activeSessionId = session.id;
+      this.devices.set(device.id, device);
+    }
+    this.save();
+    return session;
+  }
+
+  async getRemoteSession(sessionId: string): Promise<RemoteSupportSessionRecord | null> {
+    return this.remoteSessions.get(sessionId) || null;
+  }
+
+  async getRemoteSessionByPairingCode(code: string): Promise<RemoteSupportSessionRecord | null> {
+    const cleanCode = code.trim();
+    for (const s of this.remoteSessions.values()) {
+      if (s.pairingCode === cleanCode && s.status !== 'TERMINATED' && new Date(s.expiresAt).getTime() > Date.now()) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  async getActiveSessionForDevice(deviceId: string): Promise<RemoteSupportSessionRecord | null> {
+    for (const s of this.remoteSessions.values()) {
+      if (s.deviceId === deviceId && s.status !== 'TERMINATED' && new Date(s.expiresAt).getTime() > Date.now()) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  async saveRemoteSession(session: RemoteSupportSessionRecord): Promise<void> {
+    this.remoteSessions.set(session.id, session);
+    this.save();
+  }
+
+  async addRemoteCommand(command: RemoteCommandRecord): Promise<void> {
+    this.remoteCommands.set(command.id, command);
+    this.save();
+  }
+
+  async getRemoteCommands(sessionId: string): Promise<RemoteCommandRecord[]> {
+    return Array.from(this.remoteCommands.values())
+      .filter((c) => c.sessionId === sessionId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  async updateRemoteCommand(command: RemoteCommandRecord): Promise<void> {
+    this.remoteCommands.set(command.id, command);
+    this.save();
+  }
+
+  async getDeviceCompatibility(deviceId: string) {
+    const device = await this.getDevice(deviceId);
+    if (!device) return null;
+    const tools = await this.getAllTools();
+    const categorized = categorizeToolsForDevice(device, tools);
+    return { device, categorized };
   }
 }
 

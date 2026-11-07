@@ -110,6 +110,43 @@ const diagnoseFailureDeclaration: FunctionDeclaration = {
   },
 };
 
+const inspectDeviceIntelligenceDeclaration: FunctionDeclaration = {
+  name: 'inspect_device_intelligence',
+  description: 'Inspects a registered Android device profile, distinguishing verified hardware facts from estimated data and dynamic telemetry.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      device_id: { type: Type.STRING, description: 'The device ID (e.g. DEMO-0001)' },
+    },
+    required: ['device_id'],
+  },
+};
+
+const evaluateDeviceToolCompatibilityDeclaration: FunctionDeclaration = {
+  name: 'evaluate_device_tool_compatibility',
+  description: 'Runs the server-side compatibility engine for a device to find eligible tools or explain why a tool is not supported.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      device_id: { type: Type.STRING, description: 'The device ID' },
+      tool_id: { type: Type.STRING, description: 'Optional specific tool ID to check' },
+    },
+    required: ['device_id'],
+  },
+};
+
+const diagnoseDeviceHealthDeclaration: FunctionDeclaration = {
+  name: 'diagnose_device_health',
+  description: 'Evaluates dynamic device telemetry: thermal condition, low-memory pressure, internal storage, battery health, and network latency.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      device_id: { type: Type.STRING, description: 'The device ID' },
+    },
+    required: ['device_id'],
+  },
+};
+
 const generateRecipeDeclaration: FunctionDeclaration = {
   name: 'generate_repair_recipe',
   description: 'Generates a strictly compliant declarative repair recipe using only the 13 allowable Android native actions.',
@@ -118,6 +155,7 @@ const generateRecipeDeclaration: FunctionDeclaration = {
     properties: {
       symptom_description: { type: Type.STRING, description: 'Description of the user problem or diagnostic target' },
       target_app_package: { type: Type.STRING, description: 'Optional target Android package name (e.g. com.instagram.android)' },
+      device_id: { type: Type.STRING, description: 'Optional device ID to tailor recipe to that device SDK and hardware' },
     },
     required: ['symptom_description'],
   },
@@ -421,6 +459,127 @@ async function executeAdminTool(
       };
     }
 
+    case 'inspect_device_intelligence': {
+      const deviceId = String(args.device_id || '');
+      const device = await db.getDevice(deviceId);
+      if (!device) {
+        return { result: { error: 'DEVICE_NOT_FOUND', message: `No device found with ID ${deviceId}` } };
+      }
+      return {
+        result: {
+          deviceId: device.id,
+          label: device.deviceLabel,
+          verifiedHardwareFacts: device.hardwareProfile || { status: 'UNAVAILABLE' },
+          dynamicTelemetry: device.telemetry || { status: 'NO_TELEMETRY' },
+          fieldAvailability: device.fieldAvailability || {},
+          lastProfileUpdatedAt: device.lastProfileUpdatedAt,
+          activeSession: device.activeSessionId ? 'ACTIVE_SESSION' : 'IDLE',
+        },
+      };
+    }
+
+    case 'evaluate_device_tool_compatibility': {
+      const deviceId = String(args.device_id || '');
+      const toolId = args.tool_id ? String(args.tool_id) : undefined;
+      const device = await db.getDevice(deviceId);
+      if (!device) {
+        return { result: { error: 'DEVICE_NOT_FOUND', message: `Device not found: ${deviceId}` } };
+      }
+
+      if (toolId) {
+        const tool = await db.getTool(toolId);
+        if (!tool) {
+          return { result: { error: 'TOOL_NOT_FOUND', message: `Tool not found: ${toolId}` } };
+        }
+        const { evaluateDeviceCompatibility } = await import('../engine/compatibility');
+        const decision = evaluateDeviceCompatibility(device, tool);
+        return {
+          result: {
+            toolId: tool.id,
+            toolName: tool.name,
+            device: `${device.hardwareProfile?.manufacturer || ''} ${device.hardwareProfile?.model || device.deviceLabel}`,
+            decision,
+          },
+        };
+      } else {
+        const compatibility = await db.getDeviceCompatibility(deviceId);
+        return {
+          result: {
+            deviceId: device.id,
+            summary: {
+              compatible: compatibility?.categorized.compatible.map((c) => c.tool.name),
+              permissionRequired: compatibility?.categorized.availableAfterPermission.map((c) => ({
+                tool: c.tool.name,
+                missingPermissions: c.decision.missingPermissions,
+              })),
+              preconditionRequired: compatibility?.categorized.requiresDiagnosticCheck.map((c) => ({
+                tool: c.tool.name,
+                failedPreconditions: c.decision.failedPreconditions,
+              })),
+              temporarilyUnavailable: compatibility?.categorized.temporarilyUnavailable.map((c) => ({
+                tool: c.tool.name,
+                reasons: c.decision.reasons,
+              })),
+              unsupported: compatibility?.categorized.unsupported.map((c) => ({
+                tool: c.tool.name,
+                reasons: c.decision.reasons,
+              })),
+            },
+          },
+        };
+      }
+    }
+
+    case 'diagnose_device_health': {
+      const deviceId = String(args.device_id || '');
+      const device = await db.getDevice(deviceId);
+      if (!device) {
+        return { result: { error: 'DEVICE_NOT_FOUND', message: `Device not found: ${deviceId}` } };
+      }
+      const tel = device.telemetry;
+      const hw = device.hardwareProfile;
+
+      const findings: string[] = [];
+      const warnings: string[] = [];
+
+      if (tel) {
+        if (['SEVERE', 'CRITICAL', 'EMERGENCY', 'SHUTDOWN'].includes(tel.thermalStatus)) {
+          warnings.push(`Thermal Throttling Active: ${tel.thermalStatus} status detected.`);
+        } else {
+          findings.push(`Thermal status is normal (${tel.thermalStatus}).`);
+        }
+
+        if (tel.batteryLevel < 20 && tel.chargingStatus !== 'CHARGING') {
+          warnings.push(`Low battery warning: ${tel.batteryLevel}%.`);
+        } else {
+          findings.push(`Battery: ${tel.batteryLevel}% (${tel.chargingStatus}).`);
+        }
+
+        if (tel.storagePressure !== 'NORMAL') {
+          warnings.push(`Storage pressure is ${tel.storagePressure}. Available storage: ${Math.round(tel.internalStorageAvailableBytes / (1024 * 1024))} MB.`);
+        }
+
+        if (!tel.internetValidated) {
+          warnings.push('Internet connectivity probe failed or returned captive portal.');
+        } else {
+          findings.push(`Internet connection verified via ${tel.networkTransport} (latency: ${tel.dnsResolutionLatencyMs || 'unknown'}ms).`);
+        }
+      } else {
+        warnings.push('No dynamic telemetry reported yet for this device.');
+      }
+
+      return {
+        result: {
+          deviceId: device.id,
+          device: `${hw?.manufacturer || ''} ${hw?.model || device.deviceLabel}`,
+          android: `Android ${hw?.androidRelease || device.androidVersion} (API ${hw?.androidSdk || device.androidApi})`,
+          findings,
+          warnings,
+          telemetry: tel || null,
+        },
+      };
+    }
+
     default:
       return { result: { error: 'UNKNOWN_TOOL', message: `Unknown function: ${name}` } };
   }
@@ -485,6 +644,9 @@ SAFETY INVARIANTS:
               assignToolDeclaration,
               inspectReportsDeclaration,
               diagnoseFailureDeclaration,
+              inspectDeviceIntelligenceDeclaration,
+              evaluateDeviceToolCompatibilityDeclaration,
+              diagnoseDeviceHealthDeclaration,
               generateRecipeDeclaration,
             ],
           },

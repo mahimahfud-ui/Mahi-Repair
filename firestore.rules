@@ -106,5 +106,12 @@ service cloud.firestore {
     match /admin_settings/{settingId} {
       allow read, write: if false; // Strictly server-side only
     }
+
+    // Remote Support Sessions
+    match /remote_support_sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isSignedIn() && (isOwner() || resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid);
+      allow list: if isOwner();
+      allow write: if false; // Handled through server-side authenticated signaling API
+    }
   }
 }

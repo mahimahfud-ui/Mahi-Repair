@@ -2,37 +2,56 @@ import { Router, Response } from 'express';
 import { AuthenticatedRequest, authenticateToken, requireOwner } from '../security/auth';
 import { db } from '../db';
 import { z } from 'zod';
-import { RepairRecipeZodSchema, RepairToolRecord, RepairToolVersionRecord } from '../types';
+import { RepairRecipeZodSchema, RepairToolRecord, RepairToolVersionRecord, CompatibilityEvaluationResult } from '../types';
 import { toCanonicalJson, signCanonicalPayload } from '../crypto/signer';
+import { evaluateDeviceCompatibility } from '../engine/compatibility';
 
 const router = Router();
 
-// GET /api/v1/tools - List tools
+// GET /api/v1/tools - List tools (optionally evaluated against a specific device)
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const user = req.user!;
   const allTools = await db.getAllTools();
+  const deviceId = typeof req.query.device_id === 'string' ? req.query.device_id : undefined;
 
-  if (user.role === 'owner') {
-    res.json({ data: allTools });
-    return;
+  let device = null;
+  if (deviceId) {
+    device = await db.getDevice(deviceId);
   }
 
-  // Members see only published tools they have access to
-  const accessible: RepairToolRecord[] = [];
-  for (const tool of allTools) {
-    if (tool.status === 'PUBLISHED') {
-      if (tool.audience === 'all_active_members') {
-        accessible.push(tool);
-      } else {
-        const accessList = await db.getToolAccess(tool.id);
-        if (accessList.some((a) => a.memberId === user.id)) {
-          accessible.push(tool);
+  let visibleTools: RepairToolRecord[] = [];
+  if (user.role === 'owner') {
+    visibleTools = allTools;
+  } else {
+    for (const tool of allTools) {
+      if (tool.status === 'PUBLISHED') {
+        if (tool.audience === 'all_active_members') {
+          visibleTools.push(tool);
+        } else {
+          const accessList = await db.getToolAccess(tool.id);
+          if (accessList.some((a) => a.memberId === user.id)) {
+            visibleTools.push(tool);
+          }
         }
       }
     }
   }
 
-  res.json({ data: accessible });
+  // If evaluated against a device, attach deterministic compatibility results
+  if (device) {
+    const evaluations: Record<string, CompatibilityEvaluationResult> = {};
+    for (const tool of visibleTools) {
+      evaluations[tool.id] = evaluateDeviceCompatibility(device, tool);
+    }
+    res.json({
+      data: visibleTools,
+      device_id: device.id,
+      evaluations,
+    });
+    return;
+  }
+
+  res.json({ data: visibleTools });
 });
 
 const getId = (param: string | string[] | undefined): string =>
@@ -363,6 +382,48 @@ router.post('/:id/assign', authenticateToken, requireOwner, async (req: Authenti
       tool_id: tool.id,
       audience: tool.audience,
       assigned_members_count: memberIds.length,
+    },
+  });
+});
+
+// POST /api/v1/tools/preview-compatibility - Simulate tool compatibility against all enrolled devices
+router.post('/preview-compatibility', authenticateToken, requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const toolId = req.body?.tool_id;
+  const draftTool = req.body?.draft_tool;
+
+  let toolToTest: RepairToolRecord | null = null;
+  if (toolId) {
+    toolToTest = await db.getTool(toolId);
+  } else if (draftTool) {
+    toolToTest = draftTool as RepairToolRecord;
+  }
+
+  if (!toolToTest) {
+    res.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'tool_id or draft_tool object is required.' } });
+    return;
+  }
+
+  const devices = await db.getAllDevices();
+  const previews = devices.map((device) => {
+    const decision = evaluateDeviceCompatibility(device, toolToTest!);
+    return {
+      deviceId: device.id,
+      deviceLabel: device.deviceLabel,
+      manufacturer: device.hardwareProfile?.manufacturer || 'Unknown',
+      model: device.hardwareProfile?.model || 'Unknown',
+      androidSdk: device.hardwareProfile?.androidSdk || device.androidApi,
+      decision,
+    };
+  });
+
+  const eligibleCount = previews.filter((p) => p.decision.isEligible).length;
+
+  res.json({
+    data: {
+      total_enrolled_devices: devices.length,
+      eligible_count: eligibleCount,
+      ineligible_count: devices.length - eligibleCount,
+      device_previews: previews,
     },
   });
 });

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { authenticateToken, requireActiveMember, AuthenticatedRequest } from '../security/auth';
+import { DeviceRecord, RepairRunRecord } from '../types';
 import crypto from 'crypto';
 
 export const compatRouter = Router();
@@ -17,17 +18,22 @@ compatRouter.post('/auth/v1/otp', async (req: Request, res: Response): Promise<v
   }
 
   // Ensure member exists or auto-register if initial owner
-  let user = await db.getUserByEmail(email);
+  let user = await db.getProfile(email);
   if (!user) {
     // If first user, make owner, else active member
-    const allUsers = await db.getAllUsers();
+    const allUsers = await db.getAllProfiles();
     const isFirst = allUsers.length === 0;
-    user = await db.createUser({
+    const now = new Date().toISOString();
+    user = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       email,
       role: isFirst ? 'owner' : 'member',
       status: 'active',
       displayName: email.split('@')[0],
-    });
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.saveProfile(user);
   }
 
   // Generate 6-digit OTP (for staging, standard code 699300 or random, with fallback 123456)
@@ -51,14 +57,19 @@ compatRouter.post('/auth/v1/verify', async (req: Request, res: Response): Promis
     return;
   }
 
-  let user = await db.getUserByEmail(email);
+  let user = await db.getProfile(email);
   if (!user) {
-    user = await db.createUser({
+    const now = new Date().toISOString();
+    user = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       email,
       role: 'member',
       status: 'active',
       displayName: email.split('@')[0],
-    });
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.saveProfile(user);
   }
 
   // Generate session tokens
@@ -93,7 +104,7 @@ compatRouter.post('/auth/v1/token', async (req: Request, res: Response): Promise
 
   const parts = refreshToken.split('_');
   const userId = parts[1];
-  const user = userId ? await db.getUser(userId) : null;
+  const user = userId ? await db.getProfile(userId) : null;
 
   if (!user || user.status !== 'active') {
     res.status(401).json({ error: 'invalid_grant', error_description: 'Invalid refresh token' });
@@ -126,13 +137,20 @@ compatRouter.post('/auth/v1/logout', (_req: Request, res: Response): void => {
 compatRouter.post('/functions/v1/register-device', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const user = req.user!;
   const body = req.body || {};
-  const device = await db.registerDevice({
+  const now = new Date().toISOString();
+  const deviceId = body.device_id || `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const device: DeviceRecord = {
+    id: deviceId,
     userId: user.id,
     deviceLabel: body.device_label || 'Android Device',
     appVersion: body.app_version || '1.0',
     androidVersion: body.android_version || '14',
     androidApi: typeof body.android_api === 'number' ? body.android_api : 34,
-  });
+    registeredAt: now,
+    lastSeenAt: now,
+    revokedAt: null,
+  };
+  await db.saveDevice(device);
 
   res.json({
     data: {
@@ -176,7 +194,7 @@ compatRouter.post('/functions/v1/get-my-repair-tools', authenticateToken, requir
             signed_payload: ver.canonicalPayload,
             signature: ver.signature,
             signature_algorithm: ver.signatureAlgorithm,
-            published_at: ver.signedAt,
+            published_at: ver.publishedAt,
           });
         }
       }
@@ -225,24 +243,29 @@ compatRouter.post('/functions/v1/get-signed-repair-tool', authenticateToken, req
 compatRouter.post('/functions/v1/submit-repair-run', authenticateToken, requireActiveMember, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const user = req.user!;
   const body = req.body || {};
+  const now = new Date().toISOString();
+  const runId = body.run_id || `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const record = await db.recordRun({
-    runId: body.run_id || `run_${Date.now()}`,
+  const runRecord: RepairRunRecord = {
+    id: runId,
     userId: user.id,
     deviceId: body.device_id || 'unknown',
     toolId: body.tool_id,
     toolVersion: body.tool_version || 1,
-    startedAt: body.started_at || new Date().toISOString(),
-    completedAt: body.completed_at || new Date().toISOString(),
+    startedAt: body.started_at || now,
+    completedAt: body.completed_at || now,
     result: body.result || 'UNKNOWN',
-    errorCode: body.error_code,
-    stepResults: body.step_results || [],
+    errorCode: body.error_code || null,
+    stepResults: Array.isArray(body.step_results) ? body.step_results : [],
     appVersion: body.app_version || '1.0',
-  });
+    createdAt: now,
+  };
+
+  await db.saveRepairRun(runRecord);
 
   res.json({
     data: {
-      run_id: record.runId,
+      run_id: runRecord.id,
       accepted: true,
     },
   });

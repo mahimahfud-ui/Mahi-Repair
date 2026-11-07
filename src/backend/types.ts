@@ -16,16 +16,166 @@ export interface UserProfile {
   updatedAt: string;
 }
 
+export type FieldAvailability = 'OBSERVED' | 'ESTIMATED' | 'UNAVAILABLE' | 'PERMISSION_REQUIRED' | 'UNSUPPORTED';
+
+export interface DeviceHardwareProfile {
+  manufacturer: string;
+  brand: string;
+  model: string;
+  commercialModelName?: string;
+  modelIdentifier?: string;
+  productName: string;
+  deviceCodename: string;
+  hardware: string;
+  socManufacturer: string;
+  socModel: string;
+  cpuAbis: string[];
+  processorArchitecture: string;
+  cpuCoreCount: number;
+  androidRelease: string;
+  androidSdk: number;
+  sdkMinorVersion?: string;
+  securityPatchDate: string;
+  buildDisplayInfo: string;
+  screenWidthPx: number;
+  screenHeightPx: number;
+  densityDpi: number;
+  refreshRateHz: number;
+  supportedFeatures: string[];
+  availableSensors: Array<{ type: number; name: string; vendor: string }>;
+  cameraAvailable: boolean;
+  profileConsentVersion?: number;
+  collectedAt: string;
+}
+
+export interface DeviceTelemetry {
+  totalRamBytes: number;
+  availableRamBytes: number;
+  isLowMemory: boolean;
+  internalStorageTotalBytes: number;
+  internalStorageAvailableBytes: number;
+  storagePressure: 'NORMAL' | 'MODERATE' | 'LOW' | 'CRITICAL';
+  appSpecificStorageBytes?: number;
+  batteryLevel: number;
+  chargingStatus: 'CHARGING' | 'DISCHARGING' | 'NOT_CHARGING' | 'FULL' | 'UNKNOWN';
+  powerSource: 'AC' | 'USB' | 'WIRELESS' | 'BATTERY' | 'UNKNOWN';
+  batteryTemperature?: number;
+  batteryHealth: 'GOOD' | 'OVERHEAT' | 'DEAD' | 'OVER_VOLTAGE' | 'UNSPECIFIED_FAILURE' | 'COLD' | 'UNKNOWN';
+  batteryCapacityEstimateMah?: number;
+  batterySaverActive: boolean;
+  thermalStatus: 'NONE' | 'LIGHT' | 'MODERATE' | 'SEVERE' | 'CRITICAL' | 'EMERGENCY' | 'SHUTDOWN' | 'UNKNOWN';
+  networkConnectivity: 'CONNECTED' | 'DISCONNECTED' | 'CAPTIVE_PORTAL';
+  networkTransport: 'WIFI' | 'CELLULAR' | 'ETHERNET' | 'BLUETOOTH' | 'VPN' | 'NONE';
+  internetValidated: boolean;
+  dnsResolutionLatencyMs?: number;
+  httpsProbeLatencyMs?: number;
+  connectionFailureDetails?: string;
+  grantedPermissions: string[];
+  detectedRepairApps: Array<{ packageName: string; installed: boolean; versionName?: string }>;
+  lastTelemetryUpdatedAt: string;
+}
+
 export interface DeviceRecord {
   id: string;
   userId: string;
   deviceLabel?: string;
+  appInstallationId?: string;
   appVersion: string;
   androidVersion: string;
   androidApi?: number;
   registeredAt: string;
   lastSeenAt: string;
   revokedAt?: string | null;
+  hardwareProfile?: DeviceHardwareProfile;
+  telemetry?: DeviceTelemetry;
+  fieldAvailability?: Record<string, FieldAvailability>;
+  profileVersion?: number;
+  lastProfileUpdatedAt?: string;
+  activeSessionId?: string | null;
+}
+
+export interface ToolCompatibilityMetadata {
+  supportedManufacturers?: string[];
+  supportedModels?: string[];
+  supportedHardwareVariants?: string[];
+  minimumAndroidSdk: number;
+  maximumAndroidSdk?: number;
+  requiredCpuAbis?: string[];
+  requiredSystemFeatures?: string[];
+  requiredPermissions?: string[];
+  minimumAvailableRamBytes?: number;
+  minimumAvailableStorageBytes?: number;
+  supportedActionIds: string[];
+  networkPrerequisites?: {
+    requiresInternet?: boolean;
+    requiresWifi?: boolean;
+    maxLatencyMs?: number;
+  };
+  batteryPrerequisites?: {
+    minimumLevel?: number;
+    requiresCharging?: boolean;
+  };
+  thermalPrerequisites?: {
+    maximumThermalStatus?: 'NONE' | 'LIGHT' | 'MODERATE';
+    maximumTemperatureCelsius?: number;
+  };
+  requiredDeviceCapabilities?: string[];
+  riskLevel: 'read_only' | 'guided' | 'permission';
+  userConfirmationRequired: boolean;
+  supportedRecipeVersions: number[];
+  knownLimitations?: string[];
+  rollbackOrRecoveryInstructions?: string;
+}
+
+export type CompatibilityStatus =
+  | 'ELIGIBLE'
+  | 'ELIGIBLE_WITH_PERMISSION'
+  | 'ELIGIBLE_WITH_PRECONDITION'
+  | 'NOT_SUPPORTED'
+  | 'INSUFFICIENT_DEVICE_INFORMATION'
+  | 'TEMPORARILY_UNAVAILABLE';
+
+export interface CompatibilityEvaluationResult {
+  toolId: string;
+  toolVersion: number;
+  status: CompatibilityStatus;
+  isEligible: boolean;
+  reasons: string[];
+  missingPermissions?: string[];
+  failedPreconditions?: string[];
+  evaluatedAt: string;
+}
+
+export interface RemoteSupportSessionRecord {
+  id: string;
+  deviceId: string;
+  ownerId: string;
+  pairingCode: string;
+  status: 'WAITING_FOR_DEVICE' | 'DEVICE_CONNECTED' | 'SCREEN_SHARING' | 'TERMINATED';
+  webrtcOffer?: string;
+  webrtcAnswer?: string;
+  iceCandidates?: Array<{ candidate: string; sdpMid?: string; sdpMLineIndex?: number; from: 'owner' | 'device' }>;
+  createdAt: string;
+  expiresAt: string;
+  connectedAt?: string;
+  terminatedAt?: string;
+  terminatedBy?: string;
+}
+
+export interface RemoteCommandRecord {
+  id: string;
+  sessionId: string;
+  deviceId: string;
+  action: string;
+  params: Record<string, unknown>;
+  signature: string;
+  nonce: string;
+  expiresAt: string;
+  status: 'PENDING' | 'ACKNOWLEDGED' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'REJECTED';
+  result?: unknown;
+  error?: string;
+  createdAt: string;
+  executedAt?: string;
 }
 
 export interface RepairToolRecord {
@@ -39,7 +189,8 @@ export interface RepairToolRecord {
   audience: ToolAudience;
   version: number;
   draftRecipe: unknown;
-  androidCompatibility: { minApi: number };
+  androidCompatibility: { minApi: number; maxApi?: number };
+  compatibilityMetadata?: ToolCompatibilityMetadata;
   minimumAppVersion: string;
   estimatedSeconds: number;
   riskClassification: string;

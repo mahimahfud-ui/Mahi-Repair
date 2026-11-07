@@ -18,12 +18,16 @@ import { ConfirmationSheet } from './components/ConfirmationSheet';
 import { HistoryScreen } from './components/HistoryScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { BackendConfigDialog } from './components/BackendConfigDialog';
+import { AdminConsole } from './components/AdminConsole';
 
 const LOCAL_STORAGE_KEY_HISTORY = 'mahi_repair_history_v1';
 const LOCAL_STORAGE_KEY_CONFIG = 'mahi_repair_backend_config_v1';
 const LOCAL_STORAGE_KEY_SESSION = 'mahi_repair_session_v1';
 
 export const App: React.FC = () => {
+  // Mode selection: Laptop Admin Console vs Native Mobile Client
+  const [viewMode, setViewMode] = useState<'admin' | 'phone'>('admin');
+
   // Navigation & Screen selection
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export const App: React.FC = () => {
   });
 
   // Tools catalog
-  const [tools] = useState<RepairTool[]>(() => getInitialTools());
+  const [tools, setTools] = useState<RepairTool[]>(() => getInitialTools());
 
   // Backend config
   const [backendConfig, setBackendConfig] = useState<BackendConfig>(() => {
@@ -216,8 +220,27 @@ export const App: React.FC = () => {
     ? tools.find((t) => t.id === selectedToolId) || null
     : null;
 
+  if (viewMode === 'admin') {
+    return (
+      <AdminConsole
+        tools={tools}
+        onUpdateTools={setTools}
+        onSwitchToClient={() => setViewMode('phone')}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#060A14] text-[#F3F6FC] flex flex-col lg:flex-row antialiased selection:bg-[#5B8CFF]/30">
+      {/* Floating button to switch to Laptop Admin Console */}
+      <button
+        onClick={() => setViewMode('admin')}
+        className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-red-600/90 hover:bg-red-600 border border-red-400/40 text-white px-3.5 py-1.5 text-xs font-bold shadow-xl backdrop-blur transition-all"
+      >
+        <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+        <span>Owner Admin Console</span>
+      </button>
+
       {/* Navigation Shell (Left sidebar on desktop, bottom bar on mobile) */}
       <Navigation
         activeTab={activeTab}
