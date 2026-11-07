@@ -123,10 +123,8 @@ data class CreateToolRequest(
     val slug: String,
     val category: String,
     val description: String,
-    @Json(name = "problem_description") val problemDescription: String = "",
-    @Json(name = "estimated_seconds") val estimatedSeconds: Int = 60,
-    val audience: String = "all_active_members",
-    @Json(name = "steps_json") val stepsJson: String? = null
+    val icon: String = "wrench",
+    @Json(name = "draft_recipe") val draftRecipe: Map<String, Any?>
 )
 
 @JsonClass(generateAdapter = true)
@@ -418,7 +416,7 @@ class AdminApiClient(
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
             .addHeader("Content-Type", "application/json")
-            .post("{}".toRequestBody(jsonMediaType))
+            .put("{}".toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -551,7 +549,7 @@ class AdminApiClient(
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")
             .addHeader("Content-Type", "application/json")
-            .post("{}".toRequestBody(jsonMediaType))
+            .put("{\"revoked\":true}".toRequestBody(jsonMediaType))
             .build()
 
         try {
@@ -598,7 +596,7 @@ class AdminApiClient(
 
     // 14. Get Audit Logs
     suspend fun getAuditLogs(authToken: String): Result<List<AdminAuditLogItem>> = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/api/v1/admin/audit-logs"
+        val url = "$baseUrl/api/v1/audit-logs"
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $authToken")

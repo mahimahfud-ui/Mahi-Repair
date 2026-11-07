@@ -547,7 +547,7 @@ fun AdminScreen(
     if (showCreateToolDialog) {
         var name by rememberSaveable { mutableStateOf("") }
         var slug by rememberSaveable { mutableStateOf("") }
-        var category by rememberSaveable { mutableStateOf("GENERAL") }
+        var category by rememberSaveable { mutableStateOf("connectivity") }
         var description by rememberSaveable { mutableStateOf("") }
         var problemDescription by rememberSaveable { mutableStateOf("") }
         var estimatedSeconds by rememberSaveable { mutableStateOf("60") }
@@ -613,8 +613,26 @@ fun AdminScreen(
                                         slug = slug.trim(),
                                         category = category,
                                         description = description.trim(),
-                                        problemDescription = problemDescription.trim(),
-                                        estimatedSeconds = estimatedSeconds.toIntOrNull() ?: 60
+                                        draftRecipe = mapOf(
+                                            "schemaVersion" to 1,
+                                            "toolId" to slug.trim(),
+                                            "title" to name.trim(),
+                                            "version" to 1,
+                                            "category" to category,
+                                            "minAndroidApi" to 26,
+                                            "minAppVersion" to "1.0.0",
+                                            "estimatedSeconds" to (estimatedSeconds.toIntOrNull() ?: 60),
+                                            "changelog" to problemDescription.trim().ifBlank { "Initial draft" },
+                                            "steps" to listOf(
+                                                mapOf(
+                                                    "id" to "initial-diagnostic",
+                                                    "action" to "CHECK_INTERNET",
+                                                    "params" to emptyMap<String, Any?>(),
+                                                    "risk" to "read_only",
+                                                    "requiresConfirmation" to false
+                                                )
+                                            )
+                                        )
                                     ),
                                     authToken
                                 ).onSuccess {
