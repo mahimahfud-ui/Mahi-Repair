@@ -18,7 +18,7 @@ class AuthSessionDtoTest {
                 "id": "0e4eac6e-6b36-4a72-9c8d-53daeb6b5c77",
                 "email": "member@example.com",
                 "user_metadata": { "role": "member", "display_name": "Mahi", "preferences": { "theme": "dark" } },
-                "app_metadata": { "provider": "email", "providers": ["email"], "role": "member" }
+                "app_metadata": { "provider": "email", "providers": ["email"] }
               }
             }
         """.trimIndent()
