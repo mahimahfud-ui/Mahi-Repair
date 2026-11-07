@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MahiRepairApplication
+import com.example.BuildConfig
 import com.example.data.local.UserSession
 import com.example.data.local.RepairHistoryEntity
 import android.content.pm.PackageManager
