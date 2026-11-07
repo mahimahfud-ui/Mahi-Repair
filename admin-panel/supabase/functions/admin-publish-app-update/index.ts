@@ -1,10 +1,8 @@
-import { z } from 'npm:zod@4';
 import { handleError, jsonBody, preflight, rateLimit, requireOwner, respond } from '../_shared/http.ts';
 import { AppUpdateInputSchema, canonicalAppUpdateJson } from '../_shared/app-update.ts';
 import { signCanonicalPayload } from '../_shared/sign.ts';
 
 const BUCKET = 'mahi-app-updates';
-const UUID = z.string().uuid();
 
 async function verifyStoredAsset(
   admin: ReturnType<typeof import('../_shared/http.ts').serviceClient>,

@@ -64,7 +64,7 @@ export const RemoteConfigSchema = z.object({
   compatibility: z.object({
     minAndroidApi: z.number().int().min(26).max(100).default(26),
     maxAndroidApi: z.number().int().min(26).max(100).default(100),
-  }).strict().default({}),
+  }).strict().default({ minAndroidApi: 26, maxAndroidApi: 100 }),
 }).strict().superRefine((config, ctx) => {
   if (Object.keys(config.featureFlags).length > 100) {
     ctx.addIssue({ code: 'custom', path: ['featureFlags'], message: 'Too many feature flags.' });
@@ -85,7 +85,7 @@ export const AppUpdateInputSchema = z.object({
   minSupportedAppVersionCode: z.number().int().positive(),
   mandatory: z.boolean().default(false),
   releaseNotes: z.string().max(4000).default(''),
-  remoteConfig: RemoteConfigSchema.default({}),
+  remoteConfig: RemoteConfigSchema.default({ featureFlags: {}, repairTools: {}, ui: {}, toolMetadata: {}, compatibility: { minAndroidApi: 26, maxAndroidApi: 100 } }),
   packages: z.array(ContentPackageSchema).max(20).default([]),
   nativeApk: NativeApkSchema.nullable().default(null),
 }).strict().superRefine((release, ctx) => {
