@@ -77,9 +77,20 @@ class RemoteSupportService : Service() {
         }
 
         if (action == ACTION_START) {
-            sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
-            intent.getStringExtra(EXTRA_BACKEND_URL)?.let { backendUrl = it.trimEnd('/') }
-            authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN)
+            sessionId = intent.getStringExtra(EXTRA_SESSION_ID)?.takeIf { it.isNotBlank() }
+            authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN)?.takeIf { it.isNotBlank() }
+
+            val requestedBackend = intent.getStringExtra(EXTRA_BACKEND_URL)?.trim()?.trimEnd('/')
+            val configuredBackend = BuildConfig.REMOTE_SUPPORT_API_BASE_URL.trim().trimEnd('/')
+            backendUrl = requestedBackend?.takeIf { it.startsWith("https://") } ?: configuredBackend
+
+            // Fail closed when credentials or an actual HTTPS backend are not configured.
+            if (sessionId == null || authToken == null ||
+                !backendUrl.startsWith("https://") || backendUrl.endsWith(".invalid")
+            ) {
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
 
             val resultCode = intent.getIntExtra(EXTRA_PROJECTION_RESULT_CODE, 0)
             val projectionData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -87,6 +98,12 @@ class RemoteSupportService : Service() {
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(EXTRA_PROJECTION_DATA)
+            }
+
+            if (resultCode != android.app.Activity.RESULT_OK || projectionData == null) {
+                // A fresh, explicit MediaProjection consent result is required for every session.
+                stopSelf(startId)
+                return START_NOT_STICKY
             }
 
             // Foreground service notification with STOP action
@@ -148,7 +165,7 @@ class RemoteSupportService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Mahi Live Remote Support Active")
-            .setContentText("A technician is connected with your explicit consent.")
+            .setContentText("Remote diagnostics are active. Live video transport is not configured in this build.")
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
