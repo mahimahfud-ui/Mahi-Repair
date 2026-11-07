@@ -22,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -29,6 +30,7 @@ class MahiRepairApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val seenRealtimeEvents = LinkedHashSet<String>(128)
+    val appUpdateEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     @Volatile private var appIsForeground = false
     private var realtimeJob: Job? = null
 
@@ -150,6 +152,11 @@ class MahiRepairApplication : Application() {
                 if (result.isFailure) {
                     Log.w(TAG, "Catalog synchronization after notification failed.")
                 }
+            }
+            "app_update_published" -> {
+                // Realtime carries only an opaque event. The member app fetches and
+                // verifies the signed manifest using its authenticated device identity.
+                appUpdateEvents.tryEmit(Unit)
             }
             "member_access_changed", "device_revoked" -> {
                 toolRepository.clearLocalCatalog()

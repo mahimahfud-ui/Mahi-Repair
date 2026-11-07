@@ -105,12 +105,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             authRepo.sessionFlow.collectLatest { session ->
                 if (session.isAuthenticated) {
                     refreshTools()
+                    onCheckForAppUpdates()
                 } else {
                     _isToolsLoading.value = false
                     _canRetryAvailability.value = false
                     _isToolPickerOpen.value = false
                     _repairStatusMessage.value = null
+                    _appUpdate.value = AppUpdateUiState()
                 }
+            }
+        }
+        viewModelScope.launch {
+            app.appUpdateEvents.collectLatest {
+                if (authRepo.sessionFlow.first().isAuthenticated) onCheckForAppUpdates()
             }
         }
     }
