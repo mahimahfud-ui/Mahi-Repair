@@ -11,13 +11,13 @@ The database trigger broadcasts only an opaque `app_update_published` event to r
 - `schemaVersion` is 1; channels are `stable` and `beta`.
 - `releaseNumber` increases monotonically within each channel. Published rows are immutable.
 - `remoteConfig` allows booleans, labels, tool metadata, announcement text and Android API compatibility ranges. There is no script, HTML, WebView, reflection or arbitrary command field.
-- ZIP resources must be declared in `packages[].entries` with exact relative path, SHA-256 and uncompressed byte size. Only JSON, PNG, JPEG and WebP resources are accepted. A ZIP extractor must reject path traversal, undeclared entries, duplicate entries, over-limit expansion and hash/size mismatches before atomically activating a new directory.
+- ZIP resources must be declared in `packages[].entries` with exact relative path, SHA-256 and uncompressed byte size. Only JSON, PNG, JPEG and WebP resources are accepted. Admin and Android both cap an archive at 50 MB, each resource at 20 MB, at 200 declared entries and at 250 MB expanded data. The Android extractor rejects path traversal, directory/undeclared/duplicate entries, over-limit expansion, size mismatches and inner SHA-256 mismatches before activation.
 - `nativeApk` metadata is optional. The APK must match the installed application ID, increase the version code and preserve signing-certificate continuity. The Android client must hand off to Android's system package installer and leave user confirmation / unknown-app installation permission under OS control.
 - Signed package URLs are not embedded in the manifest and are not public. A client obtains a short-lived URL using `get-app-update-asset-url` only after device authorization.
 
 ## Rollback
 
-Do not mutate or delete a published row. Publish the earlier remote configuration/package descriptor as a new higher `releaseNumber`, signed with the current release key. Native APK rollback is permitted only if Android accepts a higher versionCode built from the same signing identity; Android does not support downgrading an installed application through the normal package installer.
+Do not mutate or delete a published row. For a server-wide rollback, publish the earlier remote configuration/package descriptor as a new higher `releaseNumber`, signed with the current release key. On-device, the Android client retains the last activated data release and exposes a local rollback action; it atomically switches the active pointer back to that previous release. Native APK rollback is permitted only if Android accepts a higher versionCode built from the same signing identity; Android does not support downgrading an installed application through the normal package installer.
 
 ## Required production setup
 
@@ -30,20 +30,18 @@ Do not mutate or delete a published row. Publish the earlier remote configuratio
 
 ## Android client status
 
-The Android app has a signed **native APK update path**:
+The Android client supports signed **remote configuration, data-package activation and native APK update** paths:
 
-- It checks for a stable-channel release after an authenticated session starts, when the app resumes, and when the private `app_update_published` event arrives.
-- The event carries only an opaque event ID; Android fetches the manifest through the member-authenticated, registered-device endpoint.
-- It verifies the detached RSA signature over the exact manifest bytes before parsing.
-- It verifies that the release signing-certificate SHA-256 matches the currently installed app signer.
-- It validates APK package ID, version code/name, byte count, SHA-256 and single signing-certificate fingerprint.
-- It requests a short-lived private asset URL only after manifest verification and rechecks the downloaded bytes before opening Android's system installer.
-- Unknown-source permission and final installation approval remain under Android OS control. No silent install or downgrade is implemented.
+- It checks the stable channel after an authenticated session starts, on app foreground/resume and when the private `app_update_published` event arrives. The event carries only an opaque event ID; the client re-fetches the manifest through the member-authenticated, registered-device endpoint.
+- It verifies the detached RSA-SHA256 signature over the exact manifest bytes before parsing. The manifest parser accepts only allowlisted configuration and data-package descriptors.
+- Repair-tool availability overrides and safe title/description/category metadata are applied to the existing server-authorized tool catalogue. Owner announcements are displayed in-app. Android API compatibility ranges are enforced before data activation.
+- For each content ZIP, Android obtains a short-lived private URL after device authorization, validates the URL origin, asset metadata, byte count and outer SHA-256, then checks every declared entry path, exact entry count, uncompressed byte size and inner SHA-256. Undeclared, duplicate, traversal, unsupported and over-limit entries fail the release.
+- All downloaded packages are extracted into a private staging directory. The previous active package tree is carried forward, changed packages are replaced, and an Android `AtomicFile` pointer is updated only after all resources and remote config are validated. A failed download/extraction leaves the prior release active; the previous activated data release is retained for local rollback.
+- The Admin publisher and Android client currently cap each ZIP at 50 MB and expanded resources at 250 MB. Changed package assets can be published independently, but Android downloads a changed package as a complete ZIP; it does not yet patch individual files inside an existing ZIP.
+- Native APK metadata is checked against the installed package identity, increasing versionCode and currently installed signer. The downloaded APK is checked for exact byte count, SHA-256, application ID, version name/code and single signing-certificate fingerprint before Android's system installer is opened. The device owner must approve installation in Android; no silent install or downgrade is implemented.
 
-This does not silently install anything. A device user must review and approve the system installer prompt. The private event only triggers a fresh manifest check; it is not a delivery channel for the APK itself.
-
-The Android app does **not** yet download, safely extract, hash-verify and atomically activate ZIP content packages or apply remote-config values. These remain backend publication capabilities only.
+The Admin release history records immutable published releases. The Android client currently exposes current release information and data download progress; per-device update success/failure telemetry and a complete installed-release history in Admin are not yet implemented. The client requests the stable channel; the Admin can publish beta releases, but a user-facing beta channel selector is not yet exposed.
 
 ## Important boundary
 
-The native APK path must pass current Android CI and be tested with a real release signed by the matching production key on a physical Android device before production rollout. A successful Admin/Edge Function build does not prove a real APK installs on a physical device. Content packages and remote configuration are not end-to-end complete.
+The signed native APK and data-only client paths are implemented in source, but the current Android CI has not yet completed a full successful run for the latest content-package code. A physical Android installation with a production-signed APK and a production-signed ZIP/config activation/rollback test are still required. Production deployment of the SQL migration/Edge Functions, real signing-key provisioning, and Owner/member/device authorization acceptance are also outstanding. A successful build alone is not production acceptance.

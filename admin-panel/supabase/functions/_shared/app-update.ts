@@ -23,8 +23,12 @@ const ContentPackageSchema = z.object({
   contentType: z.literal('application/zip'),
   entries: z.array(ReleaseEntrySchema).min(1).max(200),
 }).strict().superRefine((pkg, ctx) => {
-  if (pkg.entries.reduce((total, entry) => total + entry.sizeBytes, 0) > pkg.sizeBytes * 20) {
+  const expandedBytes = pkg.entries.reduce((total, entry) => total + entry.sizeBytes, 0);
+  if (expandedBytes > pkg.sizeBytes * 20) {
     ctx.addIssue({ code: 'custom', path: ['entries'], message: 'Expanded package resources exceed the permitted size ratio.' });
+  }
+  if (expandedBytes > 250 * 1024 * 1024) {
+    ctx.addIssue({ code: 'custom', path: ['entries'], message: 'Expanded content package exceeds the 250 MB Android activation limit.' });
   }
   const paths = new Set<string>();
   pkg.entries.forEach((entry, index) => {
