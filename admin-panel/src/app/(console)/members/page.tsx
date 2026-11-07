@@ -90,7 +90,7 @@ export default async function MembersPage() {
 
       <div className="panel mt-4 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-[#252830] p-4 text-sm font-medium">
-          <MailClock size={15} className="text-red-400" /> Invitation request history
+          <Mail size={15} className="text-red-400" /> Invitation request history
         </div>
         <div className="border-b border-[#252830] bg-[#0b0d11] p-4 text-xs leading-5 muted">
           These rows are audit records created after Supabase Auth accepted an invite request. The current backend does not expose inbox delivery, invitation acceptance time, expiration, resend, or per-invitation revocation. The profile access status above is not proof that an email was delivered or accepted.
