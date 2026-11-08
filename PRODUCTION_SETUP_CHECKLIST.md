@@ -18,7 +18,7 @@ This document records verified infrastructure and remaining release gates. An AC
 - Supabase device profile/telemetry columns and the member-owned registration RPC are deployed.
 - `register-device` v5 and Owner-only `get-admin-dashboard` v3 are deployed. The dashboard function was deployed after confirming the mobile Owner client called an endpoint missing from the live function inventory.
 - `send-email-hook` v1 is deployed (Resend primary, Brevo fallback), but has not been connected in Supabase Auth.
-- Admin source PR #4 is merged. Render Admin commit `098274ed7da6b368f828f6249a2784fbf2ea02ac` is live.
+- Admin source PRs #4–#7 are merged. The latest Render Admin deployment is LIVE on commit `f70c386ea5234513a992f700aaa8a1030eeb9480`.
 - Android PR #14 is merged. Member device telemetry and mobile Owner dashboard now use Supabase functions instead of the unconfigured legacy Mahi API.
 - Android PR #15 is merged. A manual signed APK/AAB release workflow is available; it has not produced a production-signed artifact because the existing upload keystore secrets are not configured/verified.
 - Existing Auth profiles remain one active Owner and one active Member. Their roles were not changed.
