@@ -7,7 +7,7 @@ const required = [
   'src/app/(console)/logs/page.tsx', 'src/app/(console)/analytics/page.tsx',
   'src/components/recipe-composer.tsx', 'src/components/test-lab-client.tsx',
   'src/lib/auth/require-owner.ts', 'src/lib/recipe/catalog.ts',
-  'supabase/migrations/202611050001_initial_schema.sql',
+  'supabase/migrations/20261105171141_202611050001_initial_schema.sql',
   'supabase/functions/_shared/http.ts', 'supabase/functions/_shared/recipe.ts', 'supabase/functions/_shared/sign.ts',
   'supabase/functions/admin-publish-tool/index.ts', 'supabase/functions/admin-manage-tool-state/index.ts',
   'supabase/functions/admin-assign-tool/index.ts', 'supabase/functions/register-device/index.ts',
@@ -42,7 +42,7 @@ const schemaActionIds = jsonSchema.properties.steps.items.properties.action.enum
 if (actionIds.length === 13 && actionIds.every((id) => schemaActionIds.includes(id) && denoRecipe.includes(`${id}:`) && kotlin.includes(`"${id}"`))) pass('13 action IDs align across frontend, Edge validation, JSON Schema and Kotlin verifier');
 else fail('action catalog mismatch across frontend, Edge, JSON Schema or Kotlin');
 
-const migration = await readFile('supabase/migrations/202611050001_initial_schema.sql', 'utf8');
+const migration = await readFile('supabase/migrations/20261105171141_202611050001_initial_schema.sql', 'utf8');
 const tableNames = ['profiles','devices','repair_tools','repair_tool_versions','repair_tool_access','device_tool_syncs','repair_runs','admin_audit_logs','recipe_test_history','rate_limit_buckets'];
 for (const table of tableNames) {
   const re = new RegExp(`alter table public\\.${table} enable row level security`, 'i');
