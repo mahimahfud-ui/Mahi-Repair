@@ -138,6 +138,7 @@ class SupabaseOwnerAdminApiClient(
 
         val recipe = tool.draftRecipe.toMutableMap()
         recipe["title"] = requestData.name.trim()
+        recipe["category"] = requestData.category.lowercase()
         recipe["changelog"] = requestData.description.trim()
         val body = JSONObject()
             .put("id", tool.id)
