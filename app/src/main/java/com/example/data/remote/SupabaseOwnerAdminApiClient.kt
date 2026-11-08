@@ -180,7 +180,9 @@ class SupabaseOwnerAdminApiClient(
     }
 
     suspend fun inviteMember(req: InviteMemberRequest, authToken: String): Result<Unit> {
+        val displayName = req.displayName.trim().take(80)
         val body = JSONObject().put("email", req.email.trim().lowercase())
+        if (displayName.isNotBlank()) body.put("display_name", displayName)
         return invoke("admin-invite-member", authToken, body).map { Unit }
     }
 
