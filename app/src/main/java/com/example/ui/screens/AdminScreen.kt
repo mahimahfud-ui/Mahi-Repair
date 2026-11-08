@@ -159,7 +159,6 @@ fun AdminScreen(
 
     // PIN Unlock State (Verified server-side via PBKDF2)
     var isUnlocked by rememberSaveable { mutableStateOf(false) }
-    var enteredPin by rememberSaveable { mutableStateOf("") }
     var pinError by rememberSaveable { mutableStateOf<String?>(null) }
     var isVerifyingPin by rememberSaveable { mutableStateOf(false) }
 
@@ -190,7 +189,6 @@ fun AdminScreen(
     var showCreateToolDialog by rememberSaveable { mutableStateOf(false) }
     var editingTool by remember { mutableStateOf<AdminToolItem?>(null) }
     var showInviteMemberDialog by rememberSaveable { mutableStateOf(false) }
-    var showChangePinDialog by rememberSaveable { mutableStateOf(false) }
 
     fun applyDashboard(snapshot: com.example.data.remote.AdminDashboardSnapshot) {
         analyticsData = snapshot.analytics
@@ -297,7 +295,7 @@ fun AdminScreen(
                         if (isVerifyingPin) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.AdminPanelSettings, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Verify Owner & Open Console", fontWeight = FontWeight.SemiBold)
                         }
@@ -500,7 +498,6 @@ fun AdminScreen(
                 AdminTab.SETTINGS -> AdminSettingsPage(
                     auditLogs = auditLogs,
                     maxWidth = maxContentWidth,
-                    onChangePin = { statusFeedback = "Owner access is verified through the active Supabase session; the legacy PIN service is retired." }
                 )
             }
         }
@@ -1312,8 +1309,7 @@ private fun ChatBubble(
 @Composable
 private fun AdminSettingsPage(
     auditLogs: List<AdminAuditLogItem>,
-    maxWidth: Dp,
-    onChangePin: () -> Unit
+    maxWidth: Dp
 ) {
     Column(
         Modifier
@@ -1334,18 +1330,15 @@ private fun AdminSettingsPage(
                     Icon(Icons.Default.Lock, null, tint = MahiAccent)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Administrative Security PIN", color = MahiTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text("Protects server-side governance and Gemini actions.", color = MahiTextMuted, fontSize = 11.sp)
+                        Text("Supabase Owner Session", color = MahiTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("Every privileged request is checked against the active Owner profile.", color = MahiTextMuted, fontSize = 11.sp)
                     }
                 }
-                Text("Stored securely with PBKDF2-SHA512 (100,000 iterations) and timing attack protection.", color = MahiTextSecondary, fontSize = 12.sp)
-                Button(
-                    onClick = onChangePin,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
-                ) {
-                    Text("Change Security PIN", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
+                Text(
+                    "The mobile console does not store a separate PIN. Supabase validates the signed-in Owner session for every read and mutation; suspended or revoked accounts are denied.",
+                    color = MahiTextSecondary,
+                    fontSize = 12.sp
+                )
             }
         }
 
