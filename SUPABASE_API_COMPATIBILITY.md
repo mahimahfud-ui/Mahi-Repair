@@ -116,7 +116,7 @@ The production database currently contains two profiles (one active Owner, one a
 Still unverified:
 1. Actual Owner web login and Android Owner-console login.
 2. Member OTP email delivery; the Resend-primary/Brevo-fallback Auth hook still needs API keys, verified sender and the dashboard-generated webhook secret before it can be connected.
-3. Presence and exact value of Supabase `ADMIN_ORIGIN`.
+3. Live Supabase Auth site URL and redirect allowlist verification.
 4. Presence/format of `RECIPE_SIGNING_PRIVATE_KEY_PEM` and cryptographic match with Android public key.
 5. Signed tool publication and execution on a physical device.
 6. Device telemetry persistence from an actual Member device.
@@ -125,7 +125,7 @@ Still unverified:
 9. Production release signing with the existing upload keystore.
 10. Supabase global Realtime public-access setting, backup/restore and alerts.
 
-The connected Supabase tooling does not expose protected secret values, the live Auth Hook/SMTP settings or the global Realtime dashboard toggle. The source `supabase/config.toml` now declares the production Admin site URL, but live Auth URL settings were not overwritten. No test sign-ins or emails were sent.
+The connected Supabase tooling does not expose protected secret values, the live Auth Hook/SMTP settings or the global Realtime dashboard toggle. The source `supabase/config.toml` now declares the production Admin site URL, but live Auth URL settings were not overwritten. The application Edge Functions use a hard-coded canonical Admin-origin fallback if an optional `ADMIN_ORIGIN` override is absent. No test sign-ins or emails were sent.
 
 ## 9. Security and legacy services
 

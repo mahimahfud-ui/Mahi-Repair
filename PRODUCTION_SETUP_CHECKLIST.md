@@ -32,11 +32,11 @@ Keep all server secrets in Supabase Edge Function secrets or protected GitHub Ac
 Required Supabase secret checks:
 
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` must be present in the Edge Function environment.
-- `ADMIN_ORIGIN` must equal the canonical HTTPS origin `https://mahi-repair-admin.onrender.com` (no path, query or trailing slash).
+- `ADMIN_ORIGIN` is an optional override. If set, it must equal the canonical HTTPS origin `https://mahi-repair-admin.onrender.com` (no path, query or trailing slash). If unset, all deployed app functions use this fixed production origin as their default.
 - `RECIPE_SIGNING_PRIVATE_KEY_PEM` must be a valid RSA-3072 PKCS#8 private key and must cryptographically match Android's configured `RECIPE_SIGNING_PUBLIC_KEY_PEM`.
 - Auth email delivery requires `SEND_EMAIL_HOOK_SECRET` (generated in Supabase Auth Hooks), `RESEND_API_KEY`, `BREVO_API_KEY`, and a sender address configured as `AUTH_EMAIL_FROM`; both provider accounts must verify that sender. Optional: `AUTH_EMAIL_FROM_NAME` and `RESEND_EMAIL_FROM`.
 
-The connected Supabase API does not reveal protected secret values. The actual presence of `ADMIN_ORIGIN`, Auth hook/provider secrets, signing-key format, and public/private key match therefore remain unverified. Do not publish a repair tool until the signing pair is verified securely.
+The connected Supabase API does not reveal protected secret values. Auth hook/provider secrets, signing-key format, and public/private key match therefore remain unverified. The app-function CORS/invite origin no longer depends on a secret; a malformed explicit `ADMIN_ORIGIN` override still fails closed. Do not publish a repair tool until the signing pair is verified securely.
 
 Android client config may contain only the Supabase project URL, public publishable/anon key and RSA public key. Never embed a service-role key or signing private key in the APK.
 
