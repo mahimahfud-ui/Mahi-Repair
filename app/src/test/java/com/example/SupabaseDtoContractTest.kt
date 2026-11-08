@@ -65,7 +65,7 @@ class SupabaseDtoContractTest {
             {
               "data": [
                 {
-                  "tool_id": "tool-network-check",
+                  "tool_id": "a0000000-0000-0000-0000-000000000003",
                   "version": 1,
                   "signed_payload": "{\"schemaVersion\":1,\"toolId\":\"tool-network-check\"}",
                   "signature": "base64-signature",
@@ -77,7 +77,7 @@ class SupabaseDtoContractTest {
         """.trimIndent()
         val response = moshi.adapter(GetToolsResponse::class.java).fromJson(responseJson)
         assertEquals(1, response?.data?.size)
-        assertEquals("tool-network-check", response?.data?.first()?.toolId)
+        assertEquals("a0000000-0000-0000-0000-000000000003", response?.data?.first()?.toolId)
         assertEquals("RSA-SHA256", response?.data?.first()?.signatureAlgorithm)
         assertEquals("2026-11-05T10:00:00Z", response?.data?.first()?.publishedAt)
     }
@@ -113,7 +113,7 @@ class SupabaseDtoContractTest {
             stepResults = listOf(
                 StepRunResultDto(
                     stepId = "check-internet",
-                    status = "COMPLETED"
+                    status = "SUCCESS"
                 )
             ),
             appVersion = "1.0.0"
