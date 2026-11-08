@@ -155,11 +155,10 @@ fun AdminScreen(
     val isTablet = screenWidth >= 640
     val maxContentWidth = if (isTablet) 980.dp else 680.dp
     val scope = rememberCoroutineScope()
-    val adminClient = remember { AdminApiClient() }
+    val adminClient = remember { com.example.data.remote.SupabaseOwnerAdminApiClient() }
 
     // PIN Unlock State (Verified server-side via PBKDF2)
     var isUnlocked by rememberSaveable { mutableStateOf(false) }
-    var enteredPin by rememberSaveable { mutableStateOf("") }
     var pinError by rememberSaveable { mutableStateOf<String?>(null) }
     var isVerifyingPin by rememberSaveable { mutableStateOf(false) }
 
@@ -179,7 +178,7 @@ fun AdminScreen(
             ChatMessage(
                 id = "welcome",
                 sender = "gemini",
-                text = "Hello Owner. I am your Gemini Admin Assistant. Ask me to create or publish tools, inspect repair runs, or manage member devices."
+                text = "Owner dashboard is connected to Supabase. Gemini actions are disabled until a production AI provider is configured; use the Tools and Members tabs for secured administration."
             )
         )
     }
@@ -190,19 +189,24 @@ fun AdminScreen(
     var showCreateToolDialog by rememberSaveable { mutableStateOf(false) }
     var editingTool by remember { mutableStateOf<AdminToolItem?>(null) }
     var showInviteMemberDialog by rememberSaveable { mutableStateOf(false) }
-    var showChangePinDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Function to load all admin data
+    fun applyDashboard(snapshot: com.example.data.remote.AdminDashboardSnapshot) {
+        analyticsData = snapshot.analytics
+        toolsList = snapshot.tools
+        membersList = snapshot.members
+        devicesList = snapshot.devices
+        auditLogs = snapshot.auditLogs
+    }
+
+    // One authenticated request loads the complete Owner dashboard.
     fun refreshAdminData() {
         if (!isUnlocked || authToken.isBlank()) return
         scope.launch {
             isLoadingData = true
             statusFeedback = null
-            adminClient.getAnalytics(authToken).onSuccess { analyticsData = it }
-            adminClient.getAllTools(authToken).onSuccess { toolsList = it }
-            adminClient.getMembers(authToken).onSuccess { membersList = it }
-            adminClient.getDevices(authToken).onSuccess { devicesList = it }
-            adminClient.getAuditLogs(authToken).onSuccess { auditLogs = it }
+            adminClient.getDashboard(authToken)
+                .onSuccess { applyDashboard(it) }
+                .onFailure { statusFeedback = it.message ?: "Owner dashboard refresh failed." }
             isLoadingData = false
         }
     }
@@ -214,7 +218,6 @@ fun AdminScreen(
     }
 
     if (!isUnlocked) {
-        // --- PIN UNLOCK SCREEN ---
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -223,9 +226,7 @@ fun AdminScreen(
             contentAlignment = Alignment.Center
         ) {
             Card(
-                modifier = Modifier
-                    .widthIn(max = 440.dp)
-                    .fillMaxWidth(),
+                modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MahiCardSurface),
                 border = BorderStroke(1.dp, MahiCardStroke)
@@ -242,105 +243,63 @@ fun AdminScreen(
                         modifier = Modifier.size(64.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = MahiAccent, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MahiAccent, modifier = Modifier.size(32.dp))
                         }
                     }
-
                     Text(
-                        "OWNER VERIFICATION",
+                        "OWNER SESSION VERIFICATION",
                         color = MahiAccent,
                         fontSize = 11.sp,
                         letterSpacing = 1.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Admin Panel Unlock",
+                        "Secure Owner Console",
                         color = MahiTextPrimary,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Enter the administrative security PIN to access platform governance and Gemini assistant.",
+                        "Supabase verifies this signed-in account on the server. Only an active Owner profile can open the console; Member accounts are rejected.",
                         color = MahiTextSecondary,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
                         lineHeight = 18.sp
                     )
-
-                    OutlinedTextField(
-                        value = enteredPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) enteredPin = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("4–8 digit PIN (e.g. 6993)", color = MahiTextMuted) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (enteredPin.length >= 4 && !isVerifyingPin) {
-                                isVerifyingPin = true
-                                pinError = null
-                                scope.launch {
-                                    adminClient.verifyAdminPin(enteredPin, authToken)
-                                        .onSuccess {
-                                            isUnlocked = true
-                                            isVerifyingPin = false
-                                        }
-                                        .onFailure {
-                                            pinError = it.message ?: "Incorrect PIN."
-                                            isVerifyingPin = false
-                                        }
-                                }
-                            }
-                        }),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = MahiTextPrimary,
-                            unfocusedTextColor = MahiTextPrimary,
-                            focusedBorderColor = MahiAccent,
-                            unfocusedBorderColor = MahiCardStroke,
-                            focusedContainerColor = MahiBlack,
-                            unfocusedContainerColor = MahiBlack
-                        )
-                    )
-
                     if (pinError != null) {
                         Text(pinError.orEmpty(), color = MahiRedPrimary, fontSize = 12.sp, textAlign = TextAlign.Center)
                     }
-
                     Button(
                         onClick = {
-                            if (enteredPin.length >= 4 && !isVerifyingPin) {
+                            if (!isVerifyingPin && authToken.isNotBlank()) {
                                 isVerifyingPin = true
                                 pinError = null
                                 scope.launch {
-                                    adminClient.verifyAdminPin(enteredPin, authToken)
+                                    adminClient.getDashboard(authToken)
                                         .onSuccess {
+                                            applyDashboard(it)
                                             isUnlocked = true
-                                            isVerifyingPin = false
                                         }
                                         .onFailure {
-                                            pinError = it.message ?: "Incorrect PIN."
-                                            isVerifyingPin = false
+                                            pinError = it.message ?: "Owner verification failed."
                                         }
+                                    isVerifyingPin = false
                                 }
                             }
                         },
-                        enabled = enteredPin.length >= 4 && !isVerifyingPin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
+                        enabled = authToken.isNotBlank() && !isVerifyingPin,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
                     ) {
                         if (isVerifyingPin) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.LockOpen, null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.AdminPanelSettings, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Unlock Admin Console", fontWeight = FontWeight.SemiBold)
+                            Text("Verify Owner & Open Console", fontWeight = FontWeight.SemiBold)
                         }
                     }
-
                     TextButton(onClick = onExitAdmin) {
                         Text("Return to User Panel", color = MahiTextMuted, fontSize = 13.sp)
                     }
@@ -539,7 +498,6 @@ fun AdminScreen(
                 AdminTab.SETTINGS -> AdminSettingsPage(
                     auditLogs = auditLogs,
                     maxWidth = maxContentWidth,
-                    onChangePin = { showChangePinDialog = true }
                 )
             }
         }
@@ -731,7 +689,6 @@ fun AdminScreen(
     if (showInviteMemberDialog) {
         var email by rememberSaveable { mutableStateOf("") }
         var displayName by rememberSaveable { mutableStateOf("") }
-        var role by rememberSaveable { mutableStateOf("member") }
         var isSubmitting by rememberSaveable { mutableStateOf(false) }
 
         AlertDialog(
@@ -754,18 +711,12 @@ fun AdminScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FilterChip(
-                            selected = role == "member",
-                            onClick = { role = "member" },
-                            label = { Text("Member") }
-                        )
-                        FilterChip(
-                            selected = role == "owner",
-                            onClick = { role = "owner" },
-                            label = { Text("Co-Owner") }
-                        )
-                    }
+                    Text(
+                        "Invited accounts are always created as Members. Owner access is never granted through Member invitations.",
+                        color = MahiTextMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
                 }
             },
             confirmButton = {
@@ -775,7 +726,7 @@ fun AdminScreen(
                             isSubmitting = true
                             scope.launch {
                                 adminClient.inviteMember(
-                                    InviteMemberRequest(email = email, role = role, displayName = displayName),
+                                    InviteMemberRequest(email = email, role = "member", displayName = displayName),
                                     authToken
                                 ).onSuccess {
                                     showInviteMemberDialog = false
@@ -799,89 +750,7 @@ fun AdminScreen(
         )
     }
 
-    // --- CHANGE PIN DIALOG ---
-    if (showChangePinDialog) {
-        var currentPin by rememberSaveable { mutableStateOf("") }
-        var newPin by rememberSaveable { mutableStateOf("") }
-        var confirmPin by rememberSaveable { mutableStateOf("") }
-        var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
-        var isSubmitting by rememberSaveable { mutableStateOf(false) }
 
-        AlertDialog(
-            onDismissRequest = { if (!isSubmitting) showChangePinDialog = false },
-            title = { Text("Change Admin PIN", color = MahiTextPrimary, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Enter current PIN and a new 4–8 digit PIN.", color = MahiTextSecondary, fontSize = 12.sp)
-                    OutlinedTextField(
-                        value = currentPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) currentPin = it },
-                        label = { Text("Current PIN") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
-                    OutlinedTextField(
-                        value = newPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) newPin = it },
-                        label = { Text("New PIN (4–8 digits)") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
-                    OutlinedTextField(
-                        value = confirmPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) confirmPin = it },
-                        label = { Text("Confirm New PIN") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
-                    if (errorMsg != null) {
-                        Text(errorMsg.orEmpty(), color = MahiRedPrimary, fontSize = 12.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newPin != confirmPin) {
-                            errorMsg = "New PIN and confirmation do not match."
-                            return@Button
-                        }
-                        if (newPin.length < 4) {
-                            errorMsg = "PIN must be at least 4 digits."
-                            return@Button
-                        }
-                        isSubmitting = true
-                        errorMsg = null
-                        scope.launch {
-                            adminClient.changeAdminPin(currentPin, newPin, authToken)
-                                .onSuccess {
-                                    showChangePinDialog = false
-                                }
-                                .onFailure {
-                                    errorMsg = it.message ?: "Failed to update PIN."
-                                }
-                            isSubmitting = false
-                        }
-                    },
-                    enabled = currentPin.isNotBlank() && newPin.isNotBlank() && confirmPin.isNotBlank() && !isSubmitting,
-                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
-                ) {
-                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Update PIN")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showChangePinDialog = false }) { Text("Cancel", color = MahiTextMuted) }
-            },
-            containerColor = MahiCardSurface
-        )
-    }
 }
 
 // ==========================================
@@ -1212,6 +1081,13 @@ private fun AdminMembersPage(
             }
         } else {
             devices.forEach { d ->
+                val manufacturer = d.hardwareProfile["manufacturer"]?.toString().orEmpty()
+                val model = (d.hardwareProfile["commercialModelName"] ?: d.hardwareProfile["model"])?.toString().orEmpty()
+                val soc = d.hardwareProfile["socModel"]?.toString().orEmpty()
+                val ramGb = ((d.telemetry["totalRamBytes"] as? Number)?.toLong()?.div(1024L * 1024L * 1024L))
+                val freeStorageGb = ((d.telemetry["internalStorageAvailableBytes"] as? Number)?.toLong()?.div(1024L * 1024L * 1024L))
+                val battery = d.telemetry["batteryLevel"]?.toString()
+                val thermal = d.telemetry["thermalStatus"]?.toString()
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -1220,7 +1096,7 @@ private fun AdminMembersPage(
                 ) {
                     Row(
                         Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         Surface(shape = CircleShape, color = MahiAccentDim, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {
@@ -1228,13 +1104,39 @@ private fun AdminMembersPage(
                             }
                         }
                         Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(d.deviceLabel.ifBlank { "Android Device" }, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 Spacer(Modifier.width(6.dp))
                                 AdminStatusBadge(if (d.revokedAt != null) "REVOKED" else "ACTIVE")
                             }
-                            Text("User: ${d.userEmail ?: d.userId} · Android ${d.androidVersion}", color = MahiTextSecondary, fontSize = 11.sp)
+                            Text("User: ${d.userEmail ?: d.userId}", color = MahiTextSecondary, fontSize = 11.sp)
+                            if (model.isNotBlank() || soc.isNotBlank()) {
+                                Text(
+                                    listOf(manufacturer, model, soc).filter { it.isNotBlank() }.joinToString(" · "),
+                                    color = MahiTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                "Android ${d.androidVersion} (API ${d.androidApi}) · App ${d.appVersion}",
+                                color = MahiTextMuted,
+                                fontSize = 10.sp
+                            )
+                            val health = listOfNotNull(
+                                ramGb?.let { "RAM ${it} GB" },
+                                freeStorageGb?.let { "Free storage ${it} GB" },
+                                battery?.let { "Battery ${it}%" },
+                                thermal?.let { "Thermal $it" }
+                            )
+                            if (health.isNotEmpty()) {
+                                Text(health.joinToString(" · "), color = MahiTextSecondary, fontSize = 10.sp)
+                            }
+                            Text(
+                                "Profile sync: ${d.profileUpdatedAt?.take(19)?.replace('T', ' ') ?: "not received"} · Last seen: ${d.lastSeenAt.take(19).replace('T', ' ')}",
+                                color = MahiTextMuted,
+                                fontSize = 10.sp
+                            )
                         }
                         if (d.revokedAt == null) {
                             OutlinedButton(
@@ -1440,8 +1342,7 @@ private fun ChatBubble(
 @Composable
 private fun AdminSettingsPage(
     auditLogs: List<AdminAuditLogItem>,
-    maxWidth: Dp,
-    onChangePin: () -> Unit
+    maxWidth: Dp
 ) {
     Column(
         Modifier
@@ -1462,18 +1363,15 @@ private fun AdminSettingsPage(
                     Icon(Icons.Default.Lock, null, tint = MahiAccent)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Administrative Security PIN", color = MahiTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text("Protects server-side governance and Gemini actions.", color = MahiTextMuted, fontSize = 11.sp)
+                        Text("Supabase Owner Session", color = MahiTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("Every privileged request is checked against the active Owner profile.", color = MahiTextMuted, fontSize = 11.sp)
                     }
                 }
-                Text("Stored securely with PBKDF2-SHA512 (100,000 iterations) and timing attack protection.", color = MahiTextSecondary, fontSize = 12.sp)
-                Button(
-                    onClick = onChangePin,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
-                ) {
-                    Text("Change Security PIN", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
+                Text(
+                    "The mobile console does not store a separate PIN. Supabase validates the signed-in Owner session for every read and mutation; suspended or revoked accounts are denied.",
+                    color = MahiTextSecondary,
+                    fontSize = 12.sp
+                )
             }
         }
 

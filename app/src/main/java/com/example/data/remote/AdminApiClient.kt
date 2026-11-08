@@ -102,7 +102,9 @@ data class AdminToolItem(
     @Json(name = "estimatedSeconds") val estimatedSeconds: Int = 60,
     @Json(name = "minAndroidSdk") val minAndroidSdk: Int = 26,
     @Json(name = "createdAt") val createdAt: String = "",
-    @Json(name = "updatedAt") val updatedAt: String = ""
+    @Json(name = "updatedAt") val updatedAt: String = "",
+    val icon: String = "wrench",
+    @Json(name = "draftRecipe") val draftRecipe: Map<String, Any?> = emptyMap()
 )
 
 @JsonClass(generateAdapter = true)
@@ -169,7 +171,11 @@ data class AdminDeviceItem(
     @Json(name = "androidApi") val androidApi: Int = 0,
     @Json(name = "revokedAt") val revokedAt: String? = null,
     @Json(name = "lastSeenAt") val lastSeenAt: String = "",
-    @Json(name = "createdAt") val createdAt: String = ""
+    @Json(name = "createdAt") val createdAt: String = "",
+    @Json(name = "hardwareProfile") val hardwareProfile: Map<String, Any?> = emptyMap(),
+    val telemetry: Map<String, Any?> = emptyMap(),
+    @Json(name = "fieldAvailability") val fieldAvailability: Map<String, Any?> = emptyMap(),
+    @Json(name = "profileUpdatedAt") val profileUpdatedAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
