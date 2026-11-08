@@ -96,28 +96,28 @@ class MemoryStagingDb {
 
     // Default Owner accounts
     const owner1: UserProfile = {
-      id: 'owner_mahin',
+      id: 'demo_owner',
       role: 'owner',
       status: 'active',
-      email: 'mahinmhfd@gmail.com',
-      displayName: 'Mahin (Owner)',
+      email: 'demo.owner@example.test',
+      displayName: 'Demo Owner',
       createdAt: now,
       updatedAt: now,
     };
     const owner2: UserProfile = {
-      id: 'owner_alex',
+      id: 'demo_owner_secondary',
       role: 'owner',
       status: 'active',
-      email: 'alex.owner@example.com',
-      displayName: 'Alex Owner',
+      email: 'secondary.demo.owner@example.test',
+      displayName: 'Secondary Demo Owner',
       createdAt: now,
       updatedAt: now,
     };
     const member1: UserProfile = {
-      id: 'member_demo',
+      id: 'demo_member',
       role: 'member',
       status: 'active',
-      email: 'member.test@example.com',
+      email: 'demo.member@example.test',
       displayName: 'Demo Member',
       createdAt: now,
       updatedAt: now,

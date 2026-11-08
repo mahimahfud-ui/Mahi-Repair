@@ -1,44 +1,55 @@
 # Mahi Repair — Android Repair Client & Owner Admin
 
-Mahi Repair is a recipe-driven Android diagnostics and guided repair system. The supported cloud path uses a separate Owner Admin application and one shared Supabase project.
+Mahi Repair is a recipe-driven Android diagnostics and guided-repair system. The supported cloud path uses a separate Owner Admin application and a shared Supabase project.
 
 ## Production architecture
 
-- **Android Member app** — native Kotlin/Jetpack Compose client. Members authenticate by email OTP, register their Android device, fetch only assigned and compatible tools, verify detached RSA-SHA256 signatures locally, run allowlisted native actions and submit repair reports.
-- **Owner Admin** — separate Next.js application in [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at [mahi-repair-admin.onrender.com](https://mahi-repair-admin.onrender.com). Owner sign-in uses the configured Owner Auth account and server-side PIN verification; every protected route checks the active Owner profile and configured Owner identity.
-- **Supabase** — shared Auth, PostgreSQL, RLS, private Realtime and 15 JWT-protected Edge Functions. Android calls Supabase directly; it does not use the Admin website as an API.
-- **Recipe signing** — RSA-3072 / SHA-256. The private signing key belongs only in Supabase Edge Function secrets. The Android app receives only the public key at build time.
+- **Android app** — Kotlin/Jetpack Compose client. Members authenticate with email OTP, register their own Android device, synchronize consented hardware/health telemetry, fetch only assigned and compatible repair tools, verify detached RSA-SHA256 signatures locally, execute allowlisted native actions and submit repair reports.
+- **Owner Admin** — separate Next.js application in [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at [mahi-repair-admin.onrender.com](https://mahi-repair-admin.onrender.com). The web console verifies the configured Owner identity server-side. The Android Owner console uses a signed-in Supabase session; Owner-only Edge Functions enforce the active Owner role on every protected request.
+- **Supabase** — shared Auth, PostgreSQL, RLS, private Realtime and 16 JWT-verified Edge Functions. Android calls Supabase directly; it does not use the Admin website as an API.
+- **Device intelligence** — `register-device` accepts the authenticated Member's server-issued device UUID, hardware profile, dynamic telemetry and field-availability map. The service-role RPC validates profile ownership and revocation before persisting it.
+- **Recipe signing** — RSA-3072 / SHA-256. The signing private key belongs only in Supabase Edge Function secrets. Android receives only the public key at build time.
 
 ## Android native action boundary
 
-The app executes a fixed allowlist such as connectivity/DNS/HTTPS checks, app/package checks, storage checks, guided settings navigation, help instructions and permission requests. A signed recipe cannot provide arbitrary shell code or bypass the native action allowlist. Guided actions and permission requests require user confirmation.
+The app executes a fixed allowlist of native diagnostics and guided repair actions. A signed recipe cannot provide arbitrary shell code or bypass the native action allowlist. Destructive or permission-dependent actions require foreground user confirmation.
 
 ## Configure an Android build
 
-1. Copy `.env.example` to `.env` only when local overrides are needed.
-2. Keep the production Supabase URL and public publishable key as client configuration. Never put a service-role key, PIN, password or private signing key in this file.
-3. `RECIPE_SIGNING_PUBLIC_KEY_PEM` is public material. It must match the private key configured in the production Supabase signing function.
-4. The optional legacy `MAHI_API_BASE_URL` and remote-support endpoints intentionally use fail-closed placeholder values. Do not replace them with the Admin website URL; the old Express API is not a production backend.
+1. Copy `.env.example` to `.env` only for local overrides.
+2. Use the production Supabase URL and public publishable/anon key as client configuration.
+3. `RECIPE_SIGNING_PUBLIC_KEY_PEM` is public material. It must match the private key configured in Supabase.
+4. The optional legacy `MAHI_API_BASE_URL` and remote-support endpoints remain fail-closed placeholders. Do not point them at the Admin website URL; the legacy Express API is not production storage.
 
-Build and test the Android debug app:
+Run Android unit tests and build a debug APK:
 
 ```bash
-cd app
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-CI currently builds a debug APK. A production release APK/AAB requires the existing, correct upload keystore and signing credentials; do not generate a replacement key unless an app-signing migration is planned.
+## Production release
 
-## Local web/legacy backend
+A manual GitHub Actions workflow, **Android Production Release**, builds a signed APK and AAB using the app's existing upload keystore. It requires these protected repository secrets:
 
-The repository also contains a legacy React/Express development surface. Its current backend data adapter is a file-backed `MemoryStagingDb` with demo seeds; it is not production storage and must not be deployed to an ephemeral Render instance. The production Owner Admin and Member app use the shared Supabase schema and Edge Functions instead.
+- `ANDROID_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_UPLOAD_STORE_PASSWORD`
+- `ANDROID_UPLOAD_KEY_PASSWORD`
 
-## Verified production baseline — 8 November 2026
+The expected keystore alias is `upload`. Do not replace the signer for an app already distributed. The workflow is merged, but a signed release artifact has not yet been produced because the existing keystore secrets are not configured/verified.
 
-- Supabase project `shwqsljicmhflnvjqjah` is ACTIVE_HEALTHY.
-- All 7 production migrations are applied and all 15 Edge Functions are ACTIVE with JWT verification enabled.
-- RLS is enabled on all public tables.
-- Existing Owner `mahinmhfd@gmail.com` remains active Owner; `mahimahfud@gmail.com` remains active Member.
-- Production data currently contains 0 registered devices, 0 repair tools, 0 published versions and 0 repair runs.
+## Legacy components and unavailable services
 
-This means the infrastructure is provisioned, but real Member enrolment, a published signed tool, a persisted repair report, private Realtime delivery and physical Android acceptance have not yet been demonstrated. Do not describe the app as fully production-ready until those checks pass.
+The repository contains a legacy React/Express development surface. Its backend data adapter is a file-backed `MemoryStagingDb` with demo seeds; it is not production storage and must not be deployed to an ephemeral Render instance.
+
+The mobile Owner dashboard is connected to Supabase. The Gemini admin assistant has no configured production provider endpoint and is not an available production feature. The old remote-support service still depends on the file-backed Express routes and has no configured live video transport; it is not a production remote-control feature.
+
+## Verified production baseline — November 8, 2026
+
+- Supabase project `shwqsljicmhflnvjqjah` is `ACTIVE_HEALTHY`.
+- 9 migrations are applied; all 16 Edge Functions are ACTIVE with JWT verification enabled.
+- RLS is enabled on all 9 public application tables.
+- Render Admin's latest merged code deployment is LIVE.
+- Android telemetry and Owner-console code changes are merged to main.
+- Production currently contains 1 active Owner profile and 1 active Member profile, with 0 registered devices, 0 repair tools, 0 published versions and 0 repair runs.
+
+Infrastructure deployment is not equivalent to end-to-end acceptance. Owner login, Member OTP delivery, signing-key match, physical Android enrollment, a published signed tool, a persisted repair report, private Realtime delivery, production release signing and remote support still require verification.
