@@ -16,7 +16,7 @@ This document records verified infrastructure and remaining release gates. An AC
 - RLS is enabled on all 9 public application tables and on `realtime.messages`.
 - Anonymous browser table grants are absent. Authenticated browser access is read-only; privileged database RPCs are service-role only.
 - Supabase device profile/telemetry columns and the member-owned registration RPC are deployed.
-- `register-device` v4 and Owner-only `get-admin-dashboard` v1 are deployed.
+- `register-device` v5 and Owner-only `get-admin-dashboard` v3 are deployed. The dashboard function was deployed after confirming the mobile Owner client called an endpoint missing from the live function inventory.
 - `send-email-hook` v1 is deployed (Resend primary, Brevo fallback), but has not been connected in Supabase Auth.
 - Admin source PR #4 is merged. Render Admin commit `098274ed7da6b368f828f6249a2784fbf2ea02ac` is live.
 - Android PR #14 is merged. Member device telemetry and mobile Owner dashboard now use Supabase functions instead of the unconfigured legacy Mahi API.
