@@ -6,8 +6,9 @@ Mahi Repair is a recipe-driven Android diagnostics and guided-repair system. The
 
 - **Android app** — Kotlin/Jetpack Compose client. Members authenticate with email OTP, register their own Android device, synchronize consented hardware/health telemetry, fetch only assigned and compatible repair tools, verify detached RSA-SHA256 signatures locally, execute allowlisted native actions and submit repair reports.
 - **Owner Admin** — separate Next.js application in [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at [mahi-repair-admin.onrender.com](https://mahi-repair-admin.onrender.com). The web console verifies the configured Owner identity server-side. The Android Owner console uses a signed-in Supabase session; Owner-only Edge Functions enforce the active Owner role on every protected request.
-- **Supabase** — shared Auth, PostgreSQL, RLS, private Realtime and 16 JWT-verified Edge Functions. Android calls Supabase directly; it does not use the Admin website as an API.
+- **Supabase** — shared Auth, PostgreSQL, RLS, private Realtime and 17 ACTIVE Edge Functions: 16 app/API functions require JWTs; the Auth email hook verifies Supabase's signed webhook instead. Android calls Supabase directly; it does not use the Admin website as an API.
 - **Device intelligence** — `register-device` accepts the authenticated Member's server-issued device UUID, hardware profile, dynamic telemetry and field-availability map. The service-role RPC validates profile ownership and revocation before persisting it.
+- **Auth email delivery** — `send-email-hook` v1 is deployed with Resend primary and Brevo fallback. It remains disconnected in Supabase Auth until provider keys, verified sender and the dashboard-generated webhook secret are configured.
 - **Recipe signing** — RSA-3072 / SHA-256. The signing private key belongs only in Supabase Edge Function secrets. Android receives only the public key at build time.
 
 ## Android native action boundary
@@ -46,10 +47,12 @@ The mobile Owner dashboard is connected to Supabase. The Gemini admin assistant 
 ## Verified production baseline — November 8, 2026
 
 - Supabase project `shwqsljicmhflnvjqjah` is `ACTIVE_HEALTHY`.
-- 9 migrations are applied; all 16 Edge Functions are ACTIVE with JWT verification enabled.
+- 9 migrations are applied; all 17 Edge Functions are ACTIVE. Sixteen application functions use JWT verification; `send-email-hook` uses signed Standard Webhooks verification and is not yet connected in Auth.
 - RLS is enabled on all 9 public application tables.
 - Render Admin's latest merged code deployment is LIVE.
 - Android telemetry and Owner-console code changes are merged to main.
 - Production currently contains 1 active Owner profile and 1 active Member profile, with 0 registered devices, 0 repair tools, 0 published versions and 0 repair runs.
+
+The Supabase config source now declares the production Admin site URL, but live Auth URL settings were not overwritten through an unavailable management API. The Auth email hook is deployed but not activated pending secrets and sender verification.
 
 Infrastructure deployment is not equivalent to end-to-end acceptance. Owner login, Member OTP delivery, signing-key match, physical Android enrollment, a published signed tool, a persisted repair report, private Realtime delivery, production release signing and remote support still require verification.
