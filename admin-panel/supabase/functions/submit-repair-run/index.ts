@@ -1,8 +1,16 @@
 import { authenticate, respond, preflight, handleError, jsonBody, rateLimit } from '../_shared/http.ts';
 import { z } from 'npm:zod@4';
+import {
+  fingerprintRunReport,
+  hasAuthorizedRunStepIds,
+  mapRunRpcError,
+  resolveRunSubmissionOutcome,
+} from '../_shared/run-report.ts';
 
 const ErrorCode = z.string().regex(/^[A-Z0-9_:-]{1,100}$/);
 const Run = z.object({
+  // Must equal Android RepairRunReport.runId exactly (UUID string).
+  run_id: z.string().uuid(),
   device_id: z.string().uuid(),
   tool_id: z.string().uuid(),
   tool_version: z.number().int().positive(),
@@ -13,7 +21,7 @@ const Run = z.object({
     step_id: z.string().min(1).max(80),
     status: z.enum(['SUCCESS', 'FAILED', 'SKIPPED', 'CANCELLED']),
     error_code: ErrorCode.optional(),
-  }).strict()).max(50),
+  }).strict()).min(1).max(50),
   error_code: ErrorCode.optional(),
   app_version: z.string().max(30).regex(/^\d+(?:\.\d+){0,3}$/),
 }).strict().superRefine((value, ctx) => {
@@ -25,17 +33,20 @@ const Run = z.object({
     if (ids.has(step.step_id)) ctx.addIssue({ code: 'custom', path: ['step_results', index, 'step_id'], message: 'Duplicate step result.' });
     ids.add(step.step_id);
   });
-});
-
-function compareVersions(a: string, b: string): number {
-  const left = a.split('.').map((v) => Number.parseInt(v, 10));
-  const right = b.split('.').map((v) => Number.parseInt(v, 10));
-  for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    const diff = (left[i] || 0) - (right[i] || 0);
-    if (diff !== 0) return diff;
+  const statuses = value.step_results.map((step) => step.status);
+  if (value.result === 'SUCCESS' && !statuses.includes('SUCCESS')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A successful run must contain at least one completed recipe step.' });
   }
-  return 0;
-}
+  if (value.result === 'PARTIAL' && (!statuses.includes('FAILED') || !statuses.includes('SUCCESS'))) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A partial run must contain both completed and failed steps.' });
+  }
+  if (value.result === 'FAILED' && !statuses.includes('FAILED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A failed run must contain a failed step or failed precheck.' });
+  }
+  if (value.result === 'CANCELLED' && !statuses.includes('CANCELLED')) {
+    ctx.addIssue({ code: 'custom', path: ['step_results'], message: 'A cancelled run must contain a cancelled step.' });
+  }
+});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return preflight(req);
@@ -43,33 +54,62 @@ Deno.serve(async (req) => {
     const { user, profile, admin } = await authenticate(req);
     if (profile.role !== 'member') throw Object.assign(new Error('Member account required'), { status: 403 });
     await rateLimit(admin, `run:${user.id}`, 60, 60);
+
     const checked = Run.safeParse(await jsonBody(req));
     if (!checked.success) return respond(req, { error: { code: 'INVALID_RUN', issues: checked.error.issues } }, 422);
     const value = checked.data;
 
-    const { data: device, error: deviceError } = await admin.from('devices')
-      .select('id,user_id,revoked_at,android_api,app_version').eq('id', value.device_id).eq('user_id', user.id).single();
-    if (deviceError || !device || device.revoked_at) throw Object.assign(new Error('Active registered device required'), { status: 403 });
-    if (device.app_version !== value.app_version) throw Object.assign(new Error('Refresh device registration before submitting this run.'), { status: 409 });
-
-    const { data: tool, error: toolError } = await admin.from('repair_tools').select('id,status,audience').eq('id', value.tool_id).single();
-    if (toolError || !tool || tool.status !== 'PUBLISHED') throw Object.assign(new Error('Tool is not currently published'), { status: 403 });
-    if (tool.audience === 'selected_members') {
-      const { data: access } = await admin.from('repair_tool_access').select('id').eq('tool_id', value.tool_id).eq('member_id', user.id).maybeSingle();
-      if (!access) throw Object.assign(new Error('No access to tool'), { status: 403 });
+    // This read provides early, user-friendly step validation. The SQL RPC
+    // repeats identity, device, assignment, publication/version, compatibility
+    // and step checks under row locks in the same transaction as the insert.
+    const { data: version, error: versionError } = await admin.from('repair_tool_versions')
+      .select('payload')
+      .eq('tool_id', value.tool_id)
+      .eq('version', value.tool_version)
+      .maybeSingle();
+    if (versionError) throw versionError;
+    if (!version) throw Object.assign(new Error('The submitted recipe version is unavailable.'), { status: 409 });
+    const payload = version.payload as { steps?: Array<{ id: string }> };
+    const knownStepIds = new Set((payload.steps ?? []).map((step) => step.id));
+    if (!hasAuthorizedRunStepIds(value.result, value.step_results, knownStepIds)) {
+      throw Object.assign(new Error('The report contains a step that is not part of the authorized recipe.'), { status: 422 });
     }
 
-    const { data: version, error: versionError } = await admin.from('repair_tool_versions')
-      .select('id,payload').eq('tool_id', value.tool_id).eq('version', value.tool_version).maybeSingle();
-    if (versionError || !version) throw Object.assign(new Error('Unknown tool version'), { status: 400 });
-    const payload = version.payload as { minAndroidApi?: number; minAppVersion?: string; steps?: Array<{ id: string }> };
-    if ((device.android_api ?? 0) < (payload.minAndroidApi ?? 23)) throw Object.assign(new Error('Device Android API is below the recipe requirement.'), { status: 409 });
-    if (payload.minAppVersion && compareVersions(value.app_version, payload.minAppVersion) < 0) throw Object.assign(new Error('Android app version is below the recipe requirement.'), { status: 409 });
-    const knownStepIds = new Set((payload.steps ?? []).map((step) => step.id));
-    if (value.step_results.some((step) => !knownStepIds.has(step.step_id))) throw Object.assign(new Error('Run contains a step ID that is not part of the signed recipe.'), { status: 422 });
+    const fingerprint = await fingerprintRunReport(user.id, value.run_id, value);
+    const { data, error } = await admin.rpc('submit_repair_run_idempotent', {
+      p_run_id: value.run_id,
+      p_user_id: user.id,
+      p_device_id: value.device_id,
+      p_tool_id: value.tool_id,
+      p_tool_version: value.tool_version,
+      p_started_at: value.started_at,
+      p_completed_at: value.completed_at ?? null,
+      p_result: value.result,
+      p_step_results: value.step_results,
+      p_error_code: value.error_code ?? null,
+      p_app_version: value.app_version,
+      p_request_fingerprint: fingerprint,
+    });
 
-    const { data, error } = await admin.from('repair_runs').insert({ ...value, user_id: user.id }).select('id').single();
-    if (error) throw error;
-    return respond(req, { data: { run_id: data.id, accepted: true } }, 201);
-  } catch (error) { return handleError(req, error); }
+    if (error) {
+      const mapped = mapRunRpcError(error.message);
+      if (mapped) throw Object.assign(new Error(mapped.message), { status: mapped.status });
+      throw error;
+    }
+
+    const outcome = resolveRunSubmissionOutcome(data, value.run_id);
+    if (outcome.conflict) {
+      return respond(req, {
+        error: { code: 'RUN_ID_CONFLICT', message: 'This run ID was already used for different report content or another identity.' },
+      }, 409);
+    }
+
+    // SUCCESS is a device-reported outcome, not cryptographic proof of physical
+    // repair. The server validates authorization and report integrity only.
+    return respond(req, {
+      data: { run_id: value.run_id, accepted: true, duplicate: outcome.duplicate },
+    }, outcome.httpStatus);
+  } catch (error) {
+    return handleError(req, error);
+  }
 });
