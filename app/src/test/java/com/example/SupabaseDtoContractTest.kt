@@ -1,7 +1,7 @@
 package com.example
 
+import com.example.data.remote.InviteMemberRequest
 import com.example.data.remote.dto.GetToolsRequest
-import com.example.data.remote.dto.InviteMemberRequest
 import com.example.data.remote.dto.GetToolsResponse
 import com.example.data.remote.dto.RegisterDeviceRequest
 import com.example.data.remote.dto.RegisterDeviceResponse
