@@ -5,6 +5,7 @@ import com.example.domain.intelligence.DynamicTelemetry
 import com.example.domain.intelligence.FieldAvailability
 import com.example.domain.intelligence.HardwareProfile
 import com.example.domain.intelligence.SensorInfo
+import kotlinx.coroutines.CancellationException
 import java.io.IOException
 
 /**
@@ -49,6 +50,8 @@ class DeviceIntelligenceApiClient(
                 }
                 Unit
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(IOException("Device profile sync could not be completed.", error))
         }
