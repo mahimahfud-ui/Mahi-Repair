@@ -44,7 +44,10 @@ data class RegisterDeviceRequest(
     @Json(name = "device_label") val deviceLabel: String? = null,
     @Json(name = "app_version") val appVersion: String,
     @Json(name = "android_version") val androidVersion: String,
-    @Json(name = "android_api") val androidApi: Int
+    @Json(name = "android_api") val androidApi: Int,
+    @Json(name = "hardware_profile") val hardwareProfile: Map<String, Any?>? = null,
+    val telemetry: Map<String, Any?>? = null,
+    @Json(name = "field_availability") val fieldAvailability: Map<String, String>? = null
 )
 
 @JsonClass(generateAdapter = true)

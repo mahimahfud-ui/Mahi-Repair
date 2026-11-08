@@ -56,6 +56,37 @@ class SupabaseDtoContractTest {
     }
 
     @Test
+    fun `device profile registration serializes Supabase hardware telemetry fields`() {
+        val request = RegisterDeviceRequest(
+            deviceId = "a0000000-0000-0000-0000-000000000001",
+            deviceLabel = "Pixel 8",
+            appVersion = "1.0.0",
+            androidVersion = "14",
+            androidApi = 34,
+            hardwareProfile = mapOf(
+                "manufacturer" to "Google",
+                "model" to "Pixel 8",
+                "cpuCoreCount" to 8
+            ),
+            telemetry = mapOf(
+                "totalRamBytes" to 8589934592L,
+                "batteryTemperature" to 31.5
+            ),
+            fieldAvailability = mapOf("batteryHealth" to "OBSERVED")
+        )
+
+        val encoded = moshi.adapter(RegisterDeviceRequest::class.java).toJson(request)
+        assertTrue(encoded.contains("\"hardware_profile\""))
+        assertTrue(encoded.contains("\"model\":\"Pixel 8\""))
+        assertTrue(encoded.contains("\"cpuCoreCount\":8"))
+        assertTrue(encoded.contains("\"totalRamBytes\":8589934592"))
+        assertTrue(encoded.contains("\"batteryTemperature\":31.5"))
+        assertTrue(encoded.contains("\"field_availability\""))
+        assertTrue(encoded.contains("\"batteryHealth\":\"OBSERVED\""))
+        assertTrue(!encoded.contains("app_installation_id"))
+    }
+
+    @Test
     fun `repair catalogue DTOs match the Edge Function contract`() {
         val request = GetToolsRequest(deviceId = "d1234567-0000-0000-0000-000000000000")
         val encoded = moshi.adapter(GetToolsRequest::class.java).toJson(request)
