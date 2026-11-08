@@ -1081,6 +1081,13 @@ private fun AdminMembersPage(
             }
         } else {
             devices.forEach { d ->
+                val manufacturer = d.hardwareProfile["manufacturer"]?.toString().orEmpty()
+                val model = (d.hardwareProfile["commercialModelName"] ?: d.hardwareProfile["model"])?.toString().orEmpty()
+                val soc = d.hardwareProfile["socModel"]?.toString().orEmpty()
+                val ramGb = ((d.telemetry["totalRamBytes"] as? Number)?.toLong()?.div(1024L * 1024L * 1024L))
+                val freeStorageGb = ((d.telemetry["internalStorageAvailableBytes"] as? Number)?.toLong()?.div(1024L * 1024L * 1024L))
+                val battery = d.telemetry["batteryLevel"]?.toString()
+                val thermal = d.telemetry["thermalStatus"]?.toString()
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -1089,7 +1096,7 @@ private fun AdminMembersPage(
                 ) {
                     Row(
                         Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         Surface(shape = CircleShape, color = MahiAccentDim, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {
@@ -1097,13 +1104,39 @@ private fun AdminMembersPage(
                             }
                         }
                         Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(d.deviceLabel.ifBlank { "Android Device" }, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 Spacer(Modifier.width(6.dp))
                                 AdminStatusBadge(if (d.revokedAt != null) "REVOKED" else "ACTIVE")
                             }
-                            Text("User: ${d.userEmail ?: d.userId} · Android ${d.androidVersion}", color = MahiTextSecondary, fontSize = 11.sp)
+                            Text("User: ${d.userEmail ?: d.userId}", color = MahiTextSecondary, fontSize = 11.sp)
+                            if (model.isNotBlank() || soc.isNotBlank()) {
+                                Text(
+                                    listOf(manufacturer, model, soc).filter { it.isNotBlank() }.joinToString(" · "),
+                                    color = MahiTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                "Android ${d.androidVersion} (API ${d.androidApi}) · App ${d.appVersion}",
+                                color = MahiTextMuted,
+                                fontSize = 10.sp
+                            )
+                            val health = listOfNotNull(
+                                ramGb?.let { "RAM ${it} GB" },
+                                freeStorageGb?.let { "Free storage ${it} GB" },
+                                battery?.let { "Battery ${it}%" },
+                                thermal?.let { "Thermal $it" }
+                            )
+                            if (health.isNotEmpty()) {
+                                Text(health.joinToString(" · "), color = MahiTextSecondary, fontSize = 10.sp)
+                            }
+                            Text(
+                                "Profile sync: ${d.profileUpdatedAt?.take(19)?.replace('T', ' ') ?: "not received"} · Last seen: ${d.lastSeenAt.take(19).replace('T', ' ')}",
+                                color = MahiTextMuted,
+                                fontSize = 10.sp
+                            )
                         }
                         if (d.revokedAt == null) {
                             OutlinedButton(
