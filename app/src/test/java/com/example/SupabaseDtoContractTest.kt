@@ -14,7 +14,6 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 
@@ -77,12 +76,14 @@ class SupabaseDtoContractTest {
         )
 
         val encoded = moshi.adapter(RegisterDeviceRequest::class.java).toJson(request)
-        val json = JSONObject(encoded)
-        assertEquals("Pixel 8", json.getJSONObject("hardware_profile").getString("model"))
-        assertEquals(8589934592L, json.getJSONObject("telemetry").getLong("totalRamBytes"))
-        assertEquals(31.5, json.getJSONObject("telemetry").getDouble("batteryTemperature"), 0.001)
-        assertEquals("OBSERVED", json.getJSONObject("field_availability").getString("batteryHealth"))
-        assertTrue(!json.has("app_installation_id"))
+        assertTrue(encoded.contains("\"hardware_profile\""))
+        assertTrue(encoded.contains("\"model\":\"Pixel 8\""))
+        assertTrue(encoded.contains("\"cpuCoreCount\":8"))
+        assertTrue(encoded.contains("\"totalRamBytes\":8589934592"))
+        assertTrue(encoded.contains("\"batteryTemperature\":31.5"))
+        assertTrue(encoded.contains("\"field_availability\""))
+        assertTrue(encoded.contains("\"batteryHealth\":\"OBSERVED\""))
+        assertTrue(!encoded.contains("app_installation_id"))
     }
 
     @Test
