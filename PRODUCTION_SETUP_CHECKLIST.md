@@ -15,7 +15,7 @@ This checklist records the current production architecture. Do not re-run alread
 - RLS is enabled on every public table and on `realtime.messages`.
 - Render Owner Admin is connected to the Admin repository's `main` branch. Its latest Admin security-hardening commit has passed CI and its Render deployment is being rolled out.
 - Render is configured with the production Supabase URL, the enabled public publishable key, and server-only `ADMIN_OWNER_EMAIL`.
-- Existing active Owner is `mahinmhfd@gmail.com`; existing active Member is `mahimahfud@gmail.com`. Never promote, rename or modify the Member to make an Owner login work.
+- The verified Owner profile remains active with the Owner role; the separate Member profile remains active with the Member role. Never promote, rename or modify the Member to make an Owner login work.
 
 ## 2. Required secret boundaries
 
