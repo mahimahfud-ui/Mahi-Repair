@@ -12,11 +12,12 @@ This document records verified infrastructure and remaining release gates. An AC
 
 - Supabase project status: `ACTIVE_HEALTHY`; PostgreSQL 17.
 - 9 migrations are recorded in production.
-- 16 Edge Functions are `ACTIVE`, all with `verify_jwt=true`.
+- 17 Edge Functions are `ACTIVE`: 16 application/API functions have `verify_jwt=true`; `send-email-hook` has `verify_jwt=false` and authenticates Supabase Auth requests with the Standard Webhooks signature.
 - RLS is enabled on all 9 public application tables and on `realtime.messages`.
 - Anonymous browser table grants are absent. Authenticated browser access is read-only; privileged database RPCs are service-role only.
 - Supabase device profile/telemetry columns and the member-owned registration RPC are deployed.
 - `register-device` v4 and Owner-only `get-admin-dashboard` v1 are deployed.
+- `send-email-hook` v1 is deployed (Resend primary, Brevo fallback), but has not been connected in Supabase Auth.
 - Admin source PR #4 is merged. Render Admin commit `098274ed7da6b368f828f6249a2784fbf2ea02ac` is live.
 - Android PR #14 is merged. Member device telemetry and mobile Owner dashboard now use Supabase functions instead of the unconfigured legacy Mahi API.
 - Android PR #15 is merged. A manual signed APK/AAB release workflow is available; it has not produced a production-signed artifact because the existing upload keystore secrets are not configured/verified.
@@ -33,8 +34,9 @@ Required Supabase secret checks:
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` must be present in the Edge Function environment.
 - `ADMIN_ORIGIN` must equal the canonical HTTPS origin `https://mahi-repair-admin.onrender.com` (no path, query or trailing slash).
 - `RECIPE_SIGNING_PRIVATE_KEY_PEM` must be a valid RSA-3072 PKCS#8 private key and must cryptographically match Android's configured `RECIPE_SIGNING_PUBLIC_KEY_PEM`.
+- Auth email delivery requires `SEND_EMAIL_HOOK_SECRET` (generated in Supabase Auth Hooks), `RESEND_API_KEY`, `BREVO_API_KEY`, and a sender address configured as `AUTH_EMAIL_FROM`; both provider accounts must verify that sender. Optional: `AUTH_EMAIL_FROM_NAME` and `RESEND_EMAIL_FROM`.
 
-The connected Supabase API does not reveal protected secret values. The actual presence of `ADMIN_ORIGIN`, signing-key format, and public/private key match therefore remain unverified. Do not publish a repair tool until the signing pair is verified securely.
+The connected Supabase API does not reveal protected secret values. The actual presence of `ADMIN_ORIGIN`, Auth hook/provider secrets, signing-key format, and public/private key match therefore remain unverified. Do not publish a repair tool until the signing pair is verified securely.
 
 Android client config may contain only the Supabase project URL, public publishable/anon key and RSA public key. Never embed a service-role key or signing private key in the APK.
 
@@ -56,7 +58,7 @@ No automated or unauthorized sign-in was attempted. A real Owner login has not y
 
 ## 4. Member email and device enrollment
 
-1. Verify production Supabase Auth SMTP/provider, sender identity, redirect URLs and rate limits before inviting a real Member.
+1. Configure the deployed Auth Send Email Hook only after adding the webhook secret, Resend/Brevo API keys and a sender verified in both providers; then enable the Hook under Supabase Authentication → Hooks. Until then, leave the current Auth email sender unchanged. Also verify redirect URLs and rate limits.
 2. Invite only a real Member from Owner Admin. Member invitation cannot assign the Owner role.
 3. The Member signs in to Android with the emailed OTP.
 4. Android obtains a server-issued device UUID through `register-device`.
@@ -64,7 +66,7 @@ No automated or unauthorized sign-in was attempted. A real Owner login has not y
 6. Confirm Owner Admin shows the actual device model/SoC, Android/app versions, RAM/storage/battery/thermal values and profile-sync timestamp.
 7. Suspend the Member or revoke the device and verify subsequent catalogue/report requests are rejected.
 
-The database schema and endpoint are deployed, but the production project currently has 0 registered devices. OTP delivery and physical-device telemetry persistence have not been verified. No test emails were sent.
+The database schema and endpoint are deployed, but the production project currently has 0 registered devices. The Resend/Brevo hook is deployed but not connected in Auth because provider keys, verified sender and the dashboard-generated hook secret are not configured through the available tools. OTP delivery and physical-device telemetry persistence have not been verified. No test emails were sent.
 
 ## 5. Tool publishing and signed recipe verification
 
@@ -116,7 +118,7 @@ A production remote-support implementation needs durable session/command/signali
 - Supabase Security Advisor reports leaked-password protection disabled. The project is on the Free plan; the feature is plan-limited and remains unresolved.
 - Supabase Health Advisor currently reports no health lints. The foreign-key covering index warning was fixed; remaining unused-index notices are informational while the tables are empty. Do not remove indexes blindly.
 - Render Admin runs on the Free plan and can suspend/sleep; this is not a high-availability production configuration.
-- SMTP delivery, Auth redirect/SMTP settings, Supabase global Realtime public-access toggle, backup/restore, alerting, and signing-key rotation procedures still need operator verification.
+- Auth Send Email Hook activation, Resend/Brevo sender verification, live Auth redirect settings, Supabase global Realtime public-access toggle, backup/restore, alerting, and signing-key rotation procedures still need operator verification.
 - Actual Owner login, Member OTP, physical device enrollment, telemetry persistence, signed publication, report submission, Realtime delivery, and release APK/AAB installation remain acceptance tests.
 
 **Release decision: NOT FULLY PRODUCTION READY.** Infrastructure and code paths are substantially improved, but the credential, signing, email, remote-support, and physical-device gates above must pass before calling this production-ready.
