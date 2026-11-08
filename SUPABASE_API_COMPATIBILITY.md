@@ -1,11 +1,11 @@
 # Mahi Repair — Supabase API & Backend Compatibility
 
-**Verified:** November 6, 2026  
+**Verified:** November 8, 2026  
 **Supabase project:** `shwqsljicmhflnvjqjah`  
 **Project URL:** `https://shwqsljicmhflnvjqjah.supabase.co`  
-**Admin repo / branch:** `mahimahfud-ui/Mahi-Repair-Admin` / `integration/connect-shared-supabase`  
-**Admin commit:** `9e627816446889909c1c57475082e2525a902847`  
-**Android repo / main:** `mahimahfud-ui/Mahi-Repair` / `49bdfd4c070fd3f06ca005a868d4514828761c78`  
+**Admin repo / branch:** `mahimahfud-ui/Mahi-Repair-Admin` / `main`  
+**Admin commit:** `6b30f2f200aa64423c5333878f90f4edbf62030d`  
+**Android repo / main:** `mahimahfud-ui/Mahi-Repair` / main; compile/config fixes are in draft PR #13 and are not yet merged.  
 **Render preview:** `https://mahi-repair-admin.onrender.com`
 
 ## 1. Architecture
@@ -85,11 +85,11 @@ The production migrations, two private-channel RLS policies, and broadcast trigg
 
 ## 6. Production deployment evidence
 
-The following four migrations are recorded in the Supabase production migration history (the generated remote versions are the timestamps shown here):
+All seven repository migrations are recorded in the Supabase production migration history (the remote versions are shown here):
 
 | Remote version | Source migration |
 |---|---|
-| `20261106170418` | `20261106120000_private_realtime_catalog_broadcast.sql` |
+| `20261105171141` | `202611050001_initial_schema.sql` |\n| `20261105171330` | `20261105180000_harden_rls_grants_and_indexes.sql` |\n| `20261105171827` | `20261105183000_deny_browser_rate_limit_access.sql` |\n| `20261106170418` | `20261106120000_private_realtime_catalog_broadcast.sql` |
 | `20261106170438` | `20261106153000_backend_report_idempotency_and_atomic_catalog.sql` |
 | `20261106170450` | `20261106160000_transactional_admin_mutations_audit.sql` |
 | `20261106170509` | `20261106170000_atomic_member_catalog_and_device_registration.sql` |
@@ -105,19 +105,19 @@ All 15 Edge Functions were redeployed with `verify_jwt=true` and verified ACTIVE
 | Admin mutation functions | 2–3 |
 | `get-admin-analytics` | 3 |
 
-Admin workflow [#42258498724](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/actions/runs/42258498724) passed on commit `9e627816446889909c1c57475082e2525a902847`. Render deploy for the same commit reported LIVE.
+Admin CI for merge commit `6b30f2f200aa64423c5333878f90f4edbf62030d` passed. Render deployment for that commit was started and is being verified; do not treat it as LIVE until its deployment status is `live`.
 
-The Android `.env.example` now includes the verified public Supabase project URL and active publishable key. These are public client configuration values, not privileged secrets.
+Android draft PR #13 updates `.env.example` with the public Supabase project URL/publishable key and RSA-3072 public key. The PR is not merged; the production Android main branch has not yet received this configuration.
 
 ## 7. Remaining production acceptance checks
 
 The database currently reports 1 active Owner and 1 active Member, but 0 registered devices, 0 tools and 0 repair runs. Complete these checks with a real Owner browser session and a test Android installation:
 
-1. Confirm Supabase Auth Site URL is `https://mahi-repair-admin.onrender.com` and allow `https://mahi-repair-admin.onrender.com/auth/callback`.
+1. Verify the normal Owner PIN sign-in against the existing configured Owner Auth identity; Member OTP delivery must be verified separately.
 2. Confirm Supabase Edge Function secret `ADMIN_ORIGIN` is exactly `https://mahi-repair-admin.onrender.com` (canonical HTTPS origin, no slash or path).
 3. Confirm `RECIPE_SIGNING_PRIVATE_KEY_PEM` exists in Supabase and its public-key counterpart configured in Android is the matching RSA-3072 key.
 4. Confirm Supabase Realtime global “Allow public access” is disabled.
-5. Sign in as Owner, create/publish a test recipe, invite a Member, register a device and verify its private channel subscription.
+5. After the signing-key match is securely confirmed, sign in as Owner, create/publish a test recipe, invite a Member, register a device and verify its private channel subscription.
 6. Publish, disable, assign/unassign a test tool; verify Android and Admin receive invalidations and then re-fetch fresh authorized data.
 7. Submit one run report; replay the same UUID/content and expect duplicate success; alter its content or user identity and expect conflict.
 8. Revoke the device/member and verify the next authenticated fetch/report attempt is rejected.
