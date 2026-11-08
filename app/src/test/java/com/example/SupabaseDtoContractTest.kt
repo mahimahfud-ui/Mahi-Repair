@@ -14,6 +14,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 
@@ -53,6 +54,35 @@ class SupabaseDtoContractTest {
         assertNotNull(response?.data)
         assertEquals("a0000000-0000-0000-0000-000000000001", response?.data?.deviceId)
         assertTrue(response?.data?.registered == true)
+    }
+
+    @Test
+    fun `device profile registration serializes Supabase hardware telemetry fields`() {
+        val request = RegisterDeviceRequest(
+            deviceId = "a0000000-0000-0000-0000-000000000001",
+            deviceLabel = "Pixel 8",
+            appVersion = "1.0.0",
+            androidVersion = "14",
+            androidApi = 34,
+            hardwareProfile = mapOf(
+                "manufacturer" to "Google",
+                "model" to "Pixel 8",
+                "cpuCoreCount" to 8
+            ),
+            telemetry = mapOf(
+                "totalRamBytes" to 8589934592L,
+                "batteryTemperature" to 31.5
+            ),
+            fieldAvailability = mapOf("batteryHealth" to "OBSERVED")
+        )
+
+        val encoded = moshi.adapter(RegisterDeviceRequest::class.java).toJson(request)
+        val json = JSONObject(encoded)
+        assertEquals("Pixel 8", json.getJSONObject("hardware_profile").getString("model"))
+        assertEquals(8589934592L, json.getJSONObject("telemetry").getLong("totalRamBytes"))
+        assertEquals(31.5, json.getJSONObject("telemetry").getDouble("batteryTemperature"), 0.001)
+        assertEquals("OBSERVED", json.getJSONObject("field_availability").getString("batteryHealth"))
+        assertTrue(!json.has("app_installation_id"))
     }
 
     @Test
