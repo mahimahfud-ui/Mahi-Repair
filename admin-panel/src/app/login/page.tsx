@@ -164,8 +164,8 @@ function LoginForm() {
             <span className="flex items-center gap-1.5"><Clock size={14} className="text-gray-500" /> Resend cooldown</span>
             <span className="font-mono tabular-nums text-white">{cooldown > 0 ? `${cooldown}s` : "Ready"}</span>
           </div>
-          <button type="button" onClick={requestCode as unknown as () => void} disabled={busy || cooldown > 0} className="btn btn-secondary w-full text-xs">
-            <RotateCcw size={14} /> {cooldown > 0 ? `Wait ${cooldown}s to resend` : "Resend code"}
+          <button type="button" onClick={() => { setSent(false); setChallengeId(""); setCode(""); setError(null); }} disabled={busy} className="btn btn-secondary w-full text-xs">
+            <RotateCcw size={14} /> {cooldown > 0 ? `Wait ${cooldown}s before requesting another code` : "Request another code"}
           </button>
           <button type="button" onClick={() => { setSent(false); setChallengeId(""); setCode(""); setError(null); }} disabled={busy} className="w-full text-center text-xs text-gray-500 hover:text-gray-300">Use a different email address</button>
         </form>
