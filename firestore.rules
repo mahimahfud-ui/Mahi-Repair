@@ -17,15 +17,12 @@ service cloud.firestore {
     }
 
     function isOwner() {
+      // Owner authority comes only from the server-managed active profile.
+      // Never grant privileges from an email-only allowlist.
       return isSignedIn()
-        && (
-          (request.auth.token.email == 'mahimahfud@gmail.com' && request.auth.token.email_verified == true)
-          || (
-            exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-            && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'owner'
-            && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active'
-          )
-        );
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'owner'
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active';
     }
 
     function isActiveMember() {
