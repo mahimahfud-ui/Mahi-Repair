@@ -1,281 +1,185 @@
 "use client";
 
-import { FormEvent, useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Cloud, ArrowRight, AlertTriangle, CheckCircle2, Clock, RotateCcw } from 'lucide-react';
-import { createClient } from '@/lib/supabase/browser';
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ShieldCheck, Cloud, ArrowRight, AlertTriangle, CheckCircle2, Clock, RotateCcw, KeyRound } from "lucide-react";
 
 const COOLDOWN_SECONDS = 60;
-const SESSION_STORAGE_COOLDOWN_KEY = 'mahi_owner_login_cooldown_until';
+const SESSION_STORAGE_COOLDOWN_KEY = "mahi_owner_login_cooldown_until";
 
-function getAuthCallbackUrl(): string {
-  // If running in browser and on a real domain (not localhost), use current origin
-  if (typeof window !== 'undefined' && window.location.origin) {
-    const origin = window.location.origin;
-    if (!origin.includes('localhost') && !origin.includes('127.0.0.1')) {
-      return `${origin}/auth/callback`;
-    }
-  }
-
-  // Fallback to configured production URL if defined
-  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL;
-  if (configuredUrl && configuredUrl.trim()) {
-    return `${configuredUrl.trim().replace(/\/$/, '')}/auth/callback`;
-  }
-
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}/auth/callback`;
-  }
-  return '/auth/callback';
+async function readError(response: Response, fallback: string): Promise<string> {
+  const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+  return payload?.error?.message || fallback;
 }
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const urlError = searchParams.get('error');
-
-  const [email, setEmail] = useState('');
+  const urlError = searchParams.get("error");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
-  // Restore cooldown from sessionStorage after mount without a synchronous effect update.
   useEffect(() => {
     let restoreTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const stored = sessionStorage.getItem(SESSION_STORAGE_COOLDOWN_KEY);
       if (stored) {
         const expiry = Number.parseInt(stored, 10);
-        const remaining = Number.isFinite(expiry)
-          ? Math.max(0, Math.ceil((expiry - Date.now()) / 1000))
-          : 0;
-        if (remaining > 0) {
-          restoreTimer = setTimeout(() => setCooldown(remaining), 0);
-        }
+        const remaining = Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - Date.now()) / 1000)) : 0;
+        if (remaining > 0) restoreTimer = setTimeout(() => setCooldown(remaining), 0);
       }
-    } catch {
-      // Ignore unavailable sessionStorage.
-    }
-    return () => {
-      if (restoreTimer !== undefined) clearTimeout(restoreTimer);
-    };
+    } catch { /* Browser storage is optional. */ }
+    return () => { if (restoreTimer !== undefined) clearTimeout(restoreTimer); };
   }, []);
 
-  // Cooldown interval ticker
   useEffect(() => {
     if (cooldown <= 0) return;
     const interval = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          try {
-            sessionStorage.removeItem(SESSION_STORAGE_COOLDOWN_KEY);
-          } catch {
-            // Ignore
-          }
+      setCooldown((previous) => {
+        if (previous <= 1) {
+          try { sessionStorage.removeItem(SESSION_STORAGE_COOLDOWN_KEY); } catch { /* Ignore. */ }
           return 0;
         }
-        return prev - 1;
+        return previous - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
   }, [cooldown]);
 
-  const startCooldown = (seconds: number = COOLDOWN_SECONDS) => {
+  function startCooldown(seconds = COOLDOWN_SECONDS) {
     setCooldown(seconds);
-    try {
-      sessionStorage.setItem(
-        SESSION_STORAGE_COOLDOWN_KEY,
-        String(Date.now() + seconds * 1000)
-      );
-    } catch {
-      // Ignore
-    }
-  };
+    try { sessionStorage.setItem(SESSION_STORAGE_COOLDOWN_KEY, String(Date.now() + seconds * 1000)); } catch { /* Ignore. */ }
+  }
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function requestCode(event: FormEvent) {
+    event.preventDefault();
     if (busy || cooldown > 0) return;
-
     setBusy(true);
     setError(null);
-
     try {
-      const client = createClient();
-      const redirectTo = getAuthCallbackUrl();
-
-      const { error: signInError } = await client.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: redirectTo,
-        },
+      const response = await fetch("/api/auth/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        cache: "no-store",
       });
-
-      if (signInError) {
-        throw signInError;
-      }
-
+      if (!response.ok) throw new Error(await readError(response, "Unable to send a verification code."));
+      const payload = await response.json() as { data?: { challenge_id?: string; resend_after_seconds?: number } };
+      if (!payload.data?.challenge_id) throw new Error("The sign-in service returned an invalid challenge.");
+      setChallengeId(payload.data.challenge_id);
       setSent(true);
-      startCooldown(COOLDOWN_SECONDS);
-    } catch (err) {
-      const rawMessage = err instanceof Error ? err.message : 'Unable to send sign-in link.';
-
-      // Check for rate limit conditions
-      if (
-        rawMessage.toLowerCase().includes('rate limit') ||
-        rawMessage.toLowerCase().includes('too many requests') ||
-        (err as { status?: number })?.status === 429
-      ) {
-        setError(
-          'Email rate limit reached. Supabase protects against email flooding by limiting how frequently sign-in emails can be sent. Please wait for the cooldown timer below before requesting another link.'
-        );
-        startCooldown(COOLDOWN_SECONDS);
-      } else {
-        setError(rawMessage);
-      }
+      setCode("");
+      startCooldown(Math.max(1, payload.data.resend_after_seconds || COOLDOWN_SECONDS));
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unable to send a verification code.";
+      setError(message);
+      if (/rate|too many|429/i.test(message)) startCooldown(COOLDOWN_SECONDS);
     } finally {
       setBusy(false);
     }
   }
 
-  const getUrlErrorMessage = (errCode: string): string => {
-    switch (errCode) {
-      case 'forbidden':
-        return 'Access denied: Only the authorized Owner account (mahinmhfd@gmail.com) can access this administration console. Member accounts are prohibited.';
-      case 'unauthorized':
-        return 'Your administrative session has expired or is invalid. Please sign in with your Owner email to continue.';
-      case 'unconfirmed_email':
-        return 'Your email address is not yet confirmed in Supabase Auth. Please confirm your email before signing in.';
-      case 'missing_code':
-        return 'The authentication link was missing required parameters. Please request a fresh sign-in link.';
+  async function verifyCode(event: FormEvent) {
+    event.preventDefault();
+    if (busy || !challengeId || !/^[0-9]{6}$/.test(code)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), challengeId, code }),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await readError(response, "The verification code was rejected."));
+      router.push("/");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to verify this code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const getUrlErrorMessage = (value: string): string => {
+    switch (value) {
+      case "forbidden": return "Access denied. Only the active Owner account may enter this console. Member accounts are prohibited.";
+      case "unauthorized": return "Your Owner session has expired or is invalid. Request a new sign-in code.";
+      case "unconfirmed_email": return "The Owner email is not verified in Firebase Authentication.";
+      case "missing_code": return "The sign-in link is no longer supported. Request a fresh verification code.";
       default:
-        try {
-          return decodeURIComponent(errCode);
-        } catch {
-          return errCode;
-        }
+        try { return decodeURIComponent(value); } catch { return value; }
     }
   };
 
   return (
     <section className="panel w-full max-w-[440px] p-8 shadow-2xl shadow-black/50">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="rounded-xl bg-red-500/15 p-3 text-red-400">
-          <Cloud size={24} />
-        </div>
+      <div className="mb-8 flex items-center gap-3">
+        <div className="rounded-xl bg-red-500/15 p-3 text-red-400"><Cloud size={24} /></div>
         <div>
           <div className="font-semibold tracking-tight text-white">Mahi Repair Cloud</div>
-          <div className="text-[11px] font-mono text-red-400/90 tracking-wider">
-            OWNER CONTROL CENTER
-          </div>
+          <div className="font-mono text-[11px] tracking-wider text-red-400/90">OWNER CONTROL CENTER</div>
         </div>
       </div>
 
       <div className="mb-6">
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-red-400 uppercase tracking-wider">
-          <ShieldCheck size={16} /> Private owner access
-        </div>
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-red-400"><ShieldCheck size={16} /> Private owner access</div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Sign in securely</h1>
-        <p className="muted text-xs mt-2 leading-relaxed">
-          Access is restricted exclusively to the authorized Owner (<span className="text-gray-300 font-mono">mahinmhfd@gmail.com</span>). Member accounts cannot enter this console.
+        <p className="muted mt-2 text-xs leading-relaxed">
+          Access is restricted to the authorized Owner (<span className="font-mono text-gray-300">mahinmhfd@gmail.com</span>). Member accounts cannot enter this console.
         </p>
       </div>
 
-      {urlError && (
-        <div className="mb-5 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-xs text-red-300 flex items-start gap-2.5">
-          <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">{getUrlErrorMessage(urlError)}</div>
-        </div>
-      )}
+      {urlError && <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-xs text-red-300"><AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-400" /><div className="leading-relaxed">{getUrlErrorMessage(urlError)}</div></div>}
 
-      {sent ? (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-emerald-900/80 bg-emerald-950/30 p-4 text-xs text-emerald-200">
-            <div className="flex items-center gap-2 font-semibold text-emerald-300 mb-1">
-              <CheckCircle2 size={16} /> Secure sign-in link sent
-            </div>
-            <p className="mt-1 leading-relaxed">
-              We sent a secure magic link to <strong className="text-white">{email}</strong>. Open it on this device to enter the Owner Console.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-lg border border-[#252830] bg-[#0c0e12] text-xs text-gray-400 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Clock size={14} className="text-gray-500" />
-              Resend cooldown:
-            </span>
-            <span className="font-mono tabular-nums text-white">
-              {cooldown > 0 ? `${cooldown}s` : 'Ready'}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSent(false);
-              setError(null);
-            }}
-            disabled={cooldown > 0}
-            className="btn btn-secondary w-full text-xs"
-          >
-            <RotateCcw size={14} />
-            {cooldown > 0 ? `Wait ${cooldown}s to send again` : 'Send another link or use different email'}
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={submit} className="space-y-4">
+      {!sent ? (
+        <form onSubmit={requestCode} className="space-y-4">
           <label className="block text-xs font-medium text-gray-300">
             Owner Email Address
-            <input
-              className="field mt-2 text-sm"
-              type="email"
-              autoComplete="email"
-              required
-              disabled={busy || cooldown > 0}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="mahinmhfd@gmail.com"
-            />
+            <input className="field mt-2 text-sm" type="email" autoComplete="email" required maxLength={254} disabled={busy || cooldown > 0} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="mahinmhfd@gmail.com" />
           </label>
-
-          {error && (
-            <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-3 text-xs text-red-300 flex items-start gap-2">
-              <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
-              <div className="leading-relaxed">{error}</div>
-            </div>
-          )}
-
-          <button
-            className="btn btn-primary w-full text-sm font-semibold"
-            disabled={busy || cooldown > 0 || !email.trim()}
-          >
-            {busy ? (
-              'Sending secure link…'
-            ) : cooldown > 0 ? (
-              <span className="flex items-center gap-2">
-                <Clock size={15} /> Rate limited — wait {cooldown}s
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                Email secure sign-in link <ArrowRight size={16} />
-              </span>
-            )}
+          {error && <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/20 p-3 text-xs text-red-300"><AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" /><div className="leading-relaxed">{error}</div></div>}
+          <button className="btn btn-primary w-full text-sm font-semibold" disabled={busy || cooldown > 0 || !email.trim()}>
+            {busy ? "Sending verification code…" : cooldown > 0 ? <span className="flex items-center gap-2"><Clock size={15} /> Wait {cooldown}s</span> : <span className="flex items-center justify-center gap-2">Email 6-digit code <ArrowRight size={16} /></span>}
           </button>
+        </form>
+      ) : (
+        <form onSubmit={verifyCode} className="space-y-4">
+          <div className="rounded-xl border border-emerald-900/80 bg-emerald-950/30 p-4 text-xs text-emerald-200">
+            <div className="mb-1 flex items-center gap-2 font-semibold text-emerald-300"><CheckCircle2 size={16} /> Verification code sent</div>
+            <p className="leading-relaxed">A sign-in code was requested for <strong className="text-white">{email}</strong>. Enter the 6-digit code to continue.</p>
+          </div>
+          <label className="block text-xs font-medium text-gray-300">
+            Verification code
+            <input className="field mt-2 text-center font-mono text-xl tracking-[0.45em]" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required disabled={busy} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" />
+          </label>
+          {error && <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/20 p-3 text-xs text-red-300"><AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" /><div className="leading-relaxed">{error}</div></div>}
+          <button className="btn btn-primary w-full text-sm font-semibold" disabled={busy || code.length !== 6}>
+            {busy ? "Verifying Owner session…" : <span className="flex items-center justify-center gap-2"><KeyRound size={15} /> Verify and open console <ArrowRight size={16} /></span>}
+          </button>
+          <div className="flex items-center justify-between rounded-lg border border-[#252830] bg-[#0c0e12] p-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1.5"><Clock size={14} className="text-gray-500" /> Resend cooldown</span>
+            <span className="font-mono tabular-nums text-white">{cooldown > 0 ? `${cooldown}s` : "Ready"}</span>
+          </div>
+          <button type="button" onClick={() => { setSent(false); setChallengeId(""); setCode(""); setError(null); }} disabled={busy} className="btn btn-secondary w-full text-xs">
+            <RotateCcw size={14} /> {cooldown > 0 ? `Wait ${cooldown}s before requesting another code` : "Request another code"}
+          </button>
+          <button type="button" onClick={() => { setSent(false); setChallengeId(""); setCode(""); setError(null); }} disabled={busy} className="w-full text-center text-xs text-gray-500 hover:text-gray-300">Use a different email address</button>
         </form>
       )}
 
-      <div className="mt-8 border-t border-[#252830] pt-4 text-center">
-        <p className="text-[11px] text-gray-500">
-          Mahi Repair Cloud Security Boundary · Server-Enforced RBAC
-        </p>
-      </div>
+      <div className="mt-8 border-t border-[#252830] pt-4 text-center"><p className="text-[11px] text-gray-500">Mahi Repair Cloud Security Boundary · Firebase ID Tokens · Server-Enforced RBAC</p></div>
     </section>
   );
 }
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen grid place-items-center p-5 bg-[radial-gradient(ellipse_at_top,#321214_0%,#090a0d_48%)]">
+    <main className="grid min-h-screen place-items-center bg-[radial-gradient(ellipse_at_top,#321214_0%,#090a0d_48%)] p-5">
       <Suspense fallback={<div className="panel p-8 text-xs text-gray-400">Loading console authentication…</div>}>
         <LoginForm />
       </Suspense>

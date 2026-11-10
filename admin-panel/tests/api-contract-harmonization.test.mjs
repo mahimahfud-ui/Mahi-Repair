@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 
 // 1. Validate that all 13 native actions align across Android, Edge Functions, and JSON Schema
 const ALLOWLISTED_ACTIONS = [

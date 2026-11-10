@@ -1,5 +1,8 @@
 # Google AI Studio Handoff — Mahi Repair
 
+> **Implementation status:** The Admin web Firebase OTP/session flow, server-side Owner gate, Cloud Run REST client, Admin mutations and data pages, OpenAPI 2.0 contract, and automated client tests are now implemented in the repository branch. Do not regenerate or replace those parts. Start with [GOOGLE_AI_STUDIO_REMAINING_WORK.md](GOOGLE_AI_STUDIO_REMAINING_WORK.md), which contains only the remaining Google infrastructure/backend and Android cutover tasks. The Admin pages use the typed client in `admin-panel/src/lib/api/cloud-run.ts` and their data actions no longer import Supabase client code.
+
+
 **Purpose:** Prepare the existing Android app and Owner Admin website for a Google-managed production backend. Google AI Studio is responsible for implementing and provisioning the Firebase/Google Cloud backend. This document records the actual repository state, fixed product constraints, and the required completion gates.
 
 ## 1. Source of truth and scope
@@ -120,7 +123,9 @@ Never trust a client-supplied UID, role, device owner, tool audience, publisher 
 
 ## 7. API contract and recipe security
 
-The repository's `openapi.json` contains a **staging-era API outline**, not a verified live Google backend. Reconcile it with actual Cloud Run handlers and keep one versioned contract for both clients.
+The normative target contract is `docs/CLOUD_RUN_API_CONTRACT.md`. It defines the Firebase custom-token OTP exchange, Firebase ID-token authorization, all Android and Admin routes, request/response envelopes, remote-support signaling and error semantics. The root `openapi.json` remains a legacy staging outline and must be regenerated from this v2 contract before backend release.
+
+A server-side typed website client is already implemented at `admin-panel/src/lib/api/cloud-run.ts`, with contract tests at `admin-panel/tests/cloud-run-client.test.ts`. It requires a Firebase ID token, supports App Check, enforces HTTPS outside localhost, parses structured errors and never retries writes. Admin AI Studio work should integrate this client into the existing server actions after Firebase Auth/session cookie handling is implemented; do not rewrite the API transport from scratch.
 
 Required logical operations:
 
