@@ -108,10 +108,11 @@ if (!activeSupabaseImports) pass('Admin app pages, actions, auth and API clients
 
 const cloudRun = await readFile('src/lib/api/cloud-run.ts', 'utf8');
 const ownerGate = await readFile('src/lib/auth/require-owner.ts', 'utf8');
+const ownerCookies = await readFile('src/lib/auth/cookies.ts', 'utf8');
 for (const token of ['Authorization', 'Bearer ${this.idToken}', 'X-Firebase-AppCheck', 'Cache-Control', 'redirect: "error"']) {
   if (cloudRun.includes(token)) pass(`Cloud Run client transport includes ${token}`); else fail(`Cloud Run client transport missing ${token}`);
 }
-if (ownerGate.includes('mahinmhfd@gmail.com') && ownerGate.includes('identity.role !== "owner"') && ownerGate.includes('identity.status !== "active"')) pass('Admin server gate enforces the exact active Owner identity');
+if (ownerCookies.includes('mahinmhfd@gmail.com') && ownerGate.includes('identity.role !== "owner"') && ownerGate.includes('identity.status !== "active"') && ownerGate.includes('identity.isOwner !== true')) pass('Admin server gate enforces the exact active Owner identity');
 else fail('Admin server gate does not enforce the expected active Owner profile');
 
 if (envExample.includes('NEXT_PUBLIC_SUPABASE_URL=') || envExample.includes('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=')) fail('legacy Supabase browser config remains in the deployment template');
