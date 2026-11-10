@@ -226,3 +226,29 @@ Pair codes expire, are one-use and rate-limited. Android must show the user a fo
 | 500/503 | Server/provider failure; return opaque request ID, not internal exception or secret |
 
 The backend, browser and Android clients must use these exact paths, request field names and envelopes. Version breaking changes explicitly and update contract tests before clients.
+
+
+## Additional Admin-console read/write routes
+
+These routes are used by the current Admin website client and must be implemented by Cloud Run so the whole console can move off Supabase without losing existing screens.
+
+| Method and path | Role | Purpose / response |
+|---|---|---|
+| `GET /tool-versions?tool_id=&limit=&cursor=` | Owner | Return immutable versions with `id, toolId, version, signature, signatureAlgorithm, keyId, publishedAt, changelog`; bounded pagination |
+| `GET /recipe-tests?limit=&cursor=` | Owner | Return static validation history with `id, recipeHash, validationStatus, simulatedStepCount, testedAt, issues` |
+| `POST /recipe-tests` | Owner | Validate and append test history; body contains the recipe and validation metadata, never a claim of real-device test |
+| `GET /tool-assignments?tool_id=` | Owner | Return assignment rows with `toolId, memberId`; never expose other users to Members |
+| `DELETE /tools/{id}` | Owner | Delete a DRAFT-only tool with no published immutable versions; reject published/testing/archived versions and audit the deletion |
+
+The Admin pages use the same API client as the Android contract. The current UI expects camelCase response fields for Owner data: `displayName`, `createdAt`, `deviceLabel`, `userId`, `appVersion`, `androidVersion`, `androidApi`, `lastSeenAt`, `revokedAt`, `updatedAt`, `draftRecipe`, `toolId`, `memberId`, `signatureAlgorithm`, `publishedAt`, `recipeHash`, `validationStatus`, `simulatedStepCount`, `testedAt`, and `totalRuns` / `activeMembersCount` / `publishedTools` analytics fields. Run-result fields remain `run_id`, `user_id`, `device_id`, `tool_id`, `tool_version`, `started_at`, `step_results`, `error_code` and `app_version` to match the Android outbox DTO.
+
+The following aggregates are returned by `GET /analytics/dashboard`: `totalRuns`, `success`, `partial`, `failed`, `cancelled`, `activeMembersCount`, `publishedTools`, `mostUsedTools[{toolId,name,runs}]`, and `commonFailures[{errorCode,occurrences}]`. Metrics must be computed over persistent accepted run records, not from the latest UI page.
+
+## Admin website authentication cookies
+
+- `POST /api/auth/request-otp` and `POST /api/auth/verify-otp` are same-origin Next.js routes that call the Cloud Run OTP endpoints.
+- After OTP verify, the Admin server exchanges the Firebase custom token with Firebase Identity Toolkit, then calls `POST /auth/verify` using the resulting Firebase ID token.
+- Only the exact active Owner may receive the Admin browser session. A Member is rejected before cookies are written.
+- Firebase ID token, refresh token and expiry are stored only in HttpOnly, Secure (production), SameSite=Lax cookies. The browser JavaScript never receives either token.
+- The Next.js proxy refreshes the Firebase session before expiry. Server pages and every Server Action revalidate Owner through Cloud Run; the UI alone is never an access boundary.
+- `FIREBASE_WEB_API_KEY` is used only for Google's public Identity Toolkit/refresh endpoints; it is not a service account or Admin credential. It must not be placed in a browser-visible `NEXT_PUBLIC_*` variable for this server-side flow.
