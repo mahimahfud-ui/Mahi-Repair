@@ -83,7 +83,7 @@ describe("CloudRunApiClient", () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const client = new CloudRunApiClient("owner-token", { baseUrl: "https://api.example.com", fetchImpl });
 
-    await expect(client.assignTool("tool-1", "selected_members", [])).rejects.toThrow(/At least one Member/);
+    expect(() => client.assignTool("tool-1", "selected_members", [])).toThrow(/At least one Member/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
