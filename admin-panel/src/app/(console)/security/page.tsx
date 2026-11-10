@@ -39,7 +39,7 @@ export default function SecurityPage() {
       <div className="panel mt-4 p-5">
         <h2 className="text-sm font-semibold">Required production controls</h2>
         <ul className="muted mt-3 list-disc space-y-2 pl-5 text-xs">
-          <li>Enable MFA for the Owner's Google account and protect Firebase project administration.</li>
+          <li>Enable MFA for the Owner&apos;s Google account and protect Firebase project administration.</li>
           <li>Enforce Firebase App Check on supported Android-facing services and separate debug from production providers.</li>
           <li>Configure and verify the OTP email sender, challenge expiry, per-account/IP limits and abuse monitoring.</li>
           <li>Rotate any credential that has ever been committed or shared; keep server secrets in Secret Manager.</li>
