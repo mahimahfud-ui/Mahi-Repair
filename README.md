@@ -1,15 +1,26 @@
-# Mahi Repair — Android Repair Client & Owner Admin
+# Mahi Repair — Android App & Owner Admin
 
-Mahi Repair is a recipe-driven Android diagnostics and guided-repair system. The supported cloud path uses a separate Owner Admin application and a shared Supabase project.
+Mahi Repair is one repair-management product with two clients: a native Android app and a responsive Owner Admin website. Both clients must use one identity system, one authorized backend, one tool catalogue and shared versioned API/recipe contracts.
 
-## Production architecture
+## Repository structure and source of truth
 
-- **Android app** — Kotlin/Jetpack Compose client. Members authenticate with email OTP, register their own Android device, synchronize consented hardware/health telemetry, fetch only assigned and compatible repair tools, verify detached RSA-SHA256 signatures locally, execute allowlisted native actions and submit repair reports.
-- **Owner Admin** — separate Next.js application in [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at [mahi-repair-admin.onrender.com](https://mahi-repair-admin.onrender.com). The web console verifies the configured Owner identity server-side. The Android Owner console uses a signed-in Supabase session; Owner-only Edge Functions enforce the active Owner role on every protected request.
-- **Supabase** — shared Auth, PostgreSQL, RLS, private Realtime and 17 ACTIVE Edge Functions: 16 app/API functions require JWTs; the Auth email hook verifies Supabase's signed webhook instead. Android calls Supabase directly; it does not use the Admin website as an API.
-- **Device intelligence** — `register-device` accepts the authenticated Member's server-issued device UUID, hardware profile, dynamic telemetry and field-availability map. The service-role RPC validates profile ownership and revocation before persisting it.
-- **Auth email delivery** — `send-email-hook` v1 is deployed with Resend primary and Brevo fallback. It remains disconnected in Supabase Auth until provider keys, verified sender and the dashboard-generated webhook secret are configured.
-- **Recipe signing** — RSA-3072 / SHA-256. The signing private key belongs only in Supabase Edge Function secrets. Android receives only the public key at build time.
+- **Android app:** `app/` — Kotlin and Jetpack Compose.
+- **Canonical Owner Admin website:** `admin-panel/` — Next.js App Router, TypeScript and Tailwind, maintained in this same repository.
+- **Shared recipe schema:** `admin-panel/schemas/repair-recipe-v1.schema.json`.
+- **Android signature/runtime boundary:** `app/src/main/java/com/example/security/`.
+- **Legacy staging surface:** root `src/` — contains older React/Express code and a file-backed demo database; it is not production storage.
+- **Secondary reference repo:** [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin) contains overlapping Admin-era code. Do not deploy it as a competing Admin/backend. Port only missing UI/features into this repository's `admin-panel/`.
+
+## Backend migration status
+
+The current shipped source still contains Supabase-based Android and Admin clients. Firebase project configuration, Firestore rules and a data blueprint are already present, but that does **not** mean the production app has been migrated. Google AI Studio is intended to implement and verify the Firebase + Cloud Run backend migration.
+
+- Firebase project configuration is recorded in `firebase-applet-config.json`; existing Firestore rules are in `firestore.rules`; model definitions are in `firebase-blueprint.json`.
+- Android currently calls Supabase through `SupabaseClient.kt`, `SupabaseOwnerAdminApiClient.kt` and `SupabaseRealtimeClient.kt`.
+- The canonical Admin website currently calls Supabase through `admin-panel/src/lib/supabase/` and server actions.
+- Do not switch production traffic, remove Supabase, disable Render, create another Firebase database, or change account roles until the acceptance checklist passes.
+
+**Read before continuing:** [Google AI Studio Handoff](docs/GOOGLE_AI_STUDIO_HANDOFF.md) and [Google Backend Cutover Checklist](docs/GOOGLE_BACKEND_CUTOVER_CHECKLIST.md). These documents identify exact source paths, Owner/Member boundaries, Firebase resource reuse constraints, recipe signing requirements and cutover gates.
 
 ## Android native action boundary
 
@@ -44,7 +55,7 @@ The repository contains a legacy React/Express development surface. Its backend 
 
 The mobile Owner dashboard is connected to Supabase. The Gemini admin assistant has no configured production provider endpoint and is not an available production feature. The old remote-support service still depends on the file-backed Express routes and has no configured live video transport; it is not a production remote-control feature.
 
-## Verified production baseline — November 8, 2026
+## Last documented Supabase baseline — November 8, 2026 (re-verify before cutover)
 
 - Supabase project `shwqsljicmhflnvjqjah` is `ACTIVE_HEALTHY`.
 - 9 migrations are applied; all 17 Edge Functions are ACTIVE. Sixteen application functions use JWT verification; `send-email-hook` uses signed Standard Webhooks verification and is not yet connected in Auth.
