@@ -29,7 +29,7 @@ const LOCAL_STORAGE_KEY_SESSION = 'mahi_repair_session_v1';
 
 export const App: React.FC = () => {
   // Mode selection: Laptop Admin Console vs Native Mobile Client
-  const [viewMode, setViewMode] = useState<'admin' | 'phone'>('admin');
+  const [viewMode, setViewMode] = useState<'admin' | 'phone'>('phone');
 
   // Device Frame simulation state
   const [deviceFrame, setDeviceFrame] = useState<DeviceFrameType>('pixel8');
@@ -45,14 +45,28 @@ export const App: React.FC = () => {
   const [session, setSession] = useState<AuthSession>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const cached = JSON.parse(saved) as AuthSession;
+        if (
+          cached.role === 'owner' &&
+          cached.email.trim().toLowerCase() !== 'mahinmhfd@gmail.com'
+        ) {
+          return {
+            ...cached,
+            isAuthenticated: false,
+            role: 'member',
+            isOfflineMode: true,
+          };
+        }
+        return cached;
+      }
     } catch {
       // Fallback
     }
     return {
-      isAuthenticated: true,
-      email: 'mahimahfud@gmail.com',
-      role: 'owner',
+      isAuthenticated: false,
+      email: '',
+      role: 'member',
       isOfflineMode: true,
     };
   });
