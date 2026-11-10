@@ -7,7 +7,7 @@ import { publishTool, setToolDisabled, assignTool, duplicateTool, deleteDraftToo
 
 export const dynamic = "force-dynamic";
 type Tool = { id: string; name: string; slug: string; category: string; status: string; version: number; updatedAt: string; audience: string; icon?: string };
-type Member = { id: string; email: string; displayName?: string };
+type Member = { id: string; email: string; displayName?: string; status: string };
 type Assignment = { toolId: string; memberId: string };
 
 export default async function ToolsPage() {
