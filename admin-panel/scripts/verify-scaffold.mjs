@@ -95,14 +95,7 @@ else pass('Firebase/Cloud Run server configuration placeholders exist');
 if (/^NEXT_PUBLIC_.*(SERVICE_ROLE|PRIVATE_KEY|API_KEY)/m.test(envExample)) fail('server credential appears in NEXT_PUBLIC template');
 else pass('environment template does not expose server credentials in browser variables');
 
-const activeAppFiles = [];
-for (const directory of ['src/app', 'src/components', 'src/lib/auth', 'src/lib/api']) {
-  await collect(directory);
-}
-for (const file of srcFiles) {
-  if (file.startsWith('src/lib/supabase/')) continue;
-  activeAppFiles.push(file);
-}
+const activeAppFiles = srcFiles.filter((file) => !file.startsWith('src/lib/supabase/'));
 let activeSupabaseImports = false;
 for (const file of activeAppFiles) {
   const content = await readFile(file, 'utf8');
@@ -122,6 +115,7 @@ if (ownerGate.includes('mahinmhfd@gmail.com') && ownerGate.includes('identity.ro
 else fail('Admin server gate does not enforce the expected active Owner profile');
 
 if (envExample.includes('NEXT_PUBLIC_SUPABASE_URL=') || envExample.includes('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=')) fail('legacy Supabase browser config remains in the deployment template');
+else pass('no legacy Supabase browser credentials are required by the Admin deployment template');
 
 
 if (failures) {
