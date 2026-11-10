@@ -6,7 +6,7 @@ import {
   FIREBASE_ID_TOKEN_COOKIE,
   FIREBASE_REFRESH_TOKEN_COOKIE,
   OWNER_EMAIL,
-} from "@/lib/auth/require-owner";
+} from "@/lib/auth/cookies";
 
 const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
