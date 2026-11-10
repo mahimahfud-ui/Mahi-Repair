@@ -26,7 +26,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const recentRuns = history.slice(0, 3);
 
   return (
-    <div className="anim-push flex flex-col gap-7 max-w-[1200px] mx-auto pb-12">
+    <div className="anim-push flex flex-col gap-7 max-w-[1200px] mx-auto pb-24 sm:pb-20 lg:pb-8">
       {/* Eyebrow & Title */}
       <div>
         <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-[#5E6B88]">

@@ -18,9 +18,14 @@ service cloud.firestore {
 
     function isOwner() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'owner'
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active';
+        && (
+          (request.auth.token.email == 'mahimahfud@gmail.com' && request.auth.token.email_verified == true)
+          || (
+            exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+            && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'owner'
+            && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'active'
+          )
+        );
     }
 
     function isActiveMember() {

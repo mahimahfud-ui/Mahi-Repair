@@ -37,7 +37,7 @@ export const ToolsScreen: React.FC<ToolsScreenProps> = ({
   }, [tools, selectedCategory, searchQuery]);
 
   return (
-    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-12">
+    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-24 sm:pb-20 lg:pb-8">
       {/* Header */}
       <div>
         <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-[#5E6B88]">

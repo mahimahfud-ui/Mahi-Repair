@@ -44,6 +44,20 @@ class MemoryStagingDb {
     if (this.profiles.size === 0) {
       this.seedInitialData();
     }
+    if (!Array.from(this.profiles.values()).some((p) => p.email === 'mahimahfud@gmail.com')) {
+      const now = new Date().toISOString();
+      const owner0: UserProfile = {
+        id: 'owner_mahimahfud',
+        role: 'owner',
+        status: 'active',
+        email: 'mahimahfud@gmail.com',
+        displayName: 'Mahi Mahfud (Owner)',
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.profiles.set(owner0.id, owner0);
+      this.save();
+    }
   }
 
   private save(): void {
@@ -95,6 +109,15 @@ class MemoryStagingDb {
     const now = new Date().toISOString();
 
     // Default Owner accounts
+    const owner0: UserProfile = {
+      id: 'owner_mahimahfud',
+      role: 'owner',
+      status: 'active',
+      email: 'mahimahfud@gmail.com',
+      displayName: 'Mahi Mahfud (Owner)',
+      createdAt: now,
+      updatedAt: now,
+    };
     const owner1: UserProfile = {
       id: 'demo_owner',
       role: 'owner',
@@ -123,6 +146,7 @@ class MemoryStagingDb {
       updatedAt: now,
     };
 
+    this.profiles.set(owner0.id, owner0);
     this.profiles.set(owner1.id, owner1);
     this.profiles.set(owner2.id, owner2);
     this.profiles.set(member1.id, member1);
