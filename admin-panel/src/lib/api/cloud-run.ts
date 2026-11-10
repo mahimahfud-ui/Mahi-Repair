@@ -76,7 +76,7 @@ export type RepairRunInput = {
 
 const API_PREFIX = "/api/v1";
 
-function normalizeBaseUrl(value: string): string {
+export function getCloudRunApiBaseUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");
   if (!trimmed) throw new Error("MAHI_API_BASE_URL is not configured.");
   let parsed: URL;
@@ -119,7 +119,7 @@ export class CloudRunApiClient {
   ) {
     if (!idToken.trim()) throw new Error("A Firebase Authentication ID token is required.");
     const baseUrl = options.baseUrl ?? process.env.MAHI_API_BASE_URL ?? "";
-    this.baseUrl = normalizeBaseUrl(baseUrl);
+    this.baseUrl = getCloudRunApiBaseUrl(baseUrl);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.appCheckToken = options.appCheckToken?.trim() || undefined;
   }
@@ -251,10 +251,14 @@ export class CloudRunApiClient {
     return this.request<T>("/repair-runs", "POST", input);
   }
 
-  listRepairRuns<T = Record<string, unknown>[]>(query?: { device_id?: string; tool_id?: string; limit?: number; cursor?: string }) {
+  listRepairRuns<T = Record<string, unknown>[]>(query?: { device_id?: string; tool_id?: string; member_id?: string; result?: string; from?: string; to?: string; limit?: number; cursor?: string }) {
     const params = new URLSearchParams();
     if (query?.device_id) params.set("device_id", query.device_id);
     if (query?.tool_id) params.set("tool_id", query.tool_id);
+    if (query?.member_id) params.set("member_id", query.member_id);
+    if (query?.result) params.set("result", query.result);
+    if (query?.from) params.set("from", query.from);
+    if (query?.to) params.set("to", query.to);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
     if (query?.cursor) params.set("cursor", query.cursor);
     const suffix = params.size ? `?${params.toString()}` : "";
@@ -283,6 +287,39 @@ export class CloudRunApiClient {
     if (query?.cursor) params.set("cursor", query.cursor);
     const suffix = params.size ? `?${params.toString()}` : "";
     return this.request<T>(`/audit-logs${suffix}`);
+  }
+
+
+  listToolVersions<T = Record<string, unknown>[]>(query?: { tool_id?: string; limit?: number; cursor?: string }) {
+    const params = new URLSearchParams();
+    if (query?.tool_id) params.set("tool_id", query.tool_id);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.cursor) params.set("cursor", query.cursor);
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return this.request<T>(`/tool-versions${suffix}`);
+  }
+
+  listRecipeTests<T = Record<string, unknown>[]>(query?: { limit?: number; cursor?: string }) {
+    const params = new URLSearchParams();
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.cursor) params.set("cursor", query.cursor);
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return this.request<T>(`/recipe-tests${suffix}`);
+  }
+
+  listToolAssignments<T = Record<string, unknown>[]>(query?: { tool_id?: string }) {
+    const params = new URLSearchParams();
+    if (query?.tool_id) params.set("tool_id", query.tool_id);
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return this.request<T>(`/tool-assignments${suffix}`);
+  }
+
+  saveRecipeTest<T = Record<string, unknown>>(input: Record<string, unknown>) {
+    return this.request<T>("/recipe-tests", "POST", input);
+  }
+
+  deleteDraftTool(toolId: string) {
+    return this.request<{ deleted: boolean }>(`/tools/${this.id(toolId, "tool ID")}`, "DELETE");
   }
 
   sendGeminiInstruction<T = Record<string, unknown>>(instruction: string, confirmed = false) {
