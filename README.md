@@ -7,6 +7,8 @@ Mahi Repair is one repair-management product with two clients: a native Android 
 - **Android app:** `app/` — Kotlin and Jetpack Compose.
 - **Canonical Owner Admin website:** `admin-panel/` — Next.js App Router, TypeScript and Tailwind, maintained in this same repository.
 - **Shared recipe schema:** `admin-panel/schemas/repair-recipe-v1.schema.json`.
+- **Cloud Run API contract:** `docs/CLOUD_RUN_API_CONTRACT.md`.
+- **Admin Cloud Run client:** `admin-panel/src/lib/api/cloud-run.ts` with tests in `admin-panel/tests/cloud-run-client.test.ts`.
 - **Android signature/runtime boundary:** `app/src/main/java/com/example/security/`.
 - **Legacy staging surface:** root `src/` — contains older React/Express code and a file-backed demo database; it is not production storage.
 - **Secondary reference repo:** [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin) contains overlapping Admin-era code. Do not deploy it as a competing Admin/backend. Port only missing UI/features into this repository's `admin-panel/`.
@@ -20,7 +22,7 @@ The current shipped source still contains Supabase-based Android and Admin clien
 - The canonical Admin website currently calls Supabase through `admin-panel/src/lib/supabase/` and server actions.
 - Do not switch production traffic, remove Supabase, disable Render, create another Firebase database, or change account roles until the acceptance checklist passes.
 
-**Read before continuing:** [Google AI Studio Handoff](docs/GOOGLE_AI_STUDIO_HANDOFF.md) and [Google Backend Cutover Checklist](docs/GOOGLE_BACKEND_CUTOVER_CHECKLIST.md). These documents identify exact source paths, Owner/Member boundaries, Firebase resource reuse constraints, recipe signing requirements and cutover gates.
+**Read before continuing:** [Google AI Studio Handoff](docs/GOOGLE_AI_STUDIO_HANDOFF.md), [Cloud Run API Contract](docs/CLOUD_RUN_API_CONTRACT.md) and [Google Backend Cutover Checklist](docs/GOOGLE_BACKEND_CUTOVER_CHECKLIST.md). The API client and its tests are already implemented for the Admin website; the remaining Google-side work is Firebase Auth/session integration, Cloud Run handlers, persistent Firestore storage, deployment and end-to-end validation.
 
 ## Android native action boundary
 
@@ -29,9 +31,9 @@ The app executes a fixed allowlist of native diagnostics and guided repair actio
 ## Configure an Android build
 
 1. Copy `.env.example` to `.env` only for local overrides.
-2. Use the production Supabase URL and public publishable/anon key as client configuration.
-3. `RECIPE_SIGNING_PUBLIC_KEY_PEM` is public material. It must match the private key configured in Supabase.
-4. The optional legacy `MAHI_API_BASE_URL` and remote-support endpoints remain fail-closed placeholders. Do not point them at the Admin website URL; the legacy Express API is not production storage.
+2. The current Android binary remains on the legacy Supabase client until the Google migration is complete; do not remove those values before the Firebase client migration and rollback gate pass.
+3. `RECIPE_SIGNING_PUBLIC_KEY_PEM` is public verification material only. The replacement private signing key must live in Google Secret Manager and the public key embedded in the APK must match it.
+4. Configure `MAHI_API_BASE_URL` with the Cloud Run service URL only after Google deploys the API contract in `docs/CLOUD_RUN_API_CONTRACT.md`. Never point it at the Admin website or the legacy file-backed Express API.
 
 Run Android unit tests and build a debug APK:
 
