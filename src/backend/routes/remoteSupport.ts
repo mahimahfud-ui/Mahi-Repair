@@ -72,6 +72,48 @@ remoteSupportRouter.post('/sessions', authenticateToken, requireOwner, async (re
   });
 });
 
+// GET /api/v1/remote-support/sessions/:id - Only Owner and paired Member may inspect session state
+remoteSupportRouter.get('/sessions/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const session = await db.getRemoteSession(sessionId);
+  if (!session) {
+    res.status(404).json({ error: { code: 'SESSION_NOT_FOUND', message: 'Session not found.' } });
+    return;
+  }
+  const access = await getSessionAccess(session, req.user!);
+  if (!access.isOwner && !access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Unauthorized session inspection.' } });
+    return;
+  }
+  res.json({ data: session });
+});
+
+// POST /api/v1/remote-support/sessions/:id/approve - Paired Member explicitly approves on Android device
+remoteSupportRouter.post('/sessions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const session = await db.getRemoteSession(sessionId);
+  if (!session || session.status === 'TERMINATED') {
+    res.status(404).json({ error: { code: 'SESSION_NOT_FOUND', message: 'Active session not found.' } });
+    return;
+  }
+  const access = await getSessionAccess(session, req.user!);
+  if (!access.isDeviceUser) {
+    res.status(403).json({ error: { code: 'DEVICE_FORBIDDEN', message: 'Only paired device user can approve remote support.' } });
+    return;
+  }
+  session.status = 'DEVICE_CONNECTED';
+  session.connectedAt = new Date().toISOString();
+  await db.saveRemoteSession(session);
+  await db.addAuditLog({
+    actorId: req.user!.id,
+    action: 'remote_session.approved',
+    targetType: 'remote_session',
+    targetId: session.id,
+    details: { deviceId: session.deviceId },
+  });
+  res.json({ data: { session_id: session.id, status: session.status, connected_at: session.connectedAt } });
+});
+
 // POST /api/v1/remote-support/join - Android phone joins with pairing code or session ID
 const JoinSessionSchema = z.object({
   pairing_code: z.string().min(4).max(16).optional(),
@@ -149,7 +191,7 @@ const SignalSchema = z.object({
   }
 });
 
-remoteSupportRouter.post('/:id/signal', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+remoteSupportRouter.post(['/:id/signal', '/sessions/:id/signal'], authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const session = await db.getRemoteSession(sessionId);
 
@@ -193,7 +235,7 @@ remoteSupportRouter.post('/:id/signal', authenticateToken, async (req: Authentic
 });
 
 // GET /api/v1/remote-support/:id/signal - Retrieve peer WebRTC signals
-remoteSupportRouter.get('/:id/signal', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+remoteSupportRouter.get(['/:id/signal', '/sessions/:id/signal'], authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const session = await db.getRemoteSession(sessionId);
 
@@ -447,7 +489,7 @@ remoteSupportRouter.post('/:id/command-result', authenticateToken, async (req: A
 });
 
 // POST /api/v1/remote-support/:id/terminate - Immediately terminate remote support session
-remoteSupportRouter.post('/:id/terminate', authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+remoteSupportRouter.post(['/:id/terminate', '/sessions/:id/terminate'], authenticateToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const session = await db.getRemoteSession(sessionId);
 

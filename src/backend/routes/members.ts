@@ -17,7 +17,8 @@ router.get('/', authenticateToken, requireOwner, async (_req: AuthenticatedReque
 const InviteSchema = z.object({
   email: z.string().email().max(255),
   displayName: z.string().max(100).optional(),
-}).strict();
+  display_name: z.string().max(100).optional(),
+}).passthrough();
 
 router.post('/invite', authenticateToken, requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const parsed = InviteSchema.safeParse(req.body);
@@ -29,6 +30,7 @@ router.post('/invite', authenticateToken, requireOwner, async (req: Authenticate
   }
 
   const email = parsed.data.email.toLowerCase().trim();
+  const displayName = (parsed.data.display_name || parsed.data.displayName || email.split('@')[0]).trim();
   const existing = await db.getProfile(email);
   if (existing) {
     res.status(409).json({
@@ -43,7 +45,7 @@ router.post('/invite', authenticateToken, requireOwner, async (req: Authenticate
     role: 'member',
     status: 'active',
     email,
-    displayName: parsed.data.displayName || email.split('@')[0],
+    displayName,
     createdAt: now,
     updatedAt: now,
   };

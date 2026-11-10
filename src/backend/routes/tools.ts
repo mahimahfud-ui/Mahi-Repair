@@ -428,4 +428,29 @@ router.post('/preview-compatibility', authenticateToken, requireOwner, async (re
   });
 });
 
+// DELETE /api/v1/tools/:id - Delete a draft-only tool with no published versions (Owner only)
+router.delete('/:id', authenticateToken, requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const toolId = getId(req.params.id);
+  const result = await db.deleteDraftTool(toolId);
+  if (!result.deleted) {
+    res.status(400).json({
+      error: {
+        code: 'CANNOT_DELETE_TOOL',
+        message: result.reason || 'Only unreleased DRAFT tools with no published versions can be deleted.',
+      },
+    });
+    return;
+  }
+
+  await db.addAuditLog({
+    actorId: req.user!.id,
+    action: 'tool.deleted',
+    targetType: 'repair_tool',
+    targetId: toolId,
+    details: { deleted: true },
+  });
+
+  res.json({ data: { deleted: true } });
+});
+
 export const toolsRouter = router;

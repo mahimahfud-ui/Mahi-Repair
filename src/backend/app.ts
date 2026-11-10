@@ -12,6 +12,7 @@ import { adminRouter } from './routes/admin';
 import { publicRouter } from './routes/public';
 import { compatRouter } from './routes/compat';
 import { remoteSupportRouter } from './routes/remoteSupport';
+import { adminConsoleRouter } from './routes/adminConsole';
 
 export function createBackendApp(): Express {
   const app = express();
@@ -37,6 +38,7 @@ export function createBackendApp(): Express {
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1/remote-support', remoteSupportRouter);
+  app.use('/api/v1', adminConsoleRouter);
   app.use('/api/v1', publicRouter);
 
   // Fallback 404 handler for API routes
