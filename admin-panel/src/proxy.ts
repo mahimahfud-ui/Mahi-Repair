@@ -4,7 +4,7 @@ import {
   FIREBASE_EXPIRES_AT_COOKIE,
   FIREBASE_ID_TOKEN_COOKIE,
   FIREBASE_REFRESH_TOKEN_COOKIE,
-} from "@/lib/auth/require-owner";
+} from "@/lib/auth/cookies";
 
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
