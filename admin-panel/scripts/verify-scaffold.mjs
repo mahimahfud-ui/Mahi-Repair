@@ -6,7 +6,9 @@ const required = [
   'src/app/(console)/page.tsx', 'src/app/(console)/tools/page.tsx', 'src/app/(console)/members/page.tsx',
   'src/app/(console)/logs/page.tsx', 'src/app/(console)/analytics/page.tsx',
   'src/components/recipe-composer.tsx', 'src/components/test-lab-client.tsx',
-  'src/lib/auth/require-owner.ts', 'src/lib/recipe/catalog.ts',
+  'src/lib/auth/require-owner.ts', 'src/lib/auth/firebase-rest.ts', 'src/lib/auth/cookies.ts',
+  'src/lib/api/cloud-run.ts', 'src/app/api/auth/request-otp/route.ts', 'src/app/api/auth/verify-otp/route.ts',
+  'tests/cloud-run-client.test.ts', 'tests/firebase-auth-client.test.ts', 'src/lib/recipe/catalog.ts',
   'supabase/migrations/20261105171141_202611050001_initial_schema.sql',
   'supabase/functions/_shared/http.ts', 'supabase/functions/_shared/recipe.ts', 'supabase/functions/_shared/sign.ts',
   'supabase/functions/admin-publish-tool/index.ts', 'supabase/functions/admin-manage-tool-state/index.ts',
@@ -26,8 +28,8 @@ for (const file of required) {
 }
 
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
-if (packageJson.scripts?.build && packageJson.dependencies?.next && packageJson.dependencies?.['@supabase/ssr']) pass('package and runtime scripts are configured');
-else fail('package scripts/runtime dependencies missing');
+if (packageJson.scripts?.build && packageJson.scripts?.typecheck && packageJson.scripts?.lint && packageJson.scripts?.test && packageJson.dependencies?.next) pass('Admin build, typecheck, lint and test scripts are configured');
+else fail('Admin package scripts/runtime dependencies missing');
 
 const jsonSchema = JSON.parse(await readFile('schemas/repair-recipe-v1.schema.json', 'utf8'));
 if (jsonSchema.$schema?.includes('2020-12') && jsonSchema.properties?.steps?.items?.allOf?.length === 13) pass('v1 JSON Schema parses and contains per-action parameter contracts');
@@ -88,9 +90,39 @@ if (edgeDirs.length >= 15 && edgeDirs.every((name) => name === 'admin-manage-too
 else fail('Edge Function directory set is incomplete');
 
 const envExample = await readFile('.env.example', 'utf8');
-if (!/NEXT_PUBLIC_SUPABASE_URL=/.test(envExample) || !/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/.test(envExample)) fail('browser environment template is missing Supabase public configuration');
-if (/^NEXT_PUBLIC_.*(SERVICE_ROLE|PRIVATE_KEY)/m.test(envExample)) fail('secret appears in NEXT_PUBLIC template');
-else pass('environment template does not expose backend secrets');
+if (!/^MAHI_API_BASE_URL=https:\/\//m.test(envExample) || !/^FIREBASE_WEB_API_KEY=/m.test(envExample)) fail('Firebase/Cloud Run server configuration placeholders are missing');
+else pass('Firebase/Cloud Run server configuration placeholders exist');
+if (/^NEXT_PUBLIC_.*(SERVICE_ROLE|PRIVATE_KEY|API_KEY)/m.test(envExample)) fail('server credential appears in NEXT_PUBLIC template');
+else pass('environment template does not expose server credentials in browser variables');
+
+const activeAppFiles = [];
+for (const directory of ['src/app', 'src/components', 'src/lib/auth', 'src/lib/api']) {
+  await collect(directory);
+}
+for (const file of srcFiles) {
+  if (file.startsWith('src/lib/supabase/')) continue;
+  activeAppFiles.push(file);
+}
+let activeSupabaseImports = false;
+for (const file of activeAppFiles) {
+  const content = await readFile(file, 'utf8');
+  if (/from\s+['"]@supabase\//.test(content) || /import\(['"]@supabase\//.test(content)) {
+    fail(`active Admin app still imports Supabase client code: ${file}`);
+    activeSupabaseImports = true;
+  }
+}
+if (!activeSupabaseImports) pass('Admin app pages, actions, auth and API clients no longer import Supabase client code');
+
+const cloudRun = await readFile('src/lib/api/cloud-run.ts', 'utf8');
+const ownerGate = await readFile('src/lib/auth/require-owner.ts', 'utf8');
+for (const token of ['Authorization', 'Bearer ${this.idToken}', 'X-Firebase-AppCheck', 'Cache-Control', 'redirect: "error"']) {
+  if (cloudRun.includes(token)) pass(`Cloud Run client transport includes ${token}`); else fail(`Cloud Run client transport missing ${token}`);
+}
+if (ownerGate.includes('mahinmhfd@gmail.com') && ownerGate.includes('identity.role !== "owner"') && ownerGate.includes('identity.status !== "active"')) pass('Admin server gate enforces the exact active Owner identity');
+else fail('Admin server gate does not enforce the expected active Owner profile');
+
+if (envExample.includes('NEXT_PUBLIC_SUPABASE_URL=') || envExample.includes('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=')) fail('legacy Supabase browser config remains in the deployment template');
+
 
 if (failures) {
   console.error(`\n${failures} scaffold audit check(s) failed.`);
