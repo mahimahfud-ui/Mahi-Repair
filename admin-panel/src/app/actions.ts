@@ -7,8 +7,8 @@ import {
   FIREBASE_EXPIRES_AT_COOKIE,
   FIREBASE_ID_TOKEN_COOKIE,
   FIREBASE_REFRESH_TOKEN_COOKIE,
-  requireOwner,
-} from "@/lib/auth/require-owner";
+} from "@/lib/auth/cookies";
+import { requireOwner } from "@/lib/auth/require-owner";
 import { RepairRecipeSchema } from "@/lib/recipe/catalog";
 
 const ADMIN_FUNCTIONS = new Set([
@@ -54,11 +54,11 @@ export async function invokeAdminFunction(functionName: string, body: Record<str
         email: requiredString(body, "email"),
         ...(typeof body.display_name === "string" ? { display_name: body.display_name } : {}),
       });
-    case "admin-manage-member":
-      return api.setMemberStatus(
-        requiredString(body, "user_id"),
-        requiredString(body, "status") as "active" | "suspended" | "revoked",
-      );
+    case "admin-manage-member": {
+      const status = requiredString(body, "status");
+      if (!["active", "suspended", "revoked"].includes(status)) throw new Error("Unsupported Member status.");
+      return api.setMemberStatus(requiredString(body, "user_id"), status as "active" | "suspended" | "revoked");
+    }
     case "admin-upsert-tool": {
       const input = {
         id: typeof body.id === "string" ? body.id : undefined,
@@ -94,11 +94,11 @@ export async function invokeAdminFunction(functionName: string, body: Record<str
       return api.deleteDraftTool(requiredString(body, "tool_id"));
     case "admin-manage-device":
       return api.revokeDevice(requiredString(body, "device_id"), body.revoked !== false);
-    case "admin-manage-tool-state":
-      return api.setToolState(
-        requiredString(body, "tool_id"),
-        requiredString(body, "status") as "DRAFT" | "TESTING" | "ARCHIVED",
-      );
+    case "admin-manage-tool-state": {
+      const status = requiredString(body, "status");
+      if (!["DRAFT", "TESTING", "ARCHIVED"].includes(status)) throw new Error("Unsupported tool state.");
+      return api.setToolState(requiredString(body, "tool_id"), status as "DRAFT" | "TESTING" | "ARCHIVED");
+    }
     case "get-admin-analytics":
       return api.getAnalytics();
     default:
