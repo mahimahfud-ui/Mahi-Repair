@@ -351,11 +351,19 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [members, setMembers] = useState([
     {
       id: 'mem_0',
-      email: 'mahimahfud@gmail.com',
+      email: 'mahinmhfd@gmail.com',
       name: 'Mahi Mahfud',
       status: 'active',
       role: 'owner',
       joined: '2026-10-01',
+    },
+    {
+      id: 'mem_4',
+      email: 'mahimahfud@gmail.com',
+      name: 'Mahi Mahfud',
+      status: 'active',
+      role: 'member',
+      joined: '2026-11-01',
     },
     {
       id: 'mem_1',
