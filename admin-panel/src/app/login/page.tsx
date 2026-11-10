@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, Cloud, ArrowRight, AlertTriangle, CheckCircle2, Clock, RotateCcw, KeyRound } from "lucide-react";
 
 const COOLDOWN_SECONDS = 60;
@@ -13,6 +13,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get("error");
   const [email, setEmail] = useState("");
@@ -96,7 +97,7 @@ function LoginForm() {
         cache: "no-store",
       });
       if (!response.ok) throw new Error(await readError(response, "The verification code was rejected."));
-      window.location.assign("/");
+      router.push("/");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to verify this code.");
     } finally {
