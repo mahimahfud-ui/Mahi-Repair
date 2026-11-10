@@ -222,14 +222,17 @@ export class CloudRunApiClient {
   }
 
   setToolState<T = Record<string, unknown>>(toolId: string, status: "DRAFT" | "TESTING" | "ARCHIVED") {
+    if (!["DRAFT", "TESTING", "ARCHIVED"].includes(status)) throw new Error("Unsupported tool state.");
     return this.request<T>(`/tools/${this.id(toolId, "tool ID")}/state`, "PUT", { status });
   }
 
   setToolDisabled<T = Record<string, unknown>>(toolId: string, disabled: boolean) {
+    if (typeof disabled !== "boolean") throw new Error("Tool disabled state must be a boolean.");
     return this.request<T>(`/tools/${this.id(toolId, "tool ID")}/disable`, "PUT", { disabled });
   }
 
   assignTool<T = Record<string, unknown>>(toolId: string, audience: "all_active_members" | "selected_members", memberIds: string[] = []) {
+    if (!["all_active_members", "selected_members"].includes(audience)) throw new Error("Unsupported tool audience.");
     if (audience === "selected_members" && memberIds.length === 0) {
       throw new Error("At least one Member must be selected for a restricted assignment.");
     }
@@ -274,6 +277,7 @@ export class CloudRunApiClient {
   }
 
   setMemberStatus<T = Record<string, unknown>>(memberId: string, status: "active" | "suspended" | "revoked") {
+    if (!["active", "suspended", "revoked"].includes(status)) throw new Error("Unsupported Member status.");
     return this.request<T>(`/members/${this.id(memberId, "Member ID")}/status`, "PUT", { status });
   }
 
