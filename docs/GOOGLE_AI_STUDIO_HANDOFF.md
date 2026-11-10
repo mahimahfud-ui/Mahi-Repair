@@ -120,7 +120,9 @@ Never trust a client-supplied UID, role, device owner, tool audience, publisher 
 
 ## 7. API contract and recipe security
 
-The repository's `openapi.json` contains a **staging-era API outline**, not a verified live Google backend. Reconcile it with actual Cloud Run handlers and keep one versioned contract for both clients.
+The normative target contract is `docs/CLOUD_RUN_API_CONTRACT.md`. It defines the Firebase custom-token OTP exchange, Firebase ID-token authorization, all Android and Admin routes, request/response envelopes, remote-support signaling and error semantics. The root `openapi.json` remains a legacy staging outline and must be regenerated from this v2 contract before backend release.
+
+A server-side typed website client is already implemented at `admin-panel/src/lib/api/cloud-run.ts`, with contract tests at `admin-panel/tests/cloud-run-client.test.ts`. It requires a Firebase ID token, supports App Check, enforces HTTPS outside localhost, parses structured errors and never retries writes. Admin AI Studio work should integrate this client into the existing server actions after Firebase Auth/session cookie handling is implemented; do not rewrite the API transport from scratch.
 
 Required logical operations:
 
