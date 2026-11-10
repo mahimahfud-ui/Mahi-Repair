@@ -2131,6 +2131,8 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               </div>
             </div>
           </div>
+        )}
+
         {/* Create New Tool & Recipe Modal */}
         {showNewToolModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
