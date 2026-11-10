@@ -1,35 +1,36 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { CloudRunApiClient, CloudRunApiError } from "@/lib/api/cloud-run";
 
-export const KNOWN_OWNER_EMAIL = (process.env.OWNER_EMAIL || 'mahinmhfd@gmail.com').toLowerCase();
+export const OWNER_EMAIL = "mahinmhfd@gmail.com";
+export const FIREBASE_ID_TOKEN_COOKIE = "mahi_firebase_id_token";
+export const FIREBASE_REFRESH_TOKEN_COOKIE = "mahi_firebase_refresh_token";
+export const FIREBASE_EXPIRES_AT_COOKIE = "mahi_firebase_expires_at";
 
 export async function requireOwner() {
-  const supabase = await createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
-    redirect('/login?error=unauthorized');
+  const cookieStore = await cookies();
+  const idToken = cookieStore.get(FIREBASE_ID_TOKEN_COOKIE)?.value;
+  if (!idToken) redirect("/login?error=unauthorized");
+
+  const api = new CloudRunApiClient(idToken);
+  let identity: Awaited<ReturnType<CloudRunApiClient["verifyIdentity"]>>;
+  try {
+    identity = await api.verifyIdentity();
+  } catch (error) {
+    const status = error instanceof CloudRunApiError ? error.status : 0;
+    if (status === 401) redirect("/login?error=unauthorized");
+    if (status === 403) redirect("/login?error=forbidden");
+    throw error;
   }
 
-  // Verify email is confirmed in production
-  if (!user.email_confirmed_at && process.env.NODE_ENV === 'production') {
-    redirect('/login?error=unconfirmed_email');
+  if (
+    identity.email.trim().toLowerCase() !== OWNER_EMAIL ||
+    identity.role !== "owner" ||
+    identity.status !== "active" ||
+    identity.isOwner !== true
+  ) {
+    redirect("/login?error=forbidden");
   }
 
-  // Verify user email matches the authorized Owner email allowlist
-  const userEmail = (user.email ?? '').toLowerCase();
-  if (userEmail !== KNOWN_OWNER_EMAIL) {
-    redirect('/login?error=forbidden');
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role,status,display_name')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (profileError || !profile || profile.role !== 'owner' || profile.status !== 'active') {
-    redirect('/login?error=forbidden');
-  }
-
-  return { supabase, user, profile };
+  return { api, idToken, identity };
 }
