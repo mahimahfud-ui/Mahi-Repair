@@ -226,9 +226,8 @@ export async function duplicateTool(formData: FormData) {
 }
 
 export async function deleteDraftTool(formData: FormData) {
-  const result = await invokeAdminFunction("admin-delete-draft-tool", { tool_id: String(formData.get("tool_id") ?? "") });
+  await invokeAdminFunction("admin-delete-draft-tool", { tool_id: String(formData.get("tool_id") ?? "") });
   revalidatePath("/tools");
-  return result;
 }
 
 export async function setDeviceRevoked(formData: FormData) {
