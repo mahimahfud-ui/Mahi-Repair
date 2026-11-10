@@ -1,4 +1,4 @@
-import { CloudRunApiError, getCloudRunApiBaseUrl } from "@/lib/api/cloud-run";
+import { CloudRunApiError, getCloudRunApiBaseUrl } from "../api/cloud-run";
 
 export type FirebaseTokenSet = {
   idToken: string;
