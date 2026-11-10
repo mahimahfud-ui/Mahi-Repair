@@ -1,5 +1,8 @@
 # Google AI Studio Handoff — Mahi Repair
 
+> **Implementation status:** The Admin web Firebase OTP/session flow, server-side Owner gate, Cloud Run REST client, Admin mutations and data pages, OpenAPI 2.0 contract, and automated client tests are now implemented in the repository branch. Do not regenerate or replace those parts. Start with [GOOGLE_AI_STUDIO_REMAINING_WORK.md](GOOGLE_AI_STUDIO_REMAINING_WORK.md), which contains only the remaining Google infrastructure/backend and Android cutover tasks. The Admin pages use the typed client in `admin-panel/src/lib/api/cloud-run.ts` and their data actions no longer import Supabase client code.
+
+
 **Purpose:** Prepare the existing Android app and Owner Admin website for a Google-managed production backend. Google AI Studio is responsible for implementing and provisioning the Firebase/Google Cloud backend. This document records the actual repository state, fixed product constraints, and the required completion gates.
 
 ## 1. Source of truth and scope
