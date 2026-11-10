@@ -44,13 +44,13 @@ class MemoryStagingDb {
     if (this.profiles.size === 0) {
       this.seedInitialData();
     }
-    if (!Array.from(this.profiles.values()).some((p) => p.email === 'mahimahfud@gmail.com')) {
+    if (!Array.from(this.profiles.values()).some((p) => p.email?.toLowerCase() === 'mahinmhfd@gmail.com')) {
       const now = new Date().toISOString();
       const owner0: UserProfile = {
-        id: 'owner_mahimahfud',
+        id: 'owner_mahinmhfd',
         role: 'owner',
         status: 'active',
-        email: 'mahimahfud@gmail.com',
+        email: 'mahinmhfd@gmail.com',
         displayName: 'Mahi Mahfud (Owner)',
         createdAt: now,
         updatedAt: now,
@@ -110,10 +110,10 @@ class MemoryStagingDb {
 
     // Default Owner accounts
     const owner0: UserProfile = {
-      id: 'owner_mahimahfud',
+      id: 'owner_mahinmhfd',
       role: 'owner',
       status: 'active',
-      email: 'mahimahfud@gmail.com',
+      email: 'mahinmhfd@gmail.com',
       displayName: 'Mahi Mahfud (Owner)',
       createdAt: now,
       updatedAt: now,

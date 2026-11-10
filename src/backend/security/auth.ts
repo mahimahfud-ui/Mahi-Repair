@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { db } from '../db';
 import { UserProfile } from '../types';
 
+export const VERIFIED_OWNER_EMAIL = 'mahinmhfd@gmail.com';
+
 export interface AuthenticatedRequest extends Request {
   user?: UserProfile;
   appCheckVerified?: boolean;
@@ -165,7 +167,11 @@ export function requireOwner(req: AuthenticatedRequest, res: Response, next: Nex
     return;
   }
 
-  if (req.user.role !== 'owner' || req.user.status !== 'active') {
+  if (
+    req.user.role !== 'owner' ||
+    req.user.status !== 'active' ||
+    req.user.email.trim().toLowerCase() !== VERIFIED_OWNER_EMAIL
+  ) {
     res.status(403).json({
       error: {
         code: 'FORBIDDEN_OWNER_REQUIRED',
