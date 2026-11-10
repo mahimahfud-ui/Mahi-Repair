@@ -123,15 +123,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleVerifyPin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (pinInput.trim() === '6993') {
+    const verifiedOwnerSession =
+      session.isAuthenticated &&
+      !session.isOfflineMode &&
+      session.role === 'owner' &&
+      session.email.trim().toLowerCase() === 'mahinmhfd@gmail.com';
+
+    if (verifiedOwnerSession) {
       setPinError('');
       setShowPinModal(false);
       setPinInput('');
       onSwitchToAdmin();
-    } else {
-      setPinError('Incorrect PIN. Access denied.');
-      setPinInput('');
+      return;
     }
+
+    setPinError('Owner access requires a verified, active Owner session. The legacy hardcoded PIN has been disabled.');
+    setPinInput('');
   };
 
   return (
