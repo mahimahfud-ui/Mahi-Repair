@@ -22,7 +22,7 @@ The current shipped source still contains Supabase-based Android and Admin clien
 - The canonical Admin website currently calls Supabase through `admin-panel/src/lib/supabase/` and server actions.
 - Do not switch production traffic, remove Supabase, disable Render, create another Firebase database, or change account roles until the acceptance checklist passes.
 
-**Read before continuing:** [Google AI Studio Handoff](docs/GOOGLE_AI_STUDIO_HANDOFF.md), [Cloud Run API Contract](docs/CLOUD_RUN_API_CONTRACT.md) and [Google Backend Cutover Checklist](docs/GOOGLE_BACKEND_CUTOVER_CHECKLIST.md). The API client and its tests are already implemented for the Admin website; the remaining Google-side work is Firebase Auth/session integration, Cloud Run handlers, persistent Firestore storage, deployment and end-to-end validation.
+**Read before continuing:** [Google AI Studio Remaining Work](docs/GOOGLE_AI_STUDIO_REMAINING_WORK.md), [Google AI Studio Handoff](docs/GOOGLE_AI_STUDIO_HANDOFF.md), [Cloud Run API Contract](docs/CLOUD_RUN_API_CONTRACT.md) and [Google Backend Cutover Checklist](docs/GOOGLE_BACKEND_CUTOVER_CHECKLIST.md). The Admin website Firebase OTP/session flow, server-side Owner gate, Cloud Run API client, all data pages/actions and client tests are implemented in the migration branch. Google should focus only on the remaining Firebase/Cloud Run infrastructure and Android Firebase cutover.
 
 ## Android native action boundary
 
