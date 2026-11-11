@@ -25,7 +25,6 @@ import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.ui.MainViewModel
-import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MainScreen
 import com.example.ui.theme.MahiBlack
@@ -89,24 +88,15 @@ fun MahiRepairApp(
         permissionRequestInFlight.value = false
     }
 
-    var isAdminOpen by rememberSaveable { mutableStateOf(false) }
-
     if (!state.session.isAuthenticated) {
         AuthScreen(
             state = state,
             onRequestOtp = { viewModel.onRequestEmailOtp(it) },
             onVerifyOtp = { viewModel.onVerifyEmailOtp(it) }
         )
-    } else if (isAdminOpen && state.session.role.equals("owner", ignoreCase = true)) {
-        AdminScreen(
-            userEmail = state.session.email,
-            authToken = state.session.token,
-            onExitAdmin = { isAdminOpen = false }
-        )
     } else {
         MainScreen(
             state = state,
-            onOpenAdmin = { isAdminOpen = true },
             onRunRepair = { viewModel.onRunRepair() },
             onRetryAvailability = { viewModel.onRetryAvailability() },
             onSelectTool = { viewModel.onSelectTool(it) },

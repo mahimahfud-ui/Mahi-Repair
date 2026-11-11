@@ -515,6 +515,32 @@ class MemoryStagingDb {
     return null;
   }
 
+  async getToolVersions(toolId?: string, limitCount = 100): Promise<RepairToolVersionRecord[]> {
+    const versions = Array.from(this.toolVersions.values())
+      .filter((version) => !toolId || version.toolId === toolId)
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    return versions.slice(0, Math.max(0, limitCount));
+  }
+
+  async getRecipeTests(limitCount = 100): Promise<RecipeTestHistoryRecord[]> {
+    return this.testHistory
+      .slice()
+      .sort((a, b) => new Date(b.testedAt).getTime() - new Date(a.testedAt).getTime())
+      .slice(0, Math.max(0, limitCount));
+  }
+
+  async saveRecipeTest(record: RecipeTestHistoryRecord): Promise<void> {
+    this.testHistory.unshift(record);
+    this.testHistory = this.testHistory.slice(0, 500);
+    this.save();
+  }
+
+  async getAllToolAssignments(toolId?: string): Promise<RepairToolAccessRecord[]> {
+    return Array.from(this.toolAccess.values())
+      .filter((assignment) => !toolId || assignment.toolId === toolId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
   async saveToolVersion(version: RepairToolVersionRecord): Promise<void> {
     this.toolVersions.set(version.id, version);
     this.save();

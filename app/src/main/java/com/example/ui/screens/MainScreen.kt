@@ -143,8 +143,7 @@ fun MainScreen(
     onDismissExecution: () -> Unit,
     onRequestPermission: (String) -> Unit,
     onCancelPermission: () -> Unit,
-    onSignOut: () -> Unit,
-    onOpenAdmin: () -> Unit = {}
+    onSignOut: () -> Unit
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val desktop = screenWidth >= 1024
@@ -268,8 +267,7 @@ fun MainScreen(
                         device = device,
                         maxWidth = maxWidth,
                         onRefresh = onRetryAvailability,
-                        onSignOut = onSignOut,
-                        onOpenAdmin = onOpenAdmin
+                        onSignOut = onSignOut
                     )
                 }
             }
@@ -554,8 +552,7 @@ private fun SettingsPage(
     device: DeviceSnapshot,
     maxWidth: Dp,
     onRefresh: () -> Unit,
-    onSignOut: () -> Unit,
-    onOpenAdmin: () -> Unit
+    onSignOut: () -> Unit
 ) {
     PageFrame(maxWidth) {
         PageHeading("PREFERENCES & ACCOUNT", "Settings", "Your account, device and local synchronization status.")
@@ -570,27 +567,6 @@ private fun SettingsPage(
                     Text("Signed-in account", color = MahiTextMuted, fontSize = 12.sp)
                     Text(state.session.email, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
                     Text(state.session.role.replaceFirstChar { it.uppercase() }, color = MahiTextSecondary, fontSize = 12.sp)
-                }
-            }
-        }
-        if (state.session.role.equals("owner", ignoreCase = true)) {
-            Spacer(Modifier.height(12.dp))
-            AppCard {
-                Text("Owner administration", color = MahiTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Manage members, registered devices, repair tools, publishing and audit history.",
-                    color = MahiTextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = onOpenAdmin,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
-                ) {
-                    Text("Open Admin Console", fontWeight = FontWeight.SemiBold)
                 }
             }
         }

@@ -25,9 +25,9 @@ export function Reveal({
 
   React.useEffect(() => {
     // Respect user's motion preferences
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setVisible(true);
-      return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const frame = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(frame);
     }
 
     const el = ref.current;
