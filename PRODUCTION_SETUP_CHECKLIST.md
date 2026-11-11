@@ -1,111 +1,119 @@
-# Mahi Repair — Production Backend Setup & Handover Checklist
+# Mahi Repair — Live Production Handover
 
-This guide provides the exact sequential steps for the **Owner** to configure the live Supabase project (`shwqsljicmhflnvjqjah`) and connect the deployed Owner Admin Panel (`https://mahi-repair-admin.onrender.com`) to the Android member client.
+**Last verified:** 11 November 2026
 
----
+This document replaces the older setup guide. The production Supabase database and Edge Functions are already provisioned. Do **not** run migrations, recreate keys, or redeploy every function just to complete this handover.
 
-## 1. Prerequisites
+## 1. Canonical architecture
 
-- Supabase CLI installed:
-  ```bash
-  npm install -g supabase
-  ```
-- Owner account logged in:
-  ```bash
-  supabase login
-  supabase link --project-ref shwqsljicmhflnvjqjah
-  ```
+| Component | Canonical location |
+|---|---|
+| Android Member app | [Mahi-Repair repository](https://github.com/mahimahfud-ui/Mahi-Repair) |
+| Separate Owner web console | [Mahi-Repair-Admin repository](https://github.com/mahimahfud-ui/Mahi-Repair-Admin) |
+| Owner login | [Mahi Repair Admin](https://mahi-repair-admin-yy7c.onrender.com/login) |
+| Shared Supabase project | `shwqsljicmhflnvjqjah` (`ap-south-1`) |
 
----
+The Android APK is a Member-only client. It does not contain an Owner Admin screen, route, Settings entry, or privileged Owner API client. Owner actions are available only through the separate Admin website.
 
-## 2. Database Migrations (Run in Order)
+Both clients use the same Supabase project and only its public publishable key. The service-role key and RSA recipe-signing private key remain server-side.
 
-Ensure all migrations from `admin-panel/supabase/migrations/` have been applied to PostgreSQL:
+## 2. Verified deployment state
 
-1. `20261105171141_202611050001_initial_schema.sql` (Tables: profiles, repair_tools, versions, devices, syncs, runs, audit)
-2. `20261105171330_20261105180000_harden_rls_grants_and_indexes.sql` (RLS security hardening)
-3. `20261105171827_20261105183000_deny_browser_rate_limit_access.sql` (Deny public rate limits)
-4. `20261106120000_private_realtime_catalog_broadcast.sql` (Realtime publication and channel policies)
-5. `20261106153000_backend_report_idempotency_and_atomic_catalog.sql` (Transactional idempotency and atomic catalogue queries)
-6. `20261106160000_transactional_admin_mutations_audit.sql` (Owner mutation auditing)
-7. `20261106170000_atomic_member_catalog_and_device_registration.sql` (Atomic member device registration RPC)
+- Supabase reports `ACTIVE_HEALTHY`, PostgreSQL 17.
+- Production migration history contains 9 applied migration entries.
+- All 9 public tables have RLS enabled.
+- All 17 production Edge Functions are `ACTIVE`. 16 require JWT verification; the Auth `send-email-hook` validates its signed webhook payload.
+- Admin functions use the canonical Admin origin `https://mahi-repair-admin-yy7c.onrender.com`.
+- Render reports the standalone Admin service as `LIVE`. Its production build, TypeScript check, and server startup succeeded.
+- A live `/api/health` fetch returned `status=configured` and `ready=true`; the login page also loaded.
+- Android PR #27 is merged to `main`. Android CI, Backend CI, and legacy scaffold CI passed. A 24 MB debug APK artifact was produced.
 
-Apply pending migrations:
-```bash
-supabase db push
+This verifies deployments and configuration shape, not the complete owner/member/device/repair workflow.
+
+## 3. One required Supabase Auth URL setting
+
+The generated Render hostname differs from the old reserved hostname. Open [Supabase Auth URL Configuration](https://supabase.com/dashboard/project/shwqsljicmhflnvjqjah/auth/url-configuration) and confirm:
+
+**Site URL**
+```
+https://mahi-repair-admin-yy7c.onrender.com
 ```
 
----
-
-## 3. Cryptographic Keypair Generation & Secrets Setup
-
-The Owner must generate an **RSA-3072** keypair for cryptographic recipe signing.
-
-### Step A: Generate RSA-3072 Keypair
-```bash
-# Generate private key
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out private_key.pem
-
-# Extract public key
-openssl rsa -pubout -in private_key.pem -out public_key.pem
+**Additional Redirect URLs**
+```
+https://mahi-repair-admin-yy7c.onrender.com/**
 ```
 
-### Step B: Set Supabase Edge Function Secrets
-Set the private key in Supabase Secrets (never expose this to Android or public source):
-```bash
-# Upload private key as secret
-supabase secrets set RECIPE_SIGNING_PRIVATE_KEY_PEM="$(cat private_key.pem)"
-```
+The repository's `supabase/config.toml` records these canonical values, but this connected workflow cannot read or change the live Auth URL configuration. Verify the settings in the dashboard before sending real Member invitations.
 
-### Step C: Bundle Public Key in Android Client
-Put the public key PEM into `.env` for the Android build:
-```properties
-RECIPE_SIGNING_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----
-...[base64-encoded X.509 public key]...
------END PUBLIC KEY-----"
-```
+## 4. Owner PIN login
 
----
+1. Open [Owner Login](https://mahi-repair-admin-yy7c.onrender.com/login).
+2. Enter the existing Owner's 8–12 digit numeric PIN.
+3. The server uses the server-only `ADMIN_OWNER_EMAIL` environment value to sign in to the existing Supabase Auth Owner identity.
+4. The server additionally checks that the authenticated user's profile has `role = 'owner'` and `status = 'active'`.
 
-## 4. Deploy Supabase Edge Functions
+The Owner login page does not request an email, OTP, or Magic Link. The PIN is not stored in this repository or in the Android app. Do not send the PIN in chat or add it to `.env`.
 
-Deploy all 15 Edge Functions to the live project:
-```bash
-supabase functions deploy admin-assign-tool
-supabase functions deploy admin-delete-draft-tool
-supabase functions deploy admin-disable-tool
-supabase functions deploy admin-invite-member
-supabase functions deploy admin-manage-device
-supabase functions deploy admin-manage-member
-supabase functions deploy admin-manage-tool-state
-supabase functions deploy admin-publish-tool
-supabase functions deploy admin-save-validation
-supabase functions deploy admin-upsert-tool
-supabase functions deploy get-admin-analytics
-supabase functions deploy get-my-repair-tools
-supabase functions deploy get-signed-repair-tool
-supabase functions deploy register-device
-supabase functions deploy submit-repair-run
-```
+The live health endpoint confirms that the Owner email setting is present and syntactically valid; it does **not** prove that the PIN is correct or that a login session has been created. Complete one normal Owner login test in the browser.
 
----
+## 5. Member invitation and Android sign-in
 
-## 5. Owner Account Bootstrap
+Before inviting a real Member:
 
-1. Open `https://mahi-repair-admin.onrender.com/login`.
-2. Enter the Owner email address.
-3. Supabase Auth will send a Magic Link or OTP.
-4. In Supabase Dashboard -> Table Editor -> `profiles`:
-   Ensure the owner's row has `role = 'owner'` and `status = 'active'`.
+1. Confirm the Auth Site URL and redirect allowlist in section 3.
+2. Confirm the Supabase Auth Send Email Hook is configured to call the deployed `send-email-hook` function with the matching signed webhook secret.
+3. Confirm at least one approved email provider is configured in Edge Function Secrets (Resend or Brevo), with a verified sender/domain. Do not place provider credentials in GitHub source or browser-visible variables.
+4. Invite one consenting test Member from the Admin website.
+5. On Android, sign in with that invited Member's email and verify the Supabase email OTP.
+6. Confirm the device is registered under that Member in the Admin website.
 
----
+The Send Email Hook function is deployed and active, but successful Member email delivery has not yet been proven. Do not treat the presence of the function as proof that provider secrets, Auth Hook wiring, sender-domain verification, or email delivery work.
 
-## 6. Inviting a Member & Enrolling an Android Device
+## 6. Recipe signing and publication gate
 
-1. From the Owner Admin Console, navigate to **Members**.
-2. Click **Invite Member** and enter the member's email (e.g. `member@example.com`).
-3. Member opens the Mahi Repair app (`Mahi-Repair-Installable.apk`) on their Android device.
-4. Member inputs their invited email and verifies the OTP.
-5. Android automatically invokes `POST /register-device` to register the device UUID.
-6. The Owner will see the registered device in Admin Panel under **Registered devices**.
-7. Owner publishes repair recipes; the Android app automatically syncs via Realtime!
+- The Android build contains the RSA public verification key from the Android repository's `.env.example`.
+- Supabase `admin-publish-tool` reads `RECIPE_SIGNING_PRIVATE_KEY_PEM` from Edge Function Secrets and signs canonical recipes using RSA-SHA256.
+- The deployed private key's presence, PKCS#8 format, RSA-3072 size, and match to the Android public key have **not** been independently verified by the connected tools.
+
+**Do not publish or assign a production repair tool until the Owner securely confirms the deployed private key matches the Android public key.** Never print, commit, or send the private key. Do not generate a new keypair as a shortcut; replacing one side without coordinating the other will invalidate signatures.
+
+## 7. Full end-to-end acceptance sequence
+
+After sections 3–6 are verified:
+
+1. Owner signs in to the Admin website using the PIN.
+2. Owner invites one test Member; the Member receives and completes the invitation flow.
+3. Member signs in to the Android app using email OTP.
+4. Android registers its real device ID; Admin shows it under the correct Member.
+5. Owner creates a repair tool, validates the recipe in Test Lab, and checks its action list against the Android allowlist.
+6. Only after the signing-key match is proven, Owner publishes and assigns the tool.
+7. Android syncs the published signed recipe and verifies the signature locally.
+8. Run only a safe, supported diagnostic or guided action on the real device.
+9. Complete the run and confirm the report appears in Admin.
+10. Verify idempotent retry, disable/unpublish, device revocation, offline/reconnect, token refresh, and private Realtime behavior.
+
+Current production data has 2 profiles (1 active Owner and 1 active Member) but 0 registered devices, 0 repair tools, 0 published versions, 0 repair runs, and 0 audit events. No physical-device end-to-end acceptance has been recorded.
+
+## 8. Android build and release signing
+
+The CI artifact is a **debug APK**, about 24 MB, signed with an ephemeral CI debug keystore. It is suitable for initial installation/testing, not a production release. A future CI run may use a different debug keystore, so an installed debug build may need to be uninstalled before installing another debug artifact.
+
+A production release requires the Owner's stable release keystore and protected build variables:
+- `KEYSTORE_PATH`
+- `STORE_PASSWORD`
+- `KEY_PASSWORD`
+
+Do not commit the keystore or passwords. Use protected GitHub Actions secrets or the approved release environment. No production release-signed APK/AAB has been produced or verified yet.
+
+## 9. Optional legacy backend / remote support
+
+`MAHI_API_BASE_URL` and `REMOTE_SUPPORT_API_BASE_URL` in the Android build example are intentionally fail-closed placeholders. The separate legacy Express staging backend is not a production data service and must not be pointed at the Admin website. Keep optional device telemetry/remote-support API features disabled until a durable, authenticated backend and its full security tests are ready.
+
+## 10. Release decision
+
+**Not yet fully production-ready.**
+
+Verified: separate repositories, shared healthy Supabase project, schema/RLS/migrations, active Edge Functions, canonical Admin deployment, Admin health readiness, Android CI/debug APK build, and no embedded Owner Admin UI in the APK.
+
+Still required: live Supabase Auth redirect allowlist confirmation, actual Owner PIN login, real Member email delivery, deployed RSA private/public-key match, stable production Android signing, and the real-device invite → register → publish → verify → repair-run → Admin-report acceptance flow.
