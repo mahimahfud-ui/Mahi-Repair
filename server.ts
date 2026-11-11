@@ -1,3 +1,4 @@
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
@@ -10,12 +11,20 @@ async function startServer() {
   const app = createBackendApp();
   const PORT = parseInt(process.env.DEFAULT_APP_PORT || '3000', 10);
   const isProd = process.env.NODE_ENV === 'production';
+  const httpServer = http.createServer(app);
 
   if (!isProd) {
     // Development mode: Mount Vite middleware
+    // Share the HTTP server so HMR upgrades the primary port rather than binding
+    // to fixed auxiliary port 24678, which conflicts during rapid restarts.
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: {
+          server: httpServer,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -30,7 +39,7 @@ async function startServer() {
     console.log('[Server] Serving production build from dist');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`[Mahi Repair Cloud Backend] Server listening on http://0.0.0.0:${PORT}`);
   });
 }
