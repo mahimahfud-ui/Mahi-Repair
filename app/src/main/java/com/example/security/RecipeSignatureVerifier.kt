@@ -1,6 +1,7 @@
 package com.example.security
 
 import android.util.Base64
+import com.example.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
@@ -34,7 +35,7 @@ object RecipeSignatureVerifier {
     fun verifyAndParse(
         signedPayload: String,
         signatureBase64: String,
-        publicKeyDerBase64: String = RsaSignatureVerifier.DEFAULT_OWNER_PUBLIC_KEY
+        publicKeyDerBase64: String = BuildConfig.RECIPE_SIGNING_PUBLIC_KEY_PEM
     ): JSONObject {
         val cleanKey = publicKeyDerBase64
             .replace("-----BEGIN PUBLIC KEY-----", "")
