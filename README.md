@@ -1,24 +1,22 @@
-# Mahi Repair — Personal Android Repair Toolkit (Web & React)
+# Mahi Repair — Android Repair Client + Separate Owner Console
 
-A comprehensive React port of the Mahi Repair ecosystem. Mahi Repair is a declarative, verifiable device diagnostic and repair system that runs immutable, signed repair recipes signed by the Owner's RSA-2048 key.
+Mahi Repair has two deliberately separate clients backed by the same production repair Supabase project:
 
-## Architecture
+- **Android member app** (`app/`): Kotlin/Jetpack Compose, invite-only Supabase Auth, registered-device authorization, signed repair recipes, native allowlisted actions, and report synchronization. The Android UI has no Owner Admin screen, route, or menu.
+- **Owner Admin website** (`admin-panel/`): Next.js application with Supabase SSR sessions, active-Owner profile checks, member/device controls, recipe authoring, testing, publishing, audit history, and analytics. It is a separate web application.
+- **Repair backend**: Supabase project `shwqsljicmhflnvjqjah`. Database RLS and JWT-verified Edge Functions own identity, device, publication, recipe-signature, and run-report authorization.
+- **AI recipe drafting**: the Owner-only Admin assistant calls the existing MahiCloud `mahi-ai-chat` Edge Function in project `husydmiujigyonlxbuuj`. Provider keys remain in that project's Edge Function secrets; no provider credential is bundled into Android or the browser.
 
-- **Client App (Android Device Toolkit View)**:
-  - Allowlisted native repair action engine (`CHECK_INTERNET`, `DNS_LOOKUP`, `HTTPS_PROBE`, `CHECK_APP_INSTALLED`, `CHECK_STORAGE`, `OPEN_APP`, `OPEN_APP_DETAILS`, `OPEN_ANDROID_SETTINGS`, `SHOW_GUIDE`, `ASK_USER_CONFIRMATION`, `REQUEST_OWN_APP_PERMISSION`, `VERIFY_INTERNET`, `VERIFY_DNS`).
-  - Cryptographic RSA-SHA256 signature verification via Web Crypto API (`RSASSA-PKCS1-v1_5` with `SHA-256`).
-  - Bundled verified tools: YouTube Quick Repair, Facebook Troubleshooter, DNS Repair & Diagnostics, Wi-Fi Troubleshooter, Play Store Repair.
-  - Interactive Step-by-step guidance and user confirmation modals.
-  - Real-time diagnostic verdicts, failure detection, and execution audit history.
-  - Backend connection configuration (Supabase URL, Anon Key, Public Key PEM).
-  - Invited email OTP authentication and offline emergency mode.
+## Security boundaries
 
-- **Owner Cloud Console & Recipe Studio**:
-  - Live overview metrics: total executions, success rate, active members, enrolled devices.
-  - Tools library: create, edit, duplicate, disable, and publish recipes.
-  - Script Studio & Recipe Composer: live JSON editor with syntax error checks, schema validation, and RSA signing.
-  - Test Lab: pre-release dry-run simulator with virtual Android devices (Pixel 9 Pro, Galaxy S24, Pixel Tablet), real-time progress steps, and debug logs.
-  - Members & Devices access control: invite family/team members, revoke compromised devices.
+- Android only downloads and executes declarative recipes composed from the app's compiled action allowlist. It does not run remote shell commands, scripts, JavaScript, DEX/JAR files, or arbitrary code.
+- The Admin website is protected by Supabase Auth plus a server-verified active Owner profile. Owner PIN login uses the existing Owner Auth account's password; use an 8–12 digit PIN configured in Supabase Auth.
+- AI output is an untrusted draft. It cannot publish a tool or execute a repair. The Owner must validate the recipe in Test Lab and publish explicitly.
+- Public Supabase publishable keys may be present in client configuration. Never commit a service-role/secret key, database password, provider key, recipe-signing private key, Owner PIN, or Android release keystore.
+
+## Local development
+
+Root React/API code is a legacy preview and is not the production storage path. The native Android app and the separate Admin website use the Supabase architecture above.
 
 ## Running Locally
 
