@@ -515,6 +515,29 @@ class MemoryStagingDb {
     return null;
   }
 
+  // Legacy local staging API helpers. Production Android/Admin traffic uses Supabase
+  // Edge Functions; these methods only complete the isolated development adapter.
+  async getToolVersions(toolId?: string, limitCount = 50): Promise<RepairToolVersionRecord[]> {
+    return Array.from(this.toolVersions.values())
+      .filter((version) => !toolId || version.toolId === toolId)
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, Math.max(0, limitCount));
+  }
+
+  async getRecipeTests(limitCount = 50): Promise<RecipeTestHistoryRecord[]> {
+    return this.testHistory.slice(0, Math.max(0, limitCount));
+  }
+
+  async saveRecipeTest(record: RecipeTestHistoryRecord): Promise<void> {
+    this.testHistory.unshift(record);
+    this.save();
+  }
+
+  async getAllToolAssignments(toolId?: string): Promise<RepairToolAccessRecord[]> {
+    return Array.from(this.toolAccess.values())
+      .filter((assignment) => !toolId || assignment.toolId === toolId);
+  }
+
   async saveToolVersion(version: RepairToolVersionRecord): Promise<void> {
     this.toolVersions.set(version.id, version);
     this.save();

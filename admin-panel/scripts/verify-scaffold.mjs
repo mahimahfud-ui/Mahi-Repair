@@ -88,9 +88,18 @@ if (edgeDirs.length >= 15 && edgeDirs.every((name) => name === 'admin-manage-too
 else fail('Edge Function directory set is incomplete');
 
 const envExample = await readFile('.env.example', 'utf8');
-if (!/NEXT_PUBLIC_SUPABASE_URL=/.test(envExample) || !/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/.test(envExample)) fail('browser environment template is missing Supabase public configuration');
-if (/^NEXT_PUBLIC_.*(SERVICE_ROLE|PRIVATE_KEY)/m.test(envExample)) fail('secret appears in NEXT_PUBLIC template');
-else pass('environment template does not expose backend secrets');
+// This repository's embedded admin-panel is a legacy Firebase reference app.
+// The canonical Supabase Owner Console lives in ../Mahi-Repair-Admin.
+if (!/^FIREBASE_WEB_API_KEY=/m.test(envExample) || !/^NEXT_PUBLIC_APP_URL=/m.test(envExample)) {
+  fail('legacy Admin Panel environment template is missing its declared client configuration');
+} else {
+  pass('legacy Admin Panel environment template has its declared client configuration');
+}
+if (/^NEXT_PUBLIC_.*(SERVICE_ROLE|PRIVATE_KEY|GEMINI_API_KEY)/m.test(envExample)) {
+  fail('secret appears in NEXT_PUBLIC template');
+} else {
+  pass('environment template does not expose backend secrets');
+}
 
 if (failures) {
   console.error(`\n${failures} scaffold audit check(s) failed.`);

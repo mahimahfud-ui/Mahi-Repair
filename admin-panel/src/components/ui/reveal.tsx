@@ -24,10 +24,10 @@ export function Reveal({
   const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
-    // Respect user's motion preferences
+    // Respect reduced-motion settings without a synchronous effect state update.
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setVisible(true);
-      return;
+      const frameId = window.requestAnimationFrame(() => setVisible(true));
+      return () => window.cancelAnimationFrame(frameId);
     }
 
     const el = ref.current;
