@@ -29,7 +29,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   const latestRun = history[0];
 
   return (
-    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-24 sm:pb-20 lg:pb-8">
+    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-12">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

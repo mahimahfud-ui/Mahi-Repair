@@ -121,7 +121,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
       {/* Mobile Fixed Bottom Bar (<1024px) */}
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[rgba(13,20,36,0.92)] backdrop-blur-[20px] border-t border-[rgba(150,180,255,0.12)] px-3 pt-2 pb-[calc(14px+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_24px_rgba(0,0,0,0.5)]"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[rgba(13,20,36,0.85)] backdrop-blur-[18px] border-t border-[rgba(150,180,255,0.08)] px-3 pt-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))]"
         aria-label="Mobile Navigation"
       >
         <div className="grid grid-cols-4 max-w-[560px] mx-auto">

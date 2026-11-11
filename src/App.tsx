@@ -19,9 +19,6 @@ import { HistoryScreen } from './components/HistoryScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { BackendConfigDialog } from './components/BackendConfigDialog';
 import { AdminConsole } from './components/AdminConsole';
-import { DeviceFrame, DeviceFrameType } from './components/DeviceFrame';
-import { liveSync, LiveUpdatePayload } from './services/liveSync';
-import { LiveUpdateBanner } from './components/LiveUpdateBanner';
 
 const LOCAL_STORAGE_KEY_HISTORY = 'mahi_repair_history_v1';
 const LOCAL_STORAGE_KEY_CONFIG = 'mahi_repair_backend_config_v1';
@@ -29,11 +26,7 @@ const LOCAL_STORAGE_KEY_SESSION = 'mahi_repair_session_v1';
 
 export const App: React.FC = () => {
   // Mode selection: Laptop Admin Console vs Native Mobile Client
-  const [viewMode, setViewMode] = useState<'admin' | 'phone'>('phone');
-
-  // Device Frame simulation state
-  const [deviceFrame, setDeviceFrame] = useState<DeviceFrameType>('pixel8');
-  const [frameOrientation, setFrameOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [viewMode, setViewMode] = useState<'admin' | 'phone'>('admin');
 
   // Navigation & Screen selection
   const [activeTab, setActiveTab] = useState<NavTab>('home');
@@ -45,28 +38,14 @@ export const App: React.FC = () => {
   const [session, setSession] = useState<AuthSession>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION);
-      if (saved) {
-        const cached = JSON.parse(saved) as AuthSession;
-        if (
-          cached.role === 'owner' &&
-          cached.email.trim().toLowerCase() !== 'mahinmhfd@gmail.com'
-        ) {
-          return {
-            ...cached,
-            isAuthenticated: false,
-            role: 'member',
-            isOfflineMode: true,
-          };
-        }
-        return cached;
-      }
+      if (saved) return JSON.parse(saved);
     } catch {
       // Fallback
     }
     return {
-      isAuthenticated: false,
-      email: '',
-      role: 'member',
+      isAuthenticated: true,
+      email: 'alex.owner@example.com',
+      role: 'owner',
       isOfflineMode: true,
     };
   });
@@ -252,126 +231,124 @@ export const App: React.FC = () => {
   }
 
   return (
-    <DeviceFrame
-      currentDevice={deviceFrame}
-      onChangeDevice={setDeviceFrame}
-      orientation={frameOrientation}
-      onToggleOrientation={() =>
-        setFrameOrientation((prev) => (prev === 'portrait' ? 'landscape' : 'portrait'))
-      }
-      onSwitchToAdmin={() => setViewMode('admin')}
-    >
-      <div className="min-h-full bg-[#060A14] text-[#F3F6FC] flex flex-col lg:flex-row antialiased selection:bg-[#5B8CFF]/30 flex-1 relative">
-        {/* Navigation Shell (Left sidebar on desktop/tablet, bottom bar on mobile) */}
-        <Navigation
-          activeTab={activeTab}
-          onSelectTab={handleSelectTab}
-          isOfflineMode={session.isOfflineMode}
-        />
+    <div className="min-h-screen bg-[#060A14] text-[#F3F6FC] flex flex-col lg:flex-row antialiased selection:bg-[#5B8CFF]/30">
+      {/* Floating button to switch to Laptop Admin Console */}
+      <button
+        onClick={() => setViewMode('admin')}
+        className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-red-600/90 hover:bg-red-600 border border-red-400/40 text-white px-3.5 py-1.5 text-xs font-bold shadow-xl backdrop-blur transition-all"
+      >
+        <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+        <span>Owner Admin Console</span>
+      </button>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Mobile Top Header (<1024px) */}
-          <header className="lg:hidden sticky top-0 z-30 bg-[#060A14]/90 backdrop-blur-md border-b border-[rgba(150,180,255,0.08)] px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-[#5B8CFF] to-[#FF4D5E] grid place-items-center text-white font-extrabold text-xs shadow-sm">
-                M
-              </div>
-              <span className="font-bold text-[15px] tracking-tight text-[#F3F6FC]">
-                Mahi Repair
-              </span>
+      {/* Navigation Shell (Left sidebar on desktop, bottom bar on mobile) */}
+      <Navigation
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        isOfflineMode={session.isOfflineMode}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Top Header (<1024px) */}
+        <header className="lg:hidden sticky top-0 z-30 bg-[#060A14]/90 backdrop-blur-md border-b border-[rgba(150,180,255,0.08)] px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-[#5B8CFF] to-[#FF4D5E] grid place-items-center text-white font-extrabold text-xs shadow-sm">
+              M
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#4FD69C] animate-pulse"></span>
-              <span className="text-[11px] font-semibold text-[#9AA7C2] uppercase tracking-wider">
-                {session.isOfflineMode ? 'Offline' : 'Connected'}
-              </span>
-            </div>
-          </header>
+            <span className="font-bold text-[15px] tracking-tight text-[#F3F6FC]">
+              Mahi Repair
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#4FD69C] animate-pulse"></span>
+            <span className="text-[11px] font-semibold text-[#9AA7C2] uppercase tracking-wider">
+              {session.isOfflineMode ? 'Offline' : 'Connected'}
+            </span>
+          </div>
+        </header>
 
-          {/* Viewport Screen Content */}
-          <main className="flex-1 px-3.5 sm:px-8 pt-5 sm:pt-7 pb-36 sm:pb-36 lg:pb-14 max-w-[1240px] w-full mx-auto min-w-0 overflow-x-hidden">
-            {selectedTool ? (
-              <ToolDetailScreen
-                tool={selectedTool}
-                executionEvent={executionEvent}
-                onBack={() => setSelectedToolId(null)}
-                onRequestRun={(tool) => setConfirmTool(tool)}
-                onResetRun={handleDismissExecution}
-                onSubmitUserAction={handleSubmitUserAction}
-              />
-            ) : (
-              <>
-                {activeTab === 'home' && (
-                  <HomeScreen
-                    tools={tools}
-                    history={history}
-                    onOpenTool={(toolId) => {
-                      setSelectedToolId(toolId);
-                    }}
-                    onGoTab={(tab) => {
-                      setSelectedToolId(null);
-                      setActiveTab(tab);
-                    }}
-                  />
-                )}
+        {/* Viewport Screen Content */}
+        <main className="flex-1 px-4 py-6 sm:px-8 sm:py-8 pb-28 lg:pb-12 max-w-[1240px] w-full mx-auto">
+          {selectedTool ? (
+            <ToolDetailScreen
+              tool={selectedTool}
+              executionEvent={executionEvent}
+              onBack={() => setSelectedToolId(null)}
+              onRequestRun={(tool) => setConfirmTool(tool)}
+              onResetRun={handleDismissExecution}
+              onSubmitUserAction={handleSubmitUserAction}
+            />
+          ) : (
+            <>
+              {activeTab === 'home' && (
+                <HomeScreen
+                  tools={tools}
+                  history={history}
+                  onOpenTool={(toolId) => {
+                    setSelectedToolId(toolId);
+                  }}
+                  onGoTab={(tab) => {
+                    setSelectedToolId(null);
+                    setActiveTab(tab);
+                  }}
+                />
+              )}
 
-                {activeTab === 'tools' && (
-                  <ToolsScreen
-                    tools={tools}
-                    onOpenTool={(toolId) => {
-                      setSelectedToolId(toolId);
-                    }}
-                  />
-                )}
+              {activeTab === 'tools' && (
+                <ToolsScreen
+                  tools={tools}
+                  onOpenTool={(toolId) => {
+                    setSelectedToolId(toolId);
+                  }}
+                />
+              )}
 
-                {activeTab === 'hist' && (
-                  <HistoryScreen
-                    history={history}
-                    onClearHistory={handleClearHistory}
-                  />
-                )}
+              {activeTab === 'hist' && (
+                <HistoryScreen
+                  history={history}
+                  onClearHistory={handleClearHistory}
+                />
+              )}
 
-                {activeTab === 'set' && (
-                  <SettingsScreen
-                    session={session}
-                    backendConfig={backendConfig}
-                    onSignOut={handleSignOut}
-                    onLogin={handleLogin}
-                    onOpenBackendConfig={() => setShowBackendConfig(true)}
-                    onSwitchToAdmin={() => setViewMode('admin')}
-                  />
-                )}
-              </>
-            )}
-          </main>
-        </div>
-
-        {/* Confirmation Sheet (Modal / Bottom Sheet) */}
-        {confirmTool && (
-          <ConfirmationSheet
-            tool={confirmTool}
-            isOpen={true}
-            onConfirm={async () => {
-              const toolToRun = confirmTool;
-              setConfirmTool(null);
-              if (toolToRun) {
-                await handleRunTool(toolToRun);
-              }
-            }}
-            onCancel={() => setConfirmTool(null)}
-          />
-        )}
-
-        {/* Backend Configuration Modal */}
-        {showBackendConfig && (
-          <BackendConfigDialog
-            config={backendConfig}
-            onSave={handleSaveBackendConfig}
-            onDismiss={() => setShowBackendConfig(false)}
-          />
-        )}
+              {activeTab === 'set' && (
+                <SettingsScreen
+                  session={session}
+                  backendConfig={backendConfig}
+                  onSignOut={handleSignOut}
+                  onLogin={handleLogin}
+                  onOpenBackendConfig={() => setShowBackendConfig(true)}
+                />
+              )}
+            </>
+          )}
+        </main>
       </div>
-    </DeviceFrame>
+
+      {/* Confirmation Sheet (Modal / Bottom Sheet) */}
+      {confirmTool && (
+        <ConfirmationSheet
+          tool={confirmTool}
+          isOpen={true}
+          onConfirm={async () => {
+            const toolToRun = confirmTool;
+            setConfirmTool(null);
+            if (toolToRun) {
+              await handleRunTool(toolToRun);
+            }
+          }}
+          onCancel={() => setConfirmTool(null)}
+        />
+      )}
+
+      {/* Backend Configuration Modal */}
+      {showBackendConfig && (
+        <BackendConfigDialog
+          config={backendConfig}
+          onSave={handleSaveBackendConfig}
+          onDismiss={() => setShowBackendConfig(false)}
+        />
+      )}
+    </div>
   );
 };

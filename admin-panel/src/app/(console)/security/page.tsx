@@ -1,26 +1,26 @@
-import { FileKey2, KeyRound, LockKeyhole, ShieldCheck, type LucideIcon } from "lucide-react";
-import { ConsoleShell } from "@/components/console-shell";
+import { FileKey2, KeyRound, LockKeyhole, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { ConsoleShell } from '@/components/console-shell';
 
 const securityCards: Array<{ Icon: LucideIcon; title: string; description: string }> = [
   {
     Icon: ShieldCheck,
-    title: "Owner-only console",
-    description: "The Admin server verifies the Firebase ID token and checks the active Owner profile through Cloud Run on every protected page and mutation. Member sessions are denied.",
+    title: 'Owner-only console',
+    description: 'The server checks the Supabase user and active owner profile on every protected page and Edge Function.',
   },
   {
     Icon: KeyRound,
-    title: "Recipe signing private key",
-    description: "The RSA-3072 signing private key belongs only in Google Secret Manager and the server runtime. Android and the browser receive only the public verification key.",
+    title: 'Signing private key',
+    description: 'RECIPE_SIGNING_PRIVATE_KEY_PEM exists only in Supabase Edge Function secrets. Never add it to Vercel or NEXT_PUBLIC environment variables.',
   },
   {
     Icon: LockKeyhole,
-    title: "Firebase session and service credentials",
-    description: "The Admin website stores Firebase ID and refresh tokens in HttpOnly cookies. Firebase Admin credentials, App Check secrets and Gemini keys must never enter browser or Android bundles.",
+    title: 'Service role key',
+    description: 'The service role key is restricted to Edge Function secrets. Browser clients use only the publishable key and RLS.',
   },
   {
     Icon: FileKey2,
-    title: "Audit and immutable releases",
-    description: "Owner mutations must create append-only audit events. Published tool versions are immutable; rollback publishes a new signed version rather than overwriting history.",
+    title: 'Audit and immutable releases',
+    description: 'Owner mutations create audit events. Published versions cannot be updated or deleted through normal database roles.',
   },
 ];
 
@@ -39,12 +39,11 @@ export default function SecurityPage() {
       <div className="panel mt-4 p-5">
         <h2 className="text-sm font-semibold">Required production controls</h2>
         <ul className="muted mt-3 list-disc space-y-2 pl-5 text-xs">
-          <li>Enable MFA for the Owner&apos;s Google account and protect Firebase project administration.</li>
-          <li>Enforce Firebase App Check on supported Android-facing services and separate debug from production providers.</li>
-          <li>Configure and verify the OTP email sender, challenge expiry, per-account/IP limits and abuse monitoring.</li>
-          <li>Rotate any credential that has ever been committed or shared; keep server secrets in Secret Manager.</li>
-          <li>Back up signing public keys and maintain key IDs, key rotation and recovery procedures in the Android app.</li>
-          <li>Monitor Cloud Run errors, authentication failures, unusual device access and immutable audit events.</li>
+          <li>Enable MFA for the owner Supabase account.</li>
+          <li>Restrict the admin origin and configure SMTP rate limits.</li>
+          <li>Rotate any key that has ever been committed or shared.</li>
+          <li>Back up signing public keys and maintain a key ID/rotation plan in the Android app.</li>
+          <li>Set Edge Function rate limits and monitor audit log anomalies.</li>
         </ul>
       </div>
     </ConsoleShell>

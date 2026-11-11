@@ -1,140 +1,133 @@
 # Mahi Repair — Supabase API & Backend Compatibility
 
-**Verified:** November 8, 2026  
-**Project:** `shwqsljicmhflnvjqjah` (`ap-south-1`, PostgreSQL 17)  
-**Admin:** [mahi-repair-admin.onrender.com](https://mahi-repair-admin.onrender.com)  
-**Source repositories:** `mahimahfud-ui/Mahi-Repair` and `mahimahfud-ui/Mahi-Repair-Admin`
+**Verified:** November 6, 2026  
+**Supabase project:** `shwqsljicmhflnvjqjah`  
+**Project URL:** `https://shwqsljicmhflnvjqjah.supabase.co`  
+**Admin repo / branch:** `mahimahfud-ui/Mahi-Repair-Admin` / `integration/connect-shared-supabase`  
+**Admin commit:** `9e627816446889909c1c57475082e2525a902847`  
+**Android repo / main:** `mahimahfud-ui/Mahi-Repair` / `49bdfd4c070fd3f06ca005a868d4514828761c78`  
+**Render preview:** `https://mahi-repair-admin.onrender.com`
 
 ## 1. Architecture
 
-The Admin website and Android app are separate Supabase clients. Android does not call the Render Admin website as an API.
+The Admin web console and the Android app are independent Supabase clients. The Android app does not call the Render website. Both clients call the same Supabase URL with the public publishable key and authenticated user sessions.
 
-- Admin web: configured Owner identity, server-side session guards, Owner-only server mutations.
-- Android Member client: email OTP, server-issued device UUID, signed repair catalogue, native allowlisted executor and idempotent report upload.
-- Android Owner console: the authenticated Owner JWT calls the Owner-only `get-admin-dashboard` Edge Function and Owner mutation functions.
-- Supabase: shared Auth, PostgreSQL, RLS, service-role RPCs, private Realtime and 17 Edge Functions (16 JWT-protected app/API functions plus one signed Auth email webhook).
+- Admin: private Owner web console; server-side active Owner checks; read-only browser database access; allowlisted Owner-only Edge Function mutations.
+- Android: active Member sessions; registered-device identity; signed recipe retrieval; device-scoped private Realtime; run-report upload.
+- Backend: shared PostgreSQL schema, RLS, Auth, private Broadcast policies, and 15 JWT-verified Edge Functions.
 
-The service-role key and RSA-3072 signing private key stay in Supabase Edge Function secrets. Neither may be included in the browser or Android APK.
+The service-role key and RSA-3072 signing private key remain inside Supabase Edge Functions. They must never be copied to Render, Android resources, or browser variables.
 
-## 2. Supabase Auth email hook
+## 2. Android HTTP contract
 
-The `send-email-hook` Edge Function is ACTIVE (v1) and validates the Standard Webhooks signature from Supabase Auth. It sends OTP/magic-link messages through Resend first and falls back to Brevo when the primary provider is unavailable or returns failure. The function has `verify_jwt=false` only because it uses the Auth webhook signature as its authentication mechanism; it is not a public email-sending endpoint.
-
-The function is deployed but **not connected** in Auth settings. Before activation, configure `SEND_EMAIL_HOOK_SECRET`, `RESEND_API_KEY`, `BREVO_API_KEY` and `AUTH_EMAIL_FROM` in Edge Function secrets; verify the sender in both providers; then select the HTTPS Send Email Hook URL under Supabase Authentication → Hooks. The current live Auth hook/sender settings were not modified. No test emails were sent.
-
-## 3. Android Member API contract
-
-All requests require a valid Supabase JWT and the public client key in the `apikey` header.
-
-| Function | Request | Result |
+| Endpoint | Request | Expected result |
 |---|---|---|
-| `register-device` | `device_id?`, `device_label?`, `app_version`, `android_version`, `android_api`, `hardware_profile?`, `telemetry?`, `field_availability?` | Server-issued/confirmed `device_id`, `registered=true`, `profile_updated` |
-| `get-my-repair-tools` | `device_id` | Only currently published, assigned, compatible signed recipes |
+| `register-device` | `device_id?`, `device_label?`, `app_version`, `android_version`, `android_api` | `data.device_id`, `data.registered=true` |
+| `get-my-repair-tools` | `device_id` | Array of currently published, assigned, device-compatible signed recipes |
 | `get-signed-repair-tool` | `tool_id`, `device_id` | Current signed payload, signature, algorithm and version |
-| `submit-repair-run` | `run_id`, `device_id`, `tool_id`, `tool_version`, timestamps, result, step results and app version | `run_id`, `accepted=true`, duplicate state |
+| `submit-repair-run` | `run_id`, `device_id`, `tool_id`, `tool_version`, timestamps, result, step results and app version | `data.run_id`, `data.accepted=true`, `data.duplicate` |
 
-The device profile upload is bounded server-side: hardware/telemetry JSON objects are capped at 32 KB each and field-availability JSON is capped at 8 KB. Allowed availability values are `OBSERVED`, `ESTIMATED`, `UNAVAILABLE`, `PERMISSION_REQUIRED`, and `UNSUPPORTED`.
+All calls require a valid Supabase JWT. A member must be active, the device must belong to that member and not be revoked, the tool must be currently published and assigned, and the app/Android version must meet the signed recipe's compatibility requirements.
 
-The function verifies the account is an active Member and the device UUID belongs to that Member and is not revoked. Device metadata, hardware profile, telemetry and heartbeat are updated atomically through `register_device_profile_for_member`. That SQL function is executable only by `service_role`, not `anon` or `authenticated`.
+## 3. Report identity and idempotency
 
-## 4. Owner API contract
+Android's client-generated `run_id` is stored as `public.repair_runs.id` (the table's primary key); it is not a separate table column.
 
-All functions below require a valid JWT and re-check that the authenticated profile is active with `role='owner'`. Browser clients do not get direct table write grants.
+The deployed `submit-repair-run` function computes a SHA-256 fingerprint from normalized report content and authenticated identity, then calls the transactional `submit_repair_run_idempotent` SQL function:
 
-| Function | Purpose |
-|---|---|
-| `get-admin-dashboard` | Owner-only summary of analytics, tools, Members, devices (including hardware/health telemetry), recent runs and audit events |
-| `admin-invite-member` | Invite a Member; invitation does not grant Owner role |
-| `admin-manage-member` | Activate, suspend or revoke a Member |
-| `admin-upsert-tool` | Create/update a draft tool |
-| `admin-publish-tool` | Validate and atomically publish a signed tool version |
-| `admin-disable-tool` | Disable/restore a published tool |
-| `admin-assign-tool` | Change Member/all-active-Members access |
-| `admin-manage-device` | Revoke/restore a registered device |
-| `admin-manage-tool-state` | Move draft/testing/archive state |
-| `admin-delete-draft-tool` | Delete a draft tool |
-| `admin-save-validation` | Persist Test Lab result/history |
-| `get-admin-analytics` | Owner-only analytics aggregation |
+- A new authorized report is stored and returns HTTP 201 with `duplicate=false`.
+- An exact retry from the same member/device returns HTTP 200 with `duplicate=true`.
+- Reusing the UUID with different content or another identity returns HTTP 409.
+- The SQL transaction locks the member/device/tool/assignment/version state while validating and accepting the report.
 
-The mobile Gemini helper is not connected to a production AI provider. It must not be treated as a working production feature.
+This closes the previous production mismatch where the deployed function rejected Android's `run_id` field.
 
-## 5. Report identity and idempotency
+## 4. Atomic device and catalogue RPCs
 
-Android's client-generated `run_id` is stored as `public.repair_runs.id` (the table primary key); it is not a separate table column.
+The deployed member APIs use database transactions rather than assembling authorization from independent, race-prone reads:
 
-The deployed `submit-repair-run` function computes a SHA-256 fingerprint from normalized report content and authenticated identity, then calls the transactional `submit_repair_run_idempotent` function:
+- `register_device_for_member`
+- `get_member_repair_catalog`
+- `get_signed_repair_tool_for_device`
+- `submit_repair_run_idempotent`
 
-- New report: stored and accepted.
-- Exact retry by the same Member/device: duplicate success.
-- Reusing the UUID with changed content or another identity: conflict rejection.
+They re-check account status, device ownership/revocation, publication/assignment, current version and device compatibility in the database transaction. Browser/Android clients do not receive direct write grants.
 
-The transaction locks and rechecks Member/device/tool/assignment/version state before accepting the report.
+## 5. Private Realtime contract
 
-## 6. Private Realtime contract
+### Android member-device topics
 
-### Member device topic
+Topic format:
 
 `mahi-repair:member:{userId}:device:{deviceId}`
 
-Only the active Member whose authenticated identity and non-revoked device exactly match the topic may subscribe. Events are opaque invalidations such as `catalog_changed`, `member_access_changed` and `device_revoked`. A message never grants execution permission; Android re-fetches the authorized catalogue or revalidates access.
+Only the active member whose authenticated identity and non-revoked device exactly match that topic may subscribe. Events are opaque invalidations, for example:
 
-### Owner topic
+- `catalog_changed`
+- `member_access_changed`
+- `device_revoked`
+
+Android uses the event as a hint to re-fetch the authorized catalogue or revalidate access. A Realtime message never grants execution permission.
+
+### Admin Owner topic
+
+Topic:
 
 `mahi-repair:admin`
 
-Only an active Owner profile may subscribe. Admin-visible database mutations broadcast opaque invalidation events; the console then re-fetches through server-verified APIs.
+Only an authenticated profile with `role='owner'` and `status='active'` may subscribe. Database triggers send `admin_data_changed` with an opaque `event_id` after Admin-visible writes. No row data, PII, recipes or signatures are included.
 
-Database policies and broadcast triggers are deployed, but actual delivery to a physical Android client and a real Owner browser session has not yet been demonstrated. Current production has no registered devices, tools or runs.
+The Next.js console listens to that private topic and calls `router.refresh()`. If the websocket is disconnected, a 15-second fallback refresh continues until reconnection.
 
-## 7. Production migration and function state
+### Live update verification boundary
 
-Nine production migrations are applied:
+The production migrations, two private-channel RLS policies, and broadcast triggers are deployed. The Render Admin service is live and the Admin CI has passed. However, the database currently has no registered Android devices, no tools, and no repair runs. Therefore actual event delivery to a physical Android device and the Owner browser has not yet been end-to-end demonstrated. Register a test device and publish a test tool before recording that acceptance as complete.
 
-| Remote version | Migration |
+## 6. Production deployment evidence
+
+The following four migrations are recorded in the Supabase production migration history (the generated remote versions are the timestamps shown here):
+
+| Remote version | Source migration |
 |---|---|
-| `20261105171141` | `202611050001_initial_schema` |
-| `20261105171330` | `20261105180000_harden_rls_grants_and_indexes` |
-| `20261105171827` | `20261105183000_deny_browser_rate_limit_access` |
-| `20261106170418` | `20261106120000_private_realtime_catalog_broadcast` |
-| `20261106170438` | `20261106153000_backend_report_idempotency_and_atomic_catalog` |
-| `20261106170450` | `20261106160000_transactional_admin_mutations_audit` |
-| `20261106170509` | `20261106170000_atomic_member_catalog_and_device_registration` |
-| `20261108161813` | `device_intelligence_telemetry` |
-| `20261108162722` | `device_tool_syncs_tool_version_index` |
+| `20261106170418` | `20261106120000_private_realtime_catalog_broadcast.sql` |
+| `20261106170438` | `20261106153000_backend_report_idempotency_and_atomic_catalog.sql` |
+| `20261106170450` | `20261106160000_transactional_admin_mutations_audit.sql` |
+| `20261106170509` | `20261106170000_atomic_member_catalog_and_device_registration.sql` |
 
-All 17 Edge Functions are ACTIVE. Sixteen app/API functions have `verify_jwt=true`; the Auth `send-email-hook` has `verify_jwt=false` and verifies the Standard Webhooks HMAC signature. New functions/versions:
-- `register-device` v4
-- `get-admin-dashboard` v1
-- `send-email-hook` v1 (deployed, not connected in Auth)
+All 15 Edge Functions were redeployed with `verify_jwt=true` and verified ACTIVE. Important deployed versions:
 
-The two new service-role RPCs, `register_device_profile_for_member` and `get_admin_analytics`, were verified executable by service_role only. RLS remains enabled for `public.devices`; new foreign-key index `device_tool_syncs_tool_version_idx` exists.
+| Function | Version |
+|---|---:|
+| `get-my-repair-tools` | 4 |
+| `get-signed-repair-tool` | 4 |
+| `register-device` | 3 |
+| `submit-repair-run` | 4 |
+| Admin mutation functions | 2–3 |
+| `get-admin-analytics` | 3 |
 
-## 8. Production data and acceptance gaps
+Admin workflow [#42258498724](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/actions/runs/42258498724) passed on commit `9e627816446889909c1c57475082e2525a902847`. Render deploy for the same commit reported LIVE.
 
-The production database currently contains two profiles (one active Owner, one active Member) and 0 devices, 0 repair tools, 0 published versions, 0 repair runs and 0 audit events.
+The Android `.env.example` now includes the verified public Supabase project URL and active publishable key. These are public client configuration values, not privileged secrets.
 
-Still unverified:
-1. Actual Owner web login and Android Owner-console login.
-2. Member OTP email delivery; the Resend-primary/Brevo-fallback Auth hook still needs API keys, verified sender and the dashboard-generated webhook secret before it can be connected.
-3. Live Supabase Auth site URL and redirect allowlist verification.
-4. Presence/format of `RECIPE_SIGNING_PRIVATE_KEY_PEM` and cryptographic match with Android public key.
-5. Signed tool publication and execution on a physical device.
-6. Device telemetry persistence from an actual Member device.
-7. Repair report submit/retry/conflict on real accounts.
-8. Private Realtime message delivery end to end.
-9. Production release signing with the existing upload keystore.
-10. Supabase global Realtime public-access setting, backup/restore and alerts.
+## 7. Remaining production acceptance checks
 
-The connected Supabase tooling does not expose protected secret values, the live Auth Hook/SMTP settings or the global Realtime dashboard toggle. The source `supabase/config.toml` now declares the production Admin site URL, but live Auth URL settings were not overwritten. The application Edge Functions use a hard-coded canonical Admin-origin fallback if an optional `ADMIN_ORIGIN` override is absent. No test sign-ins or emails were sent.
+The database currently reports 1 active Owner and 1 active Member, but 0 registered devices, 0 tools and 0 repair runs. Complete these checks with a real Owner browser session and a test Android installation:
 
-## 9. Security and legacy services
+1. Confirm Supabase Auth Site URL is `https://mahi-repair-admin.onrender.com` and allow `https://mahi-repair-admin.onrender.com/auth/callback`.
+2. Confirm Supabase Edge Function secret `ADMIN_ORIGIN` is exactly `https://mahi-repair-admin.onrender.com` (canonical HTTPS origin, no slash or path).
+3. Confirm `RECIPE_SIGNING_PRIVATE_KEY_PEM` exists in Supabase and its public-key counterpart configured in Android is the matching RSA-3072 key.
+4. Confirm Supabase Realtime global “Allow public access” is disabled.
+5. Sign in as Owner, create/publish a test recipe, invite a Member, register a device and verify its private channel subscription.
+6. Publish, disable, assign/unassign a test tool; verify Android and Admin receive invalidations and then re-fetch fresh authorized data.
+7. Submit one run report; replay the same UUID/content and expect duplicate success; alter its content or user identity and expect conflict.
+8. Revoke the device/member and verify the next authenticated fetch/report attempt is rejected.
 
-- Supabase RLS is enabled on all 9 public application tables and private Realtime messages.
-- Anonymous table grants are absent; authenticated browser grants are read-only.
-- Privileged SQL RPCs are restricted to service_role.
-- Security Advisor currently reports leaked-password protection disabled. The Supabase organization is on the Free plan; this warning remains unresolved.
-- The foreign-key covering index advisor issue was fixed. Remaining unused-index notices are informational while production tables are empty.
-- The legacy Express `MemoryStagingDb` is file-backed demo storage and is not production-safe. Remote support still depends on that API and has no production live-video transport.
-- The signed release workflow is in GitHub, but no signed APK/AAB has yet been produced because the existing upload-keystore secrets are not verified.
+Auth URL configuration, Edge Function secret values, SMTP delivery and the global Realtime dashboard toggle cannot be inspected through the connected Supabase API tools used for this audit. SMTP should be verified separately before relying on magic-link invitations. Do not claim physical-device live-event acceptance until the above checks pass.
 
-Do not label the app fully production-ready until the real-account, signing, email, device, report and Realtime acceptance checks pass.
+## 8. Security boundaries
+
+- Only the Supabase public publishable key is in Android/Render client configuration.
+- No service-role key or RSA signing private key is in GitHub or the client applications.
+- All Edge Functions are JWT verified; Owner operations separately verify the active Owner profile.
+- RLS remains enabled; browser database writes remain revoked.
+- Realtime messages are private, opaque invalidation hints; authorization is always re-checked on the next API request.

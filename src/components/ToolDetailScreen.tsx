@@ -53,7 +53,7 @@ export const ToolDetailScreen: React.FC<ToolDetailScreenProps> = ({
       : 0;
 
   return (
-    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-36 sm:pb-32 lg:pb-14">
+    <div className="anim-push flex flex-col gap-6 max-w-[1200px] mx-auto pb-16">
       {/* Back Button */}
       <button
         onClick={onBack}
@@ -280,11 +280,11 @@ export const ToolDetailScreen: React.FC<ToolDetailScreenProps> = ({
           )}
 
           {/* Primary Action Button */}
-          <div className="mt-auto pt-5 pb-4">
+          <div className="mt-auto pt-3">
             {!isRunning && !isDone && (
               <button
                 onClick={() => onRequestRun(tool)}
-                className="mahi-btn mahi-btn-primary w-full shadow-lg shadow-[#5B8CFF]/25 font-bold tracking-wide"
+                className="mahi-btn mahi-btn-primary w-full"
               >
                 Start Repair Run
               </button>

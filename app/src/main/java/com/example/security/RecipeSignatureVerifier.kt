@@ -1,9 +1,12 @@
 package com.example.security
 
-import com.example.BuildConfig
-
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.nio.charset.StandardCharsets
+import java.security.KeyFactory
+import java.security.Signature
+import java.security.spec.X509EncodedKeySpec
 
 /**
  * Verifies the exact UTF-8 bytes returned as `signed_payload` before JSON parsing,
@@ -31,13 +34,24 @@ object RecipeSignatureVerifier {
     fun verifyAndParse(
         signedPayload: String,
         signatureBase64: String,
-        publicKeyDerBase64: String = BuildConfig.RECIPE_SIGNING_PUBLIC_KEY_PEM
+        publicKeyDerBase64: String = RsaSignatureVerifier.DEFAULT_OWNER_PUBLIC_KEY
     ): JSONObject {
-        // Share the canonical RSA-3072 / SHA-256 verifier used by the live catalogue path.
-        // It verifies the exact UTF-8 payload bytes before this function parses any JSON.
-        require(RsaSignatureVerifier.verify(signedPayload, signatureBase64, publicKeyDerBase64)) {
-            "Recipe signature verification failed"
-        }
+        val cleanKey = publicKeyDerBase64
+            .replace("-----BEGIN PUBLIC KEY-----", "")
+            .replace("-----END PUBLIC KEY-----", "")
+            .replace("-----BEGIN RSA PUBLIC KEY-----", "")
+            .replace("-----END RSA PUBLIC KEY-----", "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace(" ", "")
+            .trim()
+        val keyBytes = Base64.decode(cleanKey, Base64.DEFAULT)
+        val publicKey = KeyFactory.getInstance("RSA").generatePublic(X509EncodedKeySpec(keyBytes))
+        val verifier = Signature.getInstance("SHA256withRSA")
+        verifier.initVerify(publicKey)
+        verifier.update(signedPayload.toByteArray(StandardCharsets.UTF_8))
+        val signatureBytes = Base64.decode(signatureBase64.trim(), Base64.DEFAULT)
+        require(verifier.verify(signatureBytes)) { "Recipe signature verification failed" }
 
         // Never parse untrusted recipe JSON before its detached signature is verified.
         val recipe = JSONObject(signedPayload)

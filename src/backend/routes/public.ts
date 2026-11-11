@@ -19,60 +19,6 @@ router.get('/public-key', (_req: Request, res: Response): void => {
   });
 });
 
-// In-memory live Data Pack state for dual-sync across web and app
-let liveDataPack = {
-  version: '1.2.4',
-  releaseName: 'eFootball-Style Live Data Pack',
-  publishedAt: Date.now(),
-  tools: [] as any[],
-};
-
-// GET /api/v1/datapack/status - Live Data Pack status for in-app updates
-router.get('/datapack/status', (_req: Request, res: Response): void => {
-  res.json({
-    status: 'active',
-    version: liveDataPack.version,
-    release_name: liveDataPack.releaseName,
-    published_at: liveDataPack.publishedAt,
-    tools_count: liveDataPack.tools.length,
-    dual_sync_status: 'SYNCHRONIZED',
-  });
-});
-
-// GET /api/v1/datapack/catalog - Fetch latest published tools
-router.get('/datapack/catalog', (_req: Request, res: Response): void => {
-  res.json({
-    version: liveDataPack.version,
-    published_at: liveDataPack.publishedAt,
-    tools: liveDataPack.tools,
-  });
-});
-
-// POST /api/v1/datapack/publish - Publish tools from Owner Admin Console
-router.post('/datapack/publish', (req: Request, res: Response): void => {
-  const { tools, note, releaseName } = req.body || {};
-  if (Array.isArray(tools)) {
-    liveDataPack.tools = tools;
-  }
-  // Increment minor version
-  const parts = liveDataPack.version.split('.');
-  const minor = parseInt(parts[2] || '0', 10) + 1;
-  liveDataPack.version = `${parts[0] || '1'}.${parts[1] || '2'}.${minor}`;
-  liveDataPack.publishedAt = Date.now();
-  if (releaseName) {
-    liveDataPack.releaseName = releaseName;
-  }
-
-  console.log(`[DataPack] Published version ${liveDataPack.version} (${liveDataPack.tools.length} tools): ${note || 'Admin live push'}`);
-  res.json({
-    success: true,
-    version: liveDataPack.version,
-    published_at: liveDataPack.publishedAt,
-    tools_count: liveDataPack.tools.length,
-    message: `Data Pack ${liveDataPack.version} published and synchronized live.`,
-  });
-});
-
 // GET /api/v1/health - System healthcheck
 router.get('/health', (_req: Request, res: Response): void => {
   res.json({
@@ -90,4 +36,3 @@ router.get('/health', (_req: Request, res: Response): void => {
 });
 
 export const publicRouter = router;
-

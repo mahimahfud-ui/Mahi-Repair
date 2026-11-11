@@ -64,8 +64,7 @@ fun HistoryDialog(
     viewModel: MainViewModel,
     onDismiss: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val historyList = uiState.history
+    val historyList by viewModel.getHistoryFlow().collectAsState(initial = emptyList())
 
     Dialog(
         onDismissRequest = onDismiss,

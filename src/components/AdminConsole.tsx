@@ -36,13 +36,10 @@ import {
   Lock,
   Compass,
   ArrowRight,
-  Monitor,
-  Menu,
-  Zap
+  Monitor
 } from 'lucide-react';
-import { ActionType, RepairTool, RecipeStep, ToolCategory } from '../types';
+import { ActionType, RepairTool, RecipeStep } from '../types';
 import { signRecipeForTesting } from '../security/verifier';
-import { liveSync } from '../services/liveSync';
 
 interface AdminConsoleProps {
   tools: RepairTool[];
@@ -58,7 +55,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [activeTab, setActiveTab] = useState<
     'overview' | 'tools' | 'intelligence' | 'compatibility' | 'remote' | 'gemini' | 'studio' | 'testlab' | 'members'
   >('overview');
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Studio state
   const [selectedToolId, setSelectedToolId] = useState<string>(tools[0]?.id || '');
@@ -66,89 +62,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [editorJson, setEditorJson] = useState<string>(selectedTool?.rawSignedPayload || '');
   const [jsonValidationErr, setJsonValidationErr] = useState<string | null>(null);
   const [studioNotice, setStudioNotice] = useState<string | null>(null);
-
-  // New Tool Creation Modal state
-  const [showNewToolModal, setShowNewToolModal] = useState(false);
-  const [newToolName, setNewToolName] = useState('');
-  const [newToolCategory, setNewToolCategory] = useState<ToolCategory>('GENERAL');
-  const [newToolDescription, setNewToolDescription] = useState('');
-  const [newToolTargetPackage, setNewToolTargetPackage] = useState('');
-
-  const handleCreateNewTool = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newToolName.trim()) return;
-
-    const slug = newToolName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
-    const newId = `tool_${slug}_${Date.now().toString(36).slice(-4)}`;
-    const newRecipeJson = JSON.stringify({
-      recipeId: `rcp_${newId}_v1`,
-      toolId: newId,
-      name: newToolName.trim(),
-      version: '1.0.0',
-      targetPackage: newToolTargetPackage.trim() || null,
-      requiredAndroidSdk: 26,
-      steps: [
-        {
-          id: 'step_1_conn',
-          action: 'CHECK_INTERNET',
-          name: 'Verify Network Baseline',
-          description: 'Checks connectivity to Google 8.8.8.8 and Cloudflare DNS.',
-          isRequired: true
-        },
-        {
-          id: 'step_2_app',
-          action: 'OPEN_APP_DETAILS',
-          name: 'Open App Settings',
-          description: 'Opens OS app info settings for clearing cache and storage.',
-          parameters: { targetPackage: newToolTargetPackage.trim() || 'com.android.settings' },
-          isRequired: true
-        },
-        {
-          id: 'step_3_confirm',
-          action: 'ASK_USER_CONFIRMATION',
-          name: 'User Approval Gate',
-          description: 'Confirms that repair steps have resolved the application issue.',
-          parameters: { prompt: 'Did clearing cache resolve the issue?' },
-          isRequired: false
-        }
-      ]
-    }, null, 2);
-
-    const signature = signRecipeForTesting(newRecipeJson);
-    const newTool: RepairTool = {
-      id: newId,
-      name: newToolName.trim(),
-      description: newToolDescription.trim() || 'Custom owner-authorized repair tool.',
-      category: newToolCategory,
-      version: '1.0.0',
-      problemDescription: newToolDescription.trim() || 'Resolves application malfunction.',
-      minAppVersion: 1,
-      minAndroidSdk: 26,
-      isNew: true,
-      enabled: true,
-      targetPackage: newToolTargetPackage.trim() || null,
-      rawSignedPayload: newRecipeJson,
-      signatureBase64: signature,
-      lastUpdated: Date.now(),
-      status: 'PUBLISHED',
-      audience: 'all_active_members'
-    };
-
-    const updated = [newTool, ...tools];
-    onUpdateTools(updated);
-    liveSync.publishLiveTools(updated, {
-      title: `New Tool: ${newTool.name}`,
-      details: `New tool added to library with RSA-3072 signature. Ready on all devices!`,
-      author: 'Owner Admin Console'
-    });
-
-    setShowNewToolModal(false);
-    setNewToolName('');
-    setNewToolDescription('');
-    setNewToolTargetPackage('');
-    setStudioNotice(`Tool "${newTool.name}" created, signed & published live!`);
-    setTimeout(() => setStudioNotice(null), 4000);
-  };
 
   // Test Lab state
   const [testDevice, setTestDevice] = useState('Pixel 8 Pro (API 35)');
@@ -349,22 +262,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
 
   // Members state
   const [members, setMembers] = useState([
-    {
-      id: 'mem_0',
-      email: 'mahinmhfd@gmail.com',
-      name: 'Mahi Mahfud',
-      status: 'active',
-      role: 'owner',
-      joined: '2026-10-01',
-    },
-    {
-      id: 'mem_4',
-      email: 'mahimahfud@gmail.com',
-      name: 'Mahi Mahfud',
-      status: 'active',
-      role: 'member',
-      joined: '2026-11-01',
-    },
     {
       id: 'mem_1',
       email: 'alex.family@gmail.com',
@@ -608,13 +505,8 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         return t;
       });
       onUpdateTools(updated);
-      liveSync.publishLiveTools(updated, {
-        title: `Recipe Published: ${parsed.name || selectedTool?.name}`,
-        details: `Updated payload signed with RSA-3072 and pushed live to all Android devices.`,
-        author: 'Owner Admin Console'
-      });
-      setStudioNotice('Recipe signed with RSA-SHA256 and PUBLISHED (In-App Live Update Broadcasted)!');
-      setTimeout(() => setStudioNotice(null), 4000);
+      setStudioNotice('Recipe signed with RSA-SHA256 and PUBLISHED!');
+      setTimeout(() => setStudioNotice(null), 3000);
     } catch (err: any) {
       setJsonValidationErr(err.message);
     }
@@ -720,253 +612,10 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
     );
   };
 
-  const renderNavItems = (onItemClick?: () => void) => (
-    <nav className="space-y-1 overflow-y-auto pr-1">
-      <button
-        onClick={() => {
-          setActiveTab('overview');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'overview'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Activity size={16} />
-        <span>Overview</span>
-      </button>
-
-      <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
-        Device Intelligence
-      </div>
-
-      <button
-        onClick={() => {
-          setActiveTab('intelligence');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'intelligence'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Cpu size={16} />
-        <span>Hardware & Telemetry</span>
-        <span className="ml-auto rounded-full bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] text-emerald-400">
-          LIVE
-        </span>
-      </button>
-
-      <button
-        onClick={() => {
-          setActiveTab('compatibility');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'compatibility'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Compass size={16} />
-        <span>Compatibility Matrix</span>
-      </button>
-
-      <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
-        Live Operations
-      </div>
-
-      <button
-        onClick={() => {
-          setActiveTab('remote');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'remote'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Radio size={16} />
-        <span>Remote Support</span>
-        <span className="ml-auto h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-      </button>
-
-      <button
-        onClick={() => {
-          setActiveTab('gemini');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'gemini'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Bot size={16} />
-        <span>Gemini Co-Pilot</span>
-        <Sparkles size={12} className="text-amber-400 ml-auto" />
-      </button>
-
-      <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
-        Build & Release
-      </div>
-
-      <button
-        onClick={() => {
-          setActiveTab('tools');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'tools'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Boxes size={16} />
-        <span>Tools Library</span>
-        <span className="ml-auto rounded-full bg-[#1b1e2a] px-2 py-0.5 text-[10px] text-gray-400">
-          {tools.length}
-        </span>
-      </button>
-
-      <button
-        onClick={() => {
-          setActiveTab('studio');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'studio'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <FileCode size={16} />
-        <span>Script Studio</span>
-      </button>
-
-      <button
-        onClick={() => {
-          setActiveTab('testlab');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'testlab'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <FlaskConical size={16} />
-        <span>Test Lab</span>
-      </button>
-
-      <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
-        Governance
-      </div>
-
-      <button
-        onClick={() => {
-          setActiveTab('members');
-          onItemClick?.();
-        }}
-        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-          activeTab === 'members'
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
-        }`}
-      >
-        <Users size={16} />
-        <span>Members & Devices</span>
-      </button>
-    </nav>
-  );
-
   return (
-    <div className="flex flex-col lg:flex-row h-screen bg-[#090a0f] text-gray-100 font-sans antialiased overflow-hidden">
-      {/* Mobile Sticky Header (<1024px) */}
-      <header className="lg:hidden flex items-center justify-between border-b border-[#1c1f2b] bg-[#0c0d14] px-4 py-3 shrink-0 z-30">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-            className="p-2 rounded-xl text-gray-300 hover:bg-[#181a24] border border-[#232738] transition-colors"
-            aria-label="Toggle navigation menu"
-          >
-            {isMobileNavOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-600 text-white font-bold text-xs shadow-sm shadow-red-600/30">
-              <Wrench size={14} />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white tracking-wide">Mahi Repair</div>
-              <div className="text-[9px] text-gray-400 font-mono uppercase">{activeTab}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onSwitchToClient}
-            className="flex items-center gap-1.5 rounded-xl bg-[#181a24] hover:bg-[#202332] border border-[#292d3e] px-2.5 py-1.5 text-[11px] font-semibold text-gray-200 transition-colors"
-          >
-            <Smartphone size={13} className="text-red-400" />
-            <span>Phone View</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Mobile Slide-Over Drawer (<1024px) */}
-      {isMobileNavOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsMobileNavOpen(false)}
-          />
-          <aside className="relative w-72 max-w-[85vw] bg-[#0c0d14] border-r border-[#1c1f2b] p-4 flex flex-col justify-between h-full z-10 overflow-y-auto">
-            <div>
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-[#1c1f2b] mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-600 text-white font-bold text-xs shadow-md shadow-red-600/30">
-                    <Wrench size={16} />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white tracking-wide">Mahi Repair</div>
-                    <div className="text-[9px] text-gray-400 font-mono">OWNER CONSOLE</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsMobileNavOpen(false)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white"
-                  aria-label="Close menu"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {renderNavItems(() => setIsMobileNavOpen(false))}
-            </div>
-
-            <div className="pt-4 border-t border-[#1c1f2b] mt-4">
-              <button
-                onClick={() => {
-                  setIsMobileNavOpen(false);
-                  onSwitchToClient();
-                }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#181a24] hover:bg-[#202332] border border-[#292d3e] py-2.5 text-xs font-semibold text-gray-200 transition-colors"
-              >
-                <Smartphone size={15} className="text-red-400" />
-                <span>Launch Phone Simulator</span>
-              </button>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {/* Desktop Fixed Left Sidebar (>=1024px) */}
-      <aside className="hidden lg:flex flex-col w-64 border-r border-[#1c1f2b] bg-[#0c0d14] p-4 flex-shrink-0 justify-between h-screen">
+    <div className="flex h-screen bg-[#090a0f] text-gray-100 font-sans antialiased overflow-hidden">
+      {/* Sidebar Navigation */}
+      <aside className="w-64 border-r border-[#1c1f2b] bg-[#0c0d14] p-4 flex flex-col justify-between shrink-0">
         <div>
           {/* Logo Header */}
           <div className="flex items-center gap-3 px-2 py-2">
@@ -983,9 +632,139 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             </div>
           </div>
 
-          <div className="mt-5">
-            {renderNavItems()}
-          </div>
+          <nav className="mt-5 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'overview'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Activity size={16} />
+              <span>Overview</span>
+            </button>
+
+            <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
+              Device Intelligence
+            </div>
+
+            <button
+              onClick={() => setActiveTab('intelligence')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'intelligence'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Cpu size={16} />
+              <span>Hardware & Telemetry</span>
+              <span className="ml-auto rounded-full bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] text-emerald-400">
+                LIVE
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('compatibility')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'compatibility'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Compass size={16} />
+              <span>Compatibility Matrix</span>
+            </button>
+
+            <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
+              Live Operations
+            </div>
+
+            <button
+              onClick={() => setActiveTab('remote')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'remote'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Radio size={16} />
+              <span>Remote Support</span>
+              <span className="ml-auto h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            </button>
+
+            <button
+              onClick={() => setActiveTab('gemini')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'gemini'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Bot size={16} />
+              <span>Gemini Co-Pilot</span>
+              <Sparkles size={12} className="text-amber-400 ml-auto" />
+            </button>
+
+            <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
+              Build & Release
+            </div>
+
+            <button
+              onClick={() => setActiveTab('tools')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'tools'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Boxes size={16} />
+              <span>Tools Library</span>
+              <span className="ml-auto rounded-full bg-[#1b1e2a] px-2 py-0.5 text-[10px] text-gray-400">
+                {tools.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('studio')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'studio'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <FileCode size={16} />
+              <span>Script Studio</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('testlab')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'testlab'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <FlaskConical size={16} />
+              <span>Test Lab</span>
+            </button>
+
+            <div className="pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-3">
+              Governance
+            </div>
+
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === 'members'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#14161f]'
+              }`}
+            >
+              <Users size={16} />
+              <span>Members & Devices</span>
+            </button>
+          </nav>
         </div>
 
         {/* Switch back to Android Client View */}
@@ -1001,7 +780,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 md:p-8 bg-[#090a0f] min-w-0">
+      <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#090a0f]">
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <div className="space-y-6 max-w-6xl">
@@ -1407,7 +1186,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[640px]">
+                <table className="w-full text-left text-xs">
                   <thead className="bg-[#0c0e14] text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     <tr>
                       <th className="p-4">Repair Tool</th>
@@ -1819,8 +1598,11 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               </div>
 
               <button
-                onClick={() => setShowNewToolModal(true)}
-                className="flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm"
+                onClick={() => {
+                  setSelectedToolId(tools[0]?.id || '');
+                  setActiveTab('studio');
+                }}
+                className="flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors"
               >
                 <Plus size={14} />
                 <span>New Repair Recipe</span>
@@ -1828,8 +1610,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             </div>
 
             <div className="rounded-2xl border border-[#20232e] bg-[#101219] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[620px]">
+              <table className="w-full text-left text-xs">
                 <thead className="bg-[#0c0e14] text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   <tr>
                     <th className="p-4">Tool Name</th>
@@ -1885,7 +1666,6 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                   ))}
                 </tbody>
               </table>
-              </div>
             </div>
           </div>
         )}
@@ -1903,25 +1683,18 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleSaveDraft}
-                  className="rounded-xl bg-[#181a24] hover:bg-[#202332] border border-[#292d3e] px-3.5 py-2 text-xs font-semibold text-gray-200 transition-colors cursor-pointer"
+                  className="rounded-xl bg-[#181a24] hover:bg-[#202332] border border-[#292d3e] px-4 py-2 text-xs font-semibold text-gray-200 transition-colors"
                 >
                   Save Draft
                 </button>
                 <button
                   onClick={handlePublishFromStudio}
-                  className="rounded-xl bg-red-600 hover:bg-red-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  className="rounded-xl bg-red-600 hover:bg-red-700 px-4 py-2 text-xs font-semibold text-white transition-colors"
                 >
                   Sign & Publish
-                </button>
-                <button
-                  onClick={handlePublishFromStudio}
-                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-3.5 py-2 text-xs font-semibold text-white transition-all shadow-md shadow-blue-900/30 cursor-pointer"
-                >
-                  <Zap size={13} className="fill-current" />
-                  <span>Push In-App Live Update (Data Pack)</span>
                 </button>
               </div>
             </div>
@@ -2097,151 +1870,44 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
               <div className="p-4 border-b border-[#20232e] text-xs font-bold text-gray-200">
                 Registered Hardware Devices ({deviceList.length})
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[580px]">
-                  <thead className="bg-[#0c0e14] text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                    <tr>
-                      <th className="p-4">Device</th>
-                      <th className="p-4">Owner</th>
-                      <th className="p-4">OS & Telemetry</th>
-                      <th className="p-4">Last Seen</th>
-                      <th className="p-4 text-right">Access Control</th>
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#0c0e14] text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  <tr>
+                    <th className="p-4">Device</th>
+                    <th className="p-4">Owner</th>
+                    <th className="p-4">OS & Telemetry</th>
+                    <th className="p-4">Last Seen</th>
+                    <th className="p-4 text-right">Access Control</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1b1e28]">
+                  {deviceList.map((d) => (
+                    <tr key={d.id}>
+                      <td className="p-4">
+                        <div className="font-semibold text-gray-200">{d.label}</div>
+                        <div className="font-mono text-[11px] text-gray-500">{d.id}</div>
+                      </td>
+                      <td className="p-4 text-gray-300">{d.ownerEmail || d.member}</td>
+                      <td className="p-4 text-gray-400 font-mono text-[11px]">
+                        v{d.appVersion} / {d.android}
+                      </td>
+                      <td className="p-4 text-gray-400">{d.lastSeen}</td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => handleToggleDevice(d.id)}
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                            d.revoked
+                              ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30'
+                          }`}
+                        >
+                          {d.revoked ? 'Restore Access' : 'Revoke Device'}
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#1b1e28]">
-                    {deviceList.map((d) => (
-                      <tr key={d.id}>
-                        <td className="p-4">
-                          <div className="font-semibold text-gray-200">{d.label}</div>
-                          <div className="font-mono text-[11px] text-gray-500">{d.id}</div>
-                        </td>
-                        <td className="p-4 text-gray-300">{d.ownerEmail || d.member}</td>
-                        <td className="p-4 text-gray-400 font-mono text-[11px]">
-                          v{d.appVersion} / {d.android}
-                        </td>
-                        <td className="p-4 text-gray-400">{d.lastSeen}</td>
-                        <td className="p-4 text-right">
-                          <button
-                            onClick={() => handleToggleDevice(d.id)}
-                            className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                              d.revoked
-                                ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
-                                : 'bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30'
-                            }`}
-                          >
-                            {d.revoked ? 'Restore Access' : 'Revoke Device'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Create New Tool & Recipe Modal */}
-        {showNewToolModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-            <div
-              className="w-full max-w-lg rounded-2xl bg-[#0e121c] border border-[#232a3c] p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
-              role="dialog"
-              aria-modal="true"
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-[#1f2638]">
-                <div className="flex items-center gap-2 text-white font-bold text-base">
-                  <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 grid place-items-center border border-red-500/30">
-                    <Plus size={16} />
-                  </div>
-                  <span>Create & Publish Repair Recipe</span>
-                </div>
-                <button
-                  onClick={() => setShowNewToolModal(false)}
-                  className="text-gray-400 hover:text-white p-1 rounded-lg cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateNewTool} className="flex flex-col gap-4 text-xs">
-                <div>
-                  <label className="text-gray-300 font-semibold block mb-1">Tool Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Google Play Store Fixer"
-                    value={newToolName}
-                    onChange={(e) => setNewToolName(e.target.value)}
-                    className="w-full rounded-xl bg-[#141926] border border-[#28324a] px-3.5 py-2.5 text-white placeholder-gray-500 focus:border-[#5B8CFF] focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-gray-300 font-semibold block mb-1">Category</label>
-                    <select
-                      value={newToolCategory}
-                      onChange={(e) => setNewToolCategory(e.target.value as ToolCategory)}
-                      className="w-full rounded-xl bg-[#141926] border border-[#28324a] px-3 py-2.5 text-white focus:border-[#5B8CFF] focus:outline-none"
-                    >
-                      <option value="GENERAL">General</option>
-                      <option value="SYSTEM">System</option>
-                      <option value="NETWORK">Network</option>
-                      <option value="MEDIA">Media</option>
-                      <option value="SOCIAL">Social</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-gray-300 font-semibold block mb-1">Target Android Package</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. com.android.vending"
-                      value={newToolTargetPackage}
-                      onChange={(e) => setNewToolTargetPackage(e.target.value)}
-                      className="w-full rounded-xl bg-[#141926] border border-[#28324a] px-3 py-2.5 text-white placeholder-gray-500 focus:border-[#5B8CFF] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-gray-300 font-semibold block mb-1">Problem Description</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. App download pending, error 504, or launch freeze."
-                    value={newToolDescription}
-                    onChange={(e) => setNewToolDescription(e.target.value)}
-                    className="w-full rounded-xl bg-[#141926] border border-[#28324a] p-3 text-white placeholder-gray-500 focus:border-[#5B8CFF] focus:outline-none"
-                  />
-                </div>
-
-                <div className="rounded-xl bg-[#141926] border border-[#242c40] p-3 text-gray-400 space-y-1">
-                  <div className="font-semibold text-gray-300 flex items-center gap-1.5">
-                    <ShieldCheck size={14} className="text-emerald-400" />
-                    <span>Automatic Security & Canonical Signing</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed">
-                    Upon saving, this recipe will be canonically sorted, signed with your RSA-3072 private key, and immediately pushed as an In-App Live Data Pack to all connected client devices without restarting the app.
-                  </p>
-                </div>
-
-                <div className="flex gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewToolModal(false)}
-                    className="flex-1 rounded-xl bg-[#181f2f] hover:bg-[#20293d] border border-[#2a3650] py-2.5 text-xs font-semibold text-gray-300 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newToolName.trim()}
-                    className="flex-1 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 py-2.5 text-xs font-semibold text-white shadow-md shadow-red-950/40 cursor-pointer disabled:opacity-50"
-                  >
-                    Sign & Broadcast Live
-                  </button>
-                </div>
-              </form>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

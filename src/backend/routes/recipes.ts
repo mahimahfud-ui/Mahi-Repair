@@ -59,7 +59,6 @@ router.post('/my-tools', authenticateToken, requireActiveMember, async (req: Aut
             signed_payload: versionRecord.canonicalPayload,
             signature: versionRecord.signature,
             signature_algorithm: versionRecord.signatureAlgorithm,
-            published_at: versionRecord.publishedAt,
           });
 
           // Record per-device sync version
@@ -70,7 +69,10 @@ router.post('/my-tools', authenticateToken, requireActiveMember, async (req: Aut
   }
 
   res.json({
-    data: authorizedTools,
+    data: {
+      tools: authorizedTools,
+      synced_at: new Date().toISOString(),
+    },
   });
 });
 
@@ -124,13 +126,10 @@ router.post('/signed-tool', authenticateToken, requireActiveMember, async (req: 
 
   res.json({
     data: {
-      tool_id: tool.id,
-      version: versionRecord.version,
       signed_payload: versionRecord.canonicalPayload,
       signature: versionRecord.signature,
       signature_algorithm: versionRecord.signatureAlgorithm,
-      key_id: 'repair-signing-2026-01',
-      published_at: versionRecord.publishedAt,
+      version: versionRecord.version,
     },
   });
 });

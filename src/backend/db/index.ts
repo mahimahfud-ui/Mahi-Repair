@@ -44,46 +44,6 @@ class MemoryStagingDb {
     if (this.profiles.size === 0) {
       this.seedInitialData();
     }
-    const mahin = Array.from(this.profiles.values()).find((p) => p.email?.toLowerCase() === 'mahinmhfd@gmail.com');
-    const now = new Date().toISOString();
-    if (!mahin) {
-      const owner0: UserProfile = {
-        id: 'owner_mahinmhfd',
-        role: 'owner',
-        status: 'active',
-        email: 'mahinmhfd@gmail.com',
-        displayName: 'Mahi Mahfud (Owner)',
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.profiles.set(owner0.id, owner0);
-      this.save();
-    } else if (mahin.role !== 'owner' || mahin.status !== 'active') {
-      mahin.role = 'owner';
-      mahin.status = 'active';
-      this.profiles.set(mahin.id, mahin);
-      this.save();
-    }
-
-    const mahimahfud = Array.from(this.profiles.values()).find((p) => p.email?.toLowerCase() === 'mahimahfud@gmail.com');
-    if (!mahimahfud) {
-      const member0: UserProfile = {
-        id: 'member_mahimahfud',
-        role: 'member',
-        status: 'active',
-        email: 'mahimahfud@gmail.com',
-        displayName: 'Mahi Mahfud (Member)',
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.profiles.set(member0.id, member0);
-      this.save();
-    } else if (mahimahfud.role !== 'member') {
-      // Invariant: mahimahfud@gmail.com must strictly remain a member
-      mahimahfud.role = 'member';
-      this.profiles.set(mahimahfud.id, mahimahfud);
-      this.save();
-    }
   }
 
   private save(): void {
@@ -135,44 +95,34 @@ class MemoryStagingDb {
     const now = new Date().toISOString();
 
     // Default Owner accounts
-    const owner0: UserProfile = {
-      id: 'owner_mahinmhfd',
+    const owner1: UserProfile = {
+      id: 'owner_mahin',
       role: 'owner',
       status: 'active',
       email: 'mahinmhfd@gmail.com',
-      displayName: 'Mahi Mahfud (Owner)',
-      createdAt: now,
-      updatedAt: now,
-    };
-    const owner1: UserProfile = {
-      id: 'demo_owner',
-      role: 'owner',
-      status: 'active',
-      email: 'demo.owner@example.test',
-      displayName: 'Demo Owner',
+      displayName: 'Mahin (Owner)',
       createdAt: now,
       updatedAt: now,
     };
     const owner2: UserProfile = {
-      id: 'demo_owner_secondary',
+      id: 'owner_alex',
       role: 'owner',
       status: 'active',
-      email: 'secondary.demo.owner@example.test',
-      displayName: 'Secondary Demo Owner',
+      email: 'alex.owner@example.com',
+      displayName: 'Alex Owner',
       createdAt: now,
       updatedAt: now,
     };
     const member1: UserProfile = {
-      id: 'demo_member',
+      id: 'member_demo',
       role: 'member',
       status: 'active',
-      email: 'demo.member@example.test',
+      email: 'member.test@example.com',
       displayName: 'Demo Member',
       createdAt: now,
       updatedAt: now,
     };
 
-    this.profiles.set(owner0.id, owner0);
     this.profiles.set(owner1.id, owner1);
     this.profiles.set(owner2.id, owner2);
     this.profiles.set(member1.id, member1);
@@ -565,15 +515,6 @@ class MemoryStagingDb {
     return null;
   }
 
-  async getToolVersions(toolId?: string, limitCount = 50): Promise<RepairToolVersionRecord[]> {
-    let list = Array.from(this.toolVersions.values());
-    if (toolId) {
-      list = list.filter((v) => v.toolId === toolId);
-    }
-    list.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-    return list.slice(0, limitCount);
-  }
-
   async saveToolVersion(version: RepairToolVersionRecord): Promise<void> {
     this.toolVersions.set(version.id, version);
     this.save();
@@ -581,28 +522,6 @@ class MemoryStagingDb {
 
   async getToolAccess(toolId: string): Promise<RepairToolAccessRecord[]> {
     return Array.from(this.toolAccess.values()).filter((a) => a.toolId === toolId);
-  }
-
-  async getAllToolAssignments(toolId?: string): Promise<RepairToolAccessRecord[]> {
-    const all = Array.from(this.toolAccess.values());
-    if (toolId) return all.filter((a) => a.toolId === toolId);
-    return all;
-  }
-
-  async deleteDraftTool(toolId: string): Promise<{ deleted: boolean; reason?: string }> {
-    const tool = await this.getTool(toolId);
-    if (!tool) {
-      return { deleted: false, reason: 'Tool not found' };
-    }
-    if (tool.status !== 'DRAFT' || tool.version > 0) {
-      return { deleted: false, reason: 'Only unreleased DRAFT tools with no immutable versions can be deleted' };
-    }
-    this.tools.delete(tool.id);
-    for (const [key, val] of this.toolAccess.entries()) {
-      if (val.toolId === tool.id) this.toolAccess.delete(key);
-    }
-    this.save();
-    return { deleted: true };
   }
 
   async replaceToolAccess(toolId: string, memberIds: string[], assignedBy: string): Promise<void> {
@@ -634,28 +553,12 @@ class MemoryStagingDb {
     this.save();
   }
 
-  async getRepairRun(runId: string): Promise<RepairRunRecord | null> {
-    return this.repairRuns.get(runId) || null;
-  }
-
   async getRepairRuns(userId?: string): Promise<RepairRunRecord[]> {
     const all = Array.from(this.repairRuns.values()).sort(
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     );
     if (userId) return all.filter((r) => r.userId === userId);
     return all;
-  }
-
-  async getRecipeTests(limitCount = 50): Promise<RecipeTestHistoryRecord[]> {
-    return this.testHistory.slice(-limitCount).reverse();
-  }
-
-  async saveRecipeTest(record: RecipeTestHistoryRecord): Promise<void> {
-    this.testHistory.push(record);
-    if (this.testHistory.length > 200) {
-      this.testHistory = this.testHistory.slice(-200);
-    }
-    this.save();
   }
 
   async addAuditLog(entry: Omit<AdminAuditLogRecord, 'id' | 'createdAt'>): Promise<AdminAuditLogRecord> {
@@ -727,19 +630,14 @@ class MemoryStagingDb {
       .slice(0, 5);
 
     return {
-      totalRuns,
       total_runs: totalRuns,
       success: successCount,
       partial: partialCount,
       failed: failedCount,
       cancelled: cancelledCount,
-      activeMembersCount: activeMembers,
       active_members: activeMembers,
-      publishedTools,
       published_tools: publishedTools,
-      mostUsedTools,
       most_used_tools: mostUsedTools,
-      commonFailures,
       common_failures: commonFailures,
     };
   }
