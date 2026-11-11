@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = createBackendApp();
-  const PORT = parseInt(process.env.PORT || '3000', 10);
+  const PORT = parseInt(process.env.DEFAULT_APP_PORT || '3000', 10);
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
