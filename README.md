@@ -1,33 +1,41 @@
-# Mahi Repair — Personal Android Repair Toolkit (Web & React)
+# Mahi Repair — Android Member App
 
-A comprehensive React port of the Mahi Repair ecosystem. Mahi Repair is a declarative, verifiable device diagnostic and repair system that runs immutable, signed repair recipes signed by the Owner's RSA-2048 key.
+Mahi Repair is the native Android repair client for invited Members. The Android app contains only the Member experience: sign-in, the authorized repair library, guided repair execution, device status, and local repair history.
 
-## Architecture
+## Separate Owner Console
 
-- **Client App (Android Device Toolkit View)**:
-  - Allowlisted native repair action engine (`CHECK_INTERNET`, `DNS_LOOKUP`, `HTTPS_PROBE`, `CHECK_APP_INSTALLED`, `CHECK_STORAGE`, `OPEN_APP`, `OPEN_APP_DETAILS`, `OPEN_ANDROID_SETTINGS`, `SHOW_GUIDE`, `ASK_USER_CONFIRMATION`, `REQUEST_OWN_APP_PERMISSION`, `VERIFY_INTERNET`, `VERIFY_DNS`).
-  - Cryptographic RSA-SHA256 signature verification via Web Crypto API (`RSASSA-PKCS1-v1_5` with `SHA-256`).
-  - Bundled verified tools: YouTube Quick Repair, Facebook Troubleshooter, DNS Repair & Diagnostics, Wi-Fi Troubleshooter, Play Store Repair.
-  - Interactive Step-by-step guidance and user confirmation modals.
-  - Real-time diagnostic verdicts, failure detection, and execution audit history.
-  - Backend connection configuration (Supabase URL, Anon Key, Public Key PEM).
-  - Invited email OTP authentication and offline emergency mode.
+Owner management is provided only by the standalone [Mahi Repair Admin repository](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at:
 
-- **Owner Cloud Console & Recipe Studio**:
-  - Live overview metrics: total executions, success rate, active members, enrolled devices.
-  - Tools library: create, edit, duplicate, disable, and publish recipes.
-  - Script Studio & Recipe Composer: live JSON editor with syntax error checks, schema validation, and RSA signing.
-  - Test Lab: pre-release dry-run simulator with virtual Android devices (Pixel 9 Pro, Galaxy S24, Pixel Tablet), real-time progress steps, and debug logs.
-  - Members & Devices access control: invite family/team members, revoke compromised devices.
+https://mahi-repair-admin.onrender.com
 
-## Running Locally
+The Owner Console is a separate web application and is not embedded in this Android app. The Android client has no Owner Admin screen, route, Settings entry, or privileged Admin API client.
+
+## Shared Supabase backend
+
+Both applications use the same Supabase project:
+
+- Project ref: `shwqsljicmhflnvjqjah`
+- Region: `ap-south-1`
+- Android: Member Auth, device registration, signed tool retrieval, and idempotent repair reports.
+- Admin website: Owner-only member/device management, tool authoring, validation, publishing, and audit views.
+
+The Android client uses only the public Supabase publishable key. The service-role/secret key and RSA recipe-signing private key must remain server-side in Supabase secrets. The APK embeds only the RSA public key used to verify signed recipes.
+
+## Android configuration
+
+Copy `.env.example` to `.env` for a local build. Never place Supabase service-role keys, Edge Function secrets, Owner PINs, or private signing material in this file or in the APK.
+
+## Build and verification
+
+Use the checked-in Gradle wrapper:
 
 ```bash
-npm install
-npm run dev
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
 ```
 
-Build for production:
-```bash
-npm run build
-```
+The debug APK is for development/testing. A production release must use the owner's protected release-signing configuration and pass the physical-device acceptance gates documented in `PRODUCTION_SETUP_CHECKLIST.md`.
+
+## Release boundary
+
+A successful CI build does not prove live end-to-end operation. Before declaring production acceptance, verify the Owner PIN login, Member invitation/OTP delivery, RSA public/private key match, a real Member device registration, Owner tool publish, Android signature verification, safe repair execution, and report visibility in the Admin Console.
