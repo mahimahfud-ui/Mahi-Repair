@@ -3,6 +3,7 @@ package com.example.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val MahiDarkColorScheme = darkColorScheme(
@@ -28,9 +29,13 @@ private val MahiDarkColorScheme = darkColorScheme(
 
 @Composable
 fun MahiRepairTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = MahiDarkColorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalMahiColors provides DefaultMahiColors
+    ) {
+        MaterialTheme(
+            colorScheme = MahiDarkColorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
