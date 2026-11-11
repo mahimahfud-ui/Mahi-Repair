@@ -156,7 +156,6 @@ data class AdminMembersResponse(
 @JsonClass(generateAdapter = true)
 data class InviteMemberRequest(
     val email: String,
-    val role: String = "member",
     @Json(name = "display_name") val displayName: String = ""
 )
 

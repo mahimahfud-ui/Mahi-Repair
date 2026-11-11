@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.data.remote.InviteMemberRequest
 import com.example.data.remote.dto.GetToolsRequest
 import com.example.data.remote.dto.GetToolsResponse
 import com.example.data.remote.dto.RegisterDeviceRequest
@@ -26,6 +27,18 @@ class SupabaseDtoContractTest {
         moshi = Moshi.Builder()
             .add(KotlinJsonAdapterFactory())
             .build()
+    }
+
+    @Test
+    fun `member invitation DTO keeps the display name and omits role input`() {
+        val request = InviteMemberRequest(
+            email = "member@example.test",
+            displayName = "Repair Member"
+        )
+        val encoded = moshi.adapter(InviteMemberRequest::class.java).toJson(request)
+        assertTrue(encoded.contains("\"email\":\"member@example.test\""))
+        assertTrue(encoded.contains("\"display_name\":\"Repair Member\""))
+        assertTrue(!encoded.contains("\"role\""))
     }
 
     @Test

@@ -726,7 +726,7 @@ fun AdminScreen(
                             isSubmitting = true
                             scope.launch {
                                 adminClient.inviteMember(
-                                    InviteMemberRequest(email = email, role = "member", displayName = displayName),
+                                    InviteMemberRequest(email = email, displayName = displayName),
                                     authToken
                                 ).onSuccess {
                                     showInviteMemberDialog = false
