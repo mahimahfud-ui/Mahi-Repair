@@ -223,7 +223,8 @@ fun MainScreen(
                     state = state.appUpdate,
                     onCheckForUpdates = onCheckForAppUpdates,
                     onInstallUpdate = onInstallAppUpdate,
-                    onApplyDataUpdate = onApplyDataUpdate
+                    onApplyDataUpdate = onApplyDataUpdate,
+                onRollbackDataUpdate = onRollbackDataUpdate
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -434,7 +435,8 @@ private fun AppUpdateCard(
     state: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
-    onApplyDataUpdate: () -> Unit
+    onApplyDataUpdate: () -> Unit,
+    onRollbackDataUpdate: () -> Unit
 ) {
     val installedVersion = BuildConfig.VERSION_CODE.toLong()
     val release = state.release
@@ -557,12 +559,12 @@ private fun AppUpdateCard(
                     )
                 }
             }
-            if (state.appUpdate.canRollbackDataUpdate) {
+            if (state.canRollbackDataUpdate) {
                 Button(
                     onClick = onRollbackDataUpdate,
-                    enabled = !state.appUpdate.isChecking &&
-                        !state.appUpdate.isInstalling &&
-                        !state.appUpdate.isApplyingDataUpdate,
+                    enabled = !state.isChecking &&
+                        !state.isInstalling &&
+                        !state.isApplyingDataUpdate,
                     modifier = Modifier.fillMaxWidth().testTag("rollback_data_update_button"),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344054))
