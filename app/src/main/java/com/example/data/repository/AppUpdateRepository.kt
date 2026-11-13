@@ -301,7 +301,9 @@ class AppUpdateRepository(
         }
     }
 
-    fun canRollbackDataUpdate(): Boolean = contentInstaller.canRollback()
+    suspend fun canRollbackDataUpdate(): Boolean = withContext(Dispatchers.IO) {
+        contentInstaller.canRollback()
+    }
 
     suspend fun rollbackDataUpdate(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
