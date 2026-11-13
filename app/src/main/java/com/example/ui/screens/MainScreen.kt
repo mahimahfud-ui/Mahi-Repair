@@ -73,7 +73,8 @@ fun MainScreen(
     onSignOut: () -> Unit = {},
     onCheckForAppUpdates: () -> Unit = {},
     onInstallAppUpdate: () -> Unit = {},
-    onApplyDataUpdate: () -> Unit = {}
+    onApplyDataUpdate: () -> Unit = {},
+    onRollbackDataUpdate: () -> Unit = {}
 ) {
     val canRun = state.tools.isNotEmpty() &&
         !state.isToolsLoading &&
@@ -222,7 +223,8 @@ fun MainScreen(
                     state = state.appUpdate,
                     onCheckForUpdates = onCheckForAppUpdates,
                     onInstallUpdate = onInstallAppUpdate,
-                    onApplyDataUpdate = onApplyDataUpdate
+                    onApplyDataUpdate = onApplyDataUpdate,
+                onRollbackDataUpdate = onRollbackDataUpdate
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -433,7 +435,8 @@ private fun AppUpdateCard(
     state: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
-    onApplyDataUpdate: () -> Unit
+    onApplyDataUpdate: () -> Unit,
+    onRollbackDataUpdate: () -> Unit
 ) {
     val installedVersion = BuildConfig.VERSION_CODE.toLong()
     val release = state.release
@@ -463,7 +466,8 @@ private fun AppUpdateCard(
             )
             Button(
                 onClick = onCheckForUpdates,
-                enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                enabled = !state.isChecking && !state.isInstalling &&
+                    !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                 modifier = Modifier.fillMaxWidth().testTag("check_app_updates_button"),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -503,7 +507,8 @@ private fun AppUpdateCard(
                 if (updateAvailable) {
                     Button(
                         onClick = onInstallUpdate,
-                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        enabled = !state.isChecking && !state.isInstalling &&
+                            !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                         modifier = Modifier.fillMaxWidth().testTag("install_app_update_button"),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -527,7 +532,8 @@ private fun AppUpdateCard(
                 if (dataUpdateAvailable) {
                     Button(
                         onClick = onApplyDataUpdate,
-                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        enabled = !state.isChecking && !state.isInstalling &&
+                            !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                         modifier = Modifier.fillMaxWidth().testTag("apply_data_update_button"),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -555,6 +561,33 @@ private fun AppUpdateCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+            }
+            if (state.canRollbackDataUpdate) {
+                Button(
+                    onClick = onRollbackDataUpdate,
+                    enabled = !state.isChecking &&
+                        !state.isInstalling &&
+                        !state.isApplyingDataUpdate &&
+                        !state.isRollingBackDataUpdate,
+                    modifier = Modifier.fillMaxWidth().testTag("rollback_data_update_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344054))
+                ) {
+                    if (state.isRollingBackDataUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("ROLL BACK DATA UPDATE", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+                Text(
+                    "Restore the previous signed content/configuration release. The installed APK version is unchanged.",
+                    color = MahiTextMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

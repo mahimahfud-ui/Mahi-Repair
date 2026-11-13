@@ -31,7 +31,9 @@ data class AppUpdateUiState(
     val message: String? = null,
     val error: String? = null,
     val isApplyingDataUpdate: Boolean = false,
-    val downloadProgress: Float? = null
+    val isRollingBackDataUpdate: Boolean = false,
+    val downloadProgress: Float? = null,
+    val canRollbackDataUpdate: Boolean = false
 )
 
 data class MainUiState(
@@ -237,14 +239,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onCheckForAppUpdates() {
-        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling) return
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            _appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate
+        ) return
         _appUpdate.value = AppUpdateUiState(isChecking = true)
         viewModelScope.launch {
             val result = appUpdateRepository.checkForUpdate()
             if (result.isFailure) {
                 _appUpdate.value = AppUpdateUiState(
                     error = result.exceptionOrNull()?.message
-                        ?: "The app-update service could not be reached."
+                        ?: "The app-update service could not be reached.",
+                    canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate()
                 )
                 return@launch
             }
@@ -265,13 +270,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "A signed content release is available. This app build does not activate content packages yet."
                 else -> "Mahi Repair is up to date."
             }
-            _appUpdate.value = AppUpdateUiState(release = release, message = message)
+            _appUpdate.value = AppUpdateUiState(
+                release = release,
+                message = message,
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate()
+            )
         }
     }
 
     fun onInstallAppUpdate() {
         val release = _appUpdate.value.release ?: return
         if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            _appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate ||
             !release.isNativeUpdateAvailable(BuildConfig.VERSION_CODE.toLong())
         ) return
 
@@ -291,7 +301,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onApplyDataUpdate() {
         val release = _appUpdate.value.release ?: return
         if (!release.hasDataUpdate || _appUpdate.value.isChecking ||
-            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate
+            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate ||
+            _appUpdate.value.isRollingBackDataUpdate
         ) return
 
         _appUpdate.value = _appUpdate.value.copy(
@@ -307,6 +318,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _appUpdate.value = _appUpdate.value.copy(
                 isApplyingDataUpdate = false,
                 downloadProgress = null,
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate(),
                 message = result.getOrNull(),
                 error = result.exceptionOrNull()?.message
                     ?: if (result.isFailure) "The signed data update could not be activated." else null
@@ -316,10 +328,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onRollbackDataUpdate() {
-        if (_appUpdate.value.isApplyingDataUpdate) return
+        if (_appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate) return
+        _appUpdate.value = _appUpdate.value.copy(
+            isRollingBackDataUpdate = true,
+            message = null,
+            error = null
+        )
         viewModelScope.launch {
             val result = app.appUpdateRepository.rollbackDataUpdate()
             _appUpdate.value = _appUpdate.value.copy(
+                isRollingBackDataUpdate = false,
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate(),
                 message = result.getOrNull(),
                 error = result.exceptionOrNull()?.message
             )

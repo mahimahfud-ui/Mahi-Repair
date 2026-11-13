@@ -87,7 +87,8 @@ fun MahiRepairApp(
             onSignOut = { viewModel.onSignOut() },
             onCheckForAppUpdates = { viewModel.onCheckForAppUpdates() },
             onInstallAppUpdate = { viewModel.onInstallAppUpdate() },
-            onApplyDataUpdate = { viewModel.onApplyDataUpdate() }
+            onApplyDataUpdate = { viewModel.onApplyDataUpdate() },
+            onRollbackDataUpdate = { viewModel.onRollbackDataUpdate() }
         )
     }
 }

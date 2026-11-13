@@ -3,10 +3,11 @@
 ## Branch and implementation baseline
 
 - Repository: `mahimahfud-ui/Mahi-Repair`
-- Working branch: `ai/mahi-repair-complete-workflow`
-- Agent 3 continues the existing branch; changes are a fast-forward commit and do not merge into `main`.
-- Admin Panel source: `admin-panel/`
-- Render preview is configured to follow the same branch and use `/api/health`.
+- Implementation snapshot: `ai/mahi-repair-complete-workflow` at the 13 November 2026 audit.
+- The integration branch is 192 commits ahead and 31 commits behind current `main`; PR #12 remains Draft. Do not treat this branch's embedded Admin or updater as the current production deployment.
+- **Current production architecture on `main`:** Android Member app in this repository plus the standalone Owner Console in `mahimahfud-ui/Mahi-Repair-Admin`, sharing the existing Supabase project. The documented production Admin origin is `https://mahi-repair-admin-yy7c.onrender.com`.
+- The `admin-panel/` directory described by this integration handoff is branch-specific legacy/embedded source. The standalone Admin repository is the current Owner Console source of truth; do not deploy this branch's embedded panel as a second production Admin.
+- The signed update implementation documented below exists on this integration branch, but its Android update classes are absent from current `main`. It must be reconciled and reviewed before production use.
 
 ## Delivered by Agent 3
 
@@ -38,7 +39,7 @@ The device registration contract does not contain manufacturer/model, pairing st
 
 The current backend and Android app do not contain support-session state, consent workflow, WebRTC signaling, STUN/TURN credentials or Android MediaProjection screen capture. There is no real remote video to display. See `REMOTE_SUPPORT_GAP_ANALYSIS.md` before implementing this as a new cross-platform feature.
 
-The signed app-update backend has a native APK client path. Android checks for a signed release when an authenticated session starts, when the app resumes, and when the private `app_update_published` event arrives; it verifies the RSA-signed manifest, matches the declared certificate digest to the installed app signer, downloads the asset through a short-lived private URL, checks size/SHA-256/package/version/single signer and opens Android's installer for user approval. The UI does not silently install or downgrade. ZIP content packages and remote-config values are not downloaded or applied by Android yet. A real production-signed APK still needs physical-device acceptance. See `APP_LIVE_UPDATES.md`.
+The signed app-update implementation on this integration branch includes native APK and data/config client paths. Android checks for a signed release after an authenticated session starts, on app resume and on the private `app_update_published` event. It verifies the exact RSA-signed manifest bytes; native APK assets are checked for size, SHA-256, package ID, increasing versionCode and signer-certificate continuity before Android's system installer opens for user approval. For data updates, `AppUpdateRepository` fetches each package through an authenticated short-lived asset URL, verifies the outer digest/size and calls `AppUpdateContentInstaller`; the extractor accepts only declared JSON/image entries, validates entry size and SHA-256, rejects traversal/duplicate/undeclared/unsupported entries and stages all content before atomically switching the active pointer. The previous data release is retained and the local rollback method is implemented. The rollback button is wired in the separate audit/fix branch, pending CI/review. The update path downloads each changed ZIP in full; binary delta patching is not implemented. Beta selection and per-device installation telemetry are also outstanding. None of these source paths is production-accepted until the branch is reconciled with current `main`, the production signer/backend are verified, and physical-device update/rollback tests pass. See `APP_LIVE_UPDATES.md`.
 
 ## Required Agent 4 follow-up
 

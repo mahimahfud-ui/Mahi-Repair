@@ -81,6 +81,14 @@ class AppUpdateContentInstaller(context: Context) {
     }
 
     @Synchronized
+    fun canRollback(): Boolean {
+        val current = readPointer() ?: return false
+        val currentId = current.optString("releaseId").takeIf { it.isNotBlank() } ?: return false
+        val previousId = current.optString("previousReleaseId").takeIf { it.isNotBlank() } ?: return false
+        return currentId != previousId && File(releasesDir, previousId).isDirectory
+    }
+
+    @Synchronized
     fun rollback(): Boolean {
         val current = readPointer() ?: return false
         val currentId = current.optString("releaseId").takeIf { it.isNotBlank() } ?: return false

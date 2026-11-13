@@ -206,6 +206,61 @@ class RunRepairScreenTest {
     }
 
     @Test
+    fun availableDataRollbackShowsAndInvokesTheRollbackAction() {
+        var rollbackRequested = false
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(
+                    isToolsLoading = false,
+                    appUpdate = AppUpdateUiState(canRollbackDataUpdate = true)
+                ),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {},
+                onRollbackDataUpdate = { rollbackRequested = true }
+            )
+        }
+
+        composeRule.onNodeWithTag("rollback_data_update_button")
+            .performScrollTo()
+            .assertExists()
+            .assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
+        composeRule.runOnIdle { assertTrue(rollbackRequested) }
+    }
+
+    @Test
+    fun dataRollbackButtonIsDisabledWhileRollbackIsRunning() {
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(
+                    isToolsLoading = false,
+                    appUpdate = AppUpdateUiState(
+                        canRollbackDataUpdate = true,
+                        isRollingBackDataUpdate = true
+                    )
+                ),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {}
+            )
+        }
+
+        composeRule.onNodeWithTag("rollback_data_update_button")
+            .performScrollTo()
+            .assertExists()
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+    }
+
+    @Test
     fun unavailableCatalogueKeepsRunRepairDisabled() {
         composeRule.setContent {
             MainScreen(
