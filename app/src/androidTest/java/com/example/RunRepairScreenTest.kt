@@ -234,6 +234,33 @@ class RunRepairScreenTest {
     }
 
     @Test
+    fun dataRollbackButtonIsDisabledWhileRollbackIsRunning() {
+        composeRule.setContent {
+            MainScreen(
+                state = MainUiState(
+                    isToolsLoading = false,
+                    appUpdate = AppUpdateUiState(
+                        canRollbackDataUpdate = true,
+                        isRollingBackDataUpdate = true
+                    )
+                ),
+                onRunRepair = {},
+                onRetryAvailability = {},
+                onSelectTool = {},
+                onDismissToolPicker = {},
+                onSubmitUserAction = {},
+                onDismissExecution = {}
+            )
+        }
+
+        composeRule.onNodeWithTag("rollback_data_update_button")
+            .performScrollTo()
+            .assertExists()
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+    }
+
+    @Test
     fun unavailableCatalogueKeepsRunRepairDisabled() {
         composeRule.setContent {
             MainScreen(
