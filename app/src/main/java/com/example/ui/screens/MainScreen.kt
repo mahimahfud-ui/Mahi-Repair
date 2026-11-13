@@ -466,7 +466,8 @@ private fun AppUpdateCard(
             )
             Button(
                 onClick = onCheckForUpdates,
-                enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                enabled = !state.isChecking && !state.isInstalling &&
+                    !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                 modifier = Modifier.fillMaxWidth().testTag("check_app_updates_button"),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -506,7 +507,8 @@ private fun AppUpdateCard(
                 if (updateAvailable) {
                     Button(
                         onClick = onInstallUpdate,
-                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        enabled = !state.isChecking && !state.isInstalling &&
+                            !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                         modifier = Modifier.fillMaxWidth().testTag("install_app_update_button"),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -530,7 +532,8 @@ private fun AppUpdateCard(
                 if (dataUpdateAvailable) {
                     Button(
                         onClick = onApplyDataUpdate,
-                        enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                        enabled = !state.isChecking && !state.isInstalling &&
+                            !state.isApplyingDataUpdate && !state.isRollingBackDataUpdate,
                         modifier = Modifier.fillMaxWidth().testTag("apply_data_update_button"),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
@@ -564,12 +567,21 @@ private fun AppUpdateCard(
                     onClick = onRollbackDataUpdate,
                     enabled = !state.isChecking &&
                         !state.isInstalling &&
-                        !state.isApplyingDataUpdate,
+                        !state.isApplyingDataUpdate &&
+                        !state.isRollingBackDataUpdate,
                     modifier = Modifier.fillMaxWidth().testTag("rollback_data_update_button"),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344054))
                 ) {
-                    Text("ROLL BACK DATA UPDATE", color = Color.White, fontSize = 11.sp)
+                    if (state.isRollingBackDataUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("ROLL BACK DATA UPDATE", color = Color.White, fontSize = 11.sp)
+                    }
                 }
                 Text(
                     "Restore the previous signed content/configuration release. The installed APK version is unchanged.",
