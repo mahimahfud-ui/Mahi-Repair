@@ -3,10 +3,11 @@
 ## Branch and implementation baseline
 
 - Repository: `mahimahfud-ui/Mahi-Repair`
-- Working branch: `ai/mahi-repair-complete-workflow`
-- Agent 3 continues the existing branch; changes are a fast-forward commit and do not merge into `main`.
-- Admin Panel source: `admin-panel/`
-- Render preview is configured to follow the same branch and use `/api/health`.
+- Implementation snapshot: `ai/mahi-repair-complete-workflow` at the 13 November 2026 audit.
+- The integration branch is 192 commits ahead and 31 commits behind current `main`; PR #12 remains Draft. Do not treat this branch's embedded Admin or updater as the current production deployment.
+- **Current production architecture on `main`:** Android Member app in this repository plus the standalone Owner Console in `mahimahfud-ui/Mahi-Repair-Admin`, sharing the existing Supabase project. The documented production Admin origin is `https://mahi-repair-admin-yy7c.onrender.com`.
+- The `admin-panel/` directory described by this integration handoff is branch-specific legacy/embedded source. The standalone Admin repository is the current Owner Console source of truth; do not deploy this branch's embedded panel as a second production Admin.
+- The signed update implementation documented below exists on this integration branch, but its Android update classes are absent from current `main`. It must be reconciled and reviewed before production use.
 
 ## Delivered by Agent 3
 
