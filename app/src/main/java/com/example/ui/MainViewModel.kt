@@ -31,6 +31,7 @@ data class AppUpdateUiState(
     val message: String? = null,
     val error: String? = null,
     val isApplyingDataUpdate: Boolean = false,
+    val isRollingBackDataUpdate: Boolean = false,
     val downloadProgress: Float? = null,
     val canRollbackDataUpdate: Boolean = false
 )
@@ -238,7 +239,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onCheckForAppUpdates() {
-        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling) return
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            _appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate
+        ) return
         _appUpdate.value = AppUpdateUiState(isChecking = true)
         viewModelScope.launch {
             val result = appUpdateRepository.checkForUpdate()
@@ -278,6 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onInstallAppUpdate() {
         val release = _appUpdate.value.release ?: return
         if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            _appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate ||
             !release.isNativeUpdateAvailable(BuildConfig.VERSION_CODE.toLong())
         ) return
 
@@ -297,7 +301,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onApplyDataUpdate() {
         val release = _appUpdate.value.release ?: return
         if (!release.hasDataUpdate || _appUpdate.value.isChecking ||
-            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate
+            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate ||
+            _appUpdate.value.isRollingBackDataUpdate
         ) return
 
         _appUpdate.value = _appUpdate.value.copy(
@@ -323,10 +328,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onRollbackDataUpdate() {
-        if (_appUpdate.value.isApplyingDataUpdate) return
+        if (_appUpdate.value.isApplyingDataUpdate || _appUpdate.value.isRollingBackDataUpdate) return
+        _appUpdate.value = _appUpdate.value.copy(
+            isRollingBackDataUpdate = true,
+            message = null,
+            error = null
+        )
         viewModelScope.launch {
             val result = app.appUpdateRepository.rollbackDataUpdate()
             _appUpdate.value = _appUpdate.value.copy(
+                isRollingBackDataUpdate = false,
                 canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate(),
                 message = result.getOrNull(),
                 error = result.exceptionOrNull()?.message
