@@ -31,7 +31,8 @@ data class AppUpdateUiState(
     val message: String? = null,
     val error: String? = null,
     val isApplyingDataUpdate: Boolean = false,
-    val downloadProgress: Float? = null
+    val downloadProgress: Float? = null,
+    val canRollbackDataUpdate: Boolean = false
 )
 
 data class MainUiState(
@@ -244,7 +245,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (result.isFailure) {
                 _appUpdate.value = AppUpdateUiState(
                     error = result.exceptionOrNull()?.message
-                        ?: "The app-update service could not be reached."
+                        ?: "The app-update service could not be reached.",
+                    canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate()
                 )
                 return@launch
             }
@@ -265,7 +267,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "A signed content release is available. This app build does not activate content packages yet."
                 else -> "Mahi Repair is up to date."
             }
-            _appUpdate.value = AppUpdateUiState(release = release, message = message)
+            _appUpdate.value = AppUpdateUiState(
+                release = release,
+                message = message,
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate()
+            )
         }
     }
 
@@ -307,6 +313,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _appUpdate.value = _appUpdate.value.copy(
                 isApplyingDataUpdate = false,
                 downloadProgress = null,
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate(),
                 message = result.getOrNull(),
                 error = result.exceptionOrNull()?.message
                     ?: if (result.isFailure) "The signed data update could not be activated." else null
@@ -320,6 +327,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = app.appUpdateRepository.rollbackDataUpdate()
             _appUpdate.value = _appUpdate.value.copy(
+                canRollbackDataUpdate = appUpdateRepository.canRollbackDataUpdate(),
                 message = result.getOrNull(),
                 error = result.exceptionOrNull()?.message
             )
