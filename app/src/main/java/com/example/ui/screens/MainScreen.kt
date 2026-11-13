@@ -73,7 +73,8 @@ fun MainScreen(
     onSignOut: () -> Unit = {},
     onCheckForAppUpdates: () -> Unit = {},
     onInstallAppUpdate: () -> Unit = {},
-    onApplyDataUpdate: () -> Unit = {}
+    onApplyDataUpdate: () -> Unit = {},
+    onRollbackDataUpdate: () -> Unit = {}
 ) {
     val canRun = state.tools.isNotEmpty() &&
         !state.isToolsLoading &&
@@ -555,6 +556,24 @@ private fun AppUpdateCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+            }
+            if (state.appUpdate.canRollbackDataUpdate) {
+                Button(
+                    onClick = onRollbackDataUpdate,
+                    enabled = !state.appUpdate.isChecking &&
+                        !state.appUpdate.isInstalling &&
+                        !state.appUpdate.isApplyingDataUpdate,
+                    modifier = Modifier.fillMaxWidth().testTag("rollback_data_update_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF344054))
+                ) {
+                    Text("ROLL BACK DATA UPDATE", color = Color.White, fontSize = 11.sp)
+                }
+                Text(
+                    "Restore the previous signed content/configuration release. The installed APK version is unchanged.",
+                    color = MahiTextMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
