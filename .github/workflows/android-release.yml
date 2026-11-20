@@ -135,7 +135,7 @@ jobs:
           cat > "$NOTES_FILE" <<EOF
           Mahi Repair Android production build.
 
-          - Source commit: `$GITHUB_SHA`
+          - Source commit: $GITHUB_SHA
           - Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           - Signing: built with the existing configured Android upload keystore.
           - Assets: signed APK, Android App Bundle (AAB), and SHA-256 checksums.
@@ -151,7 +151,7 @@ jobs:
           {
             echo "## Permanent GitHub Release"
             echo
-            echo "- Tag: `$TAG`"
+            echo "- Tag: $TAG"
             echo "- APK/AAB: [Download release assets]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG)"
-            echo "- SHA-256 checksums are attached as `SHA256SUMS.txt`."
+            echo "- SHA-256 checksums are attached as SHA256SUMS.txt."
           } >> "$GITHUB_STEP_SUMMARY"
