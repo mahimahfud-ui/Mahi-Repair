@@ -88,12 +88,13 @@ jobs:
 
           {
             echo "KEYSTORE_PATH=$KEYSTORE_PATH"
-            echo "STORE_PASSWORD=$ANDROID_UPLOAD_STORE_PASSWORD"
-            echo "KEY_PASSWORD=$ANDROID_UPLOAD_KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
       - name: Run unit tests and build signed release outputs
         shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleRelease bundleRelease
