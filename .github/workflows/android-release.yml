@@ -131,7 +131,7 @@ jobs:
           TAG="android-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           CHECKSUM_FILE="$RUNNER_TEMP/SHA256SUMS.txt"
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
-          sha256sum "$APK_FILE" "$AAB_FILE" > "$CHECKSUM_FILE"
+          sha256sum "$APK_FILE" "$AAB_FILE" | awk '{ name=$2; sub(/^.*\\//, "", name); print $1 "  " name }' > "$CHECKSUM_FILE"
 
           cat > "$NOTES_FILE" <<EOF
           Mahi Repair Android production build.
