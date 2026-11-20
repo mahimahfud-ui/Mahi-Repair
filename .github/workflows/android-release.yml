@@ -2,9 +2,14 @@ name: Android Production Release
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Type PUBLISH to create a permanent GitHub Release from the signed main-branch build"
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-production-release
@@ -17,6 +22,21 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Confirm release request and source branch
+        shell: bash
+        env:
+          CONFIRM_RELEASE: ${{ inputs.confirm_release }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Production APK releases can only be built from main."
+            exit 1
+          fi
+          if [[ "$CONFIRM_RELEASE" != "PUBLISH" ]]; then
+            echo "::error::Type PUBLISH in the release confirmation field."
+            exit 1
+          fi
+
       - name: Checkout source
         uses: actions/checkout@v7
 
@@ -87,3 +107,51 @@ jobs:
             app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish signed APK and AAB as a permanent GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          APK_FILE="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          AAB_FILE="$(find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)"
+
+          if [[ -z "$APK_FILE" || ! -f "$APK_FILE" ]]; then
+            echo "::error::Signed release APK was not produced."
+            exit 1
+          fi
+          if [[ -z "$AAB_FILE" || ! -f "$AAB_FILE" ]]; then
+            echo "::error::Signed release AAB was not produced."
+            exit 1
+          fi
+
+          TAG="android-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          CHECKSUM_FILE="$RUNNER_TEMP/SHA256SUMS.txt"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          sha256sum "$APK_FILE" "$AAB_FILE" > "$CHECKSUM_FILE"
+
+          cat > "$NOTES_FILE" <<EOF
+          Mahi Repair Android production build.
+
+          - Source commit: `$GITHUB_SHA`
+          - Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - Signing: built with the existing configured Android upload keystore.
+          - Assets: signed APK, Android App Bundle (AAB), and SHA-256 checksums.
+
+          Install the APK directly on a compatible Android device. The AAB is for supported app-store distribution workflows.
+          EOF
+
+          gh release create "$TAG" "$APK_FILE" "$AAB_FILE" "$CHECKSUM_FILE" \
+            --title "Mahi Repair Android build ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            --notes-file "$NOTES_FILE" \
+            --target "$GITHUB_SHA"
+
+          {
+            echo "## Permanent GitHub Release"
+            echo
+            echo "- Tag: `$TAG`"
+            echo "- APK/AAB: [Download release assets]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG)"
+            echo "- SHA-256 checksums are attached as `SHA256SUMS.txt`."
+          } >> "$GITHUB_STEP_SUMMARY"
