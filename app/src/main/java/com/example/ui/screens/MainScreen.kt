@@ -139,7 +139,6 @@ private data class DeviceSnapshot(
 fun MainScreen(
     state: MainUiState,
     onRunRepair: () -> Unit,
-    runRepairEnabled: Boolean,
     onRetryAvailability: () -> Unit,
     onSelectTool: (String) -> Unit,
     onDismissToolPicker: () -> Unit,
@@ -335,6 +334,7 @@ private fun HomePage(
     onOpenTools: () -> Unit,
     onOpenHistory: () -> Unit,
     onRunRepair: () -> Unit,
+    runRepairEnabled: Boolean,
     onRetryAvailability: () -> Unit,
     onSelectTool: (String) -> Unit
 ) {
