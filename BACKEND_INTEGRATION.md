@@ -1,131 +1,73 @@
-# Mahi Repair Cloud — Android Backend Integration Guide
+# Android Backend Integration — Current Supabase Contract
 
-This guide details how the Android application connects to the secure Google Cloud & Firebase staging backend.
+**This document replaces the older Firebase/Cloud Run staging guide.** The production architecture currently used by Android and the separate Owner Admin website is one shared Supabase project. Do not use the old Firebase ID-token, Cloud Run `/api/v1`, in-app Admin PIN or legacy Express contracts described in historical branches.
 
----
+## Canonical resources
 
-## 1. Cloud Infrastructure & Configuration
-
-| Parameter | Value |
+| Component | Current value |
 |---|---|
-| **Staging API Base URL** | `https://ais-dev-kahuk3nnzze6ngscnugunt-253592682542.asia-southeast1.run.app/api/v1` |
-| **Local Dev Base URL** | `http://10.0.2.2:3000/api/v1` (Android Emulator) or `http://localhost:3000/api/v1` |
-| **Firebase Project ID** | `manifest-hawk-76tvw` |
-| **Firestore Database ID** | `ai-studio-mahirepair-a294799a-c294-4076-998a-6efc3ff9c0b7` |
-| **Auth Domain** | `manifest-hawk-76tvw.firebaseapp.com` |
-| **Signature Algorithm** | `RSASSA-PKCS1-v1_5` with `SHA-256` (RSA-3072) |
+| Android repository | [Mahi-Repair](https://github.com/mahimahfud-ui/Mahi-Repair) |
+| Standalone Owner Admin | [Mahi-Repair-Admin](https://github.com/mahimahfud-ui/Mahi-Repair-Admin) |
+| Owner website | https://mahi-repair-admin-yy7c.onrender.com |
+| Supabase project ref | `shwqsljicmhflnvjqjah` |
+| Supabase URL | `https://shwqsljicmhflnvjqjah.supabase.co` |
+| Region | `ap-south-1` |
 
----
+The Android APK is Member-only. Owner administration must stay in the separate website. Do not re-add Owner screens, Admin routes, Owner API clients or an Admin PIN to Android.
 
-## 2. Recipe Verification Public Key (RSA-3072)
+## Android client configuration
 
-Embed this public key in the Android APK to verify all tool recipes before parsing or executing:
+The Android build reads the public Supabase URL and publishable key from the Gradle-generated `BuildConfig` values sourced from the repository's `.env.example` / local `.env`.
 
-### Base64 DER Format (for `X509EncodedKeySpec`):
-```text
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAoO8m4oNIqIb0kGdLI6fWZKwS4Ffe0bfIS3XX2Z0lQV+Df+hOCvDIC/ADqiz2px9lVkiOKTZGSLCSJNOzFXXiqhG6s8vhp18BxbSIimTW7JY/JL6+Y/4leAQTuZOkj7EN9DHtwtUP6UusWUyDR4iB8/SRpxeK0VM1BMFvqXZlR+AhN5IALS1Gwz+UbpEZkPcGG/uiesAMuL3/jkRay+GD+ynCHzX6XS3CYJmH3GebGWDhZJlm8TOwUipCKm/fu1a1cKzrYu9pR7luBU1dOhQMnitaclEeovDKrXwyC3idwCrO5ovslKp2BwY9AxRDzv7qz1oc64EKNZnyis0HScvppGmaCf/NJJz//TpAkJy2MxwAc2n38jTyOtW1Om9UNNpjxjbddfXYwtLil78XGIZetDz+KzRaa9CdNKhdPAmwLhKf2KSNfOPCUp4dM/mAjEtK51I/puisNrGE6jYiyzOMHPR8jFDLm21N2/rbYMdyo1ptNEs2OBwLx4UefPaE4QHrAgMBAAE=
-```
+- `SUPABASE_URL`: public Supabase project URL.
+- `SUPABASE_ANON_KEY`: public publishable/anon client key.
+- `RECIPE_SIGNING_PUBLIC_KEY_PEM`: RSA-3072 verification public key only.
+- `MAHI_API_BASE_URL` and `REMOTE_SUPPORT_API_BASE_URL`: legacy optional APIs; their current `.invalid` values intentionally fail closed.
 
-### Full X.509 PEM:
-```text
------BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAoO8m4oNIqIb0kGdLI6fW
-ZKwS4Ffe0bfIS3XX2Z0lQV+Df+hOCvDIC/ADqiz2px9lVkiOKTZGSLCSJNOzFXXi
-qhG6s8vhp18BxbSIimTW7JY/JL6+Y/4leAQTuZOkj7EN9DHtwtUP6UusWUyDR4iB
-8/SRpxeK0VM1BMFvqXZlR+AhN5IALS1Gwz+UbpEZkPcGG/uiesAMuL3/jkRay+GD
-+ynCHzX6XS3CYJmH3GebGWDhZJlm8TOwUipCKm/fu1a1cKzrYu9pR7luBU1dOhQM
-nitaclEeovDKrXwyC3idwCrO5ovslKp2BwY9AxRDzv7qz1oc64EKNZnyis0HScvp
-pGmaCf/NJJz//TpAkJy2MxwAc2n38jTyOtW1Om9UNNpjxjbddfXYwtLil78XGIZe
-tDz+KzRaa9CdNKhdPAmwLhKf2KSNfOPCUp4dM/mAjEtK51I/puisNrGE6jYiyzOM
-HPR8jFDLm21N2/rbYMdyo1ptNEs2OBwLx4UefPaE4QHrAgMBAAE=
------END PUBLIC KEY-----
-```
+Never put a Supabase service-role/secret key, Owner PIN, SMTP/provider credential or RSA private key in Android configuration.
 
----
+## Authentication and API flow
 
-## 3. Core Android Network & Execution Flows
+The active Kotlin client is `app/src/main/java/com/example/data/remote/SupabaseClient.kt`.
 
-### Flow A: Device Registration (App Startup)
-1. On initial launch, generate device hardware profile and call:
-   ```http
-   POST /api/v1/devices/register
-   Authorization: Bearer <Firebase_ID_Token>
-   Content-Type: application/json
+1. Member email OTP request uses Supabase Auth `/auth/v1/otp` with account creation disabled.
+2. OTP verification uses Supabase Auth `/auth/v1/verify`.
+3. Session refresh and sign-out use Supabase Auth token/logout endpoints.
+4. Device registration calls the JWT-protected `register-device` Edge Function and stores only the server-issued device UUID in app-private storage.
+5. Catalogue sync calls `get-my-repair-tools` for the authenticated Member and registered device.
+6. Single-tool retrieval calls `get-signed-repair-tool`; Android verifies RSA-SHA256 over the exact `signed_payload` UTF-8 bytes before parsing.
+7. Android validates schema, parameters and every action ID against the native allowlist. Downloaded data is never executable code.
+8. Repair reports are stored in the Room outbox and uploaded through `submit-repair-run`; retries reuse the same `run_id` so the backend can enforce idempotency.
 
-   {
-     "device_label": "Pixel 8 Pro",
-     "app_version": "1.0.0",
-     "android_version": "15",
-     "android_api": 35
-   }
-   ```
-2. The server responds with `status: "registered"` and a server-issued `device_id`.
-3. Store `device_id` securely in Android EncryptedSharedPreferences (excluded from auto-backup).
-4. On subsequent app launches, include `device_id` in the body to record last-seen timestamps and verify that the device is not revoked.
+All Member endpoints require the Supabase access token. Owner tokens must be rejected by Member-only operations; suspended Members and revoked devices must fail closed.
 
-### Flow B: Syncing Authorized Repair Tools
-1. Fetch current signed tools authorized for the authenticated member:
-   ```http
-   POST /api/v1/recipes/my-tools
-   Authorization: Bearer <Firebase_ID_Token>
-   Content-Type: application/json
+## Realtime contract
 
-   {
-     "device_id": "<saved_device_id>"
-   }
-   ```
-2. For each tool returned, verify the detached `signature` over the exact UTF-8 bytes of `signed_payload` using `RecipeSignatureVerifier.kt`.
-3. Cache verified recipes locally in Room database for offline emergency capability.
+The Android client uses `SupabaseRealtimeClient.kt` to subscribe to the private topic derived from the authenticated Member UID and server-issued device ID. Events are opaque invalidation hints only. On an event, Android refetches the current authorized catalogue through authenticated Edge Functions; a Realtime event never carries a recipe or grants permission to execute.
 
-### Flow C: Verifying and Executing a Recipe
-```kotlin
-// Android Kotlin Signature Verification
-val isVerified = RecipeSignatureVerifier.verifyAndParse(
-    signedPayload = tool.signedPayload,
-    signatureBase64 = tool.signature,
-    publicKeyDerBase64 = RECIPE_SIGNING_PUBLIC_KEY_DER
-)
-// Only after verification passes, execute using RecipeExecutionEngine
-```
+The Admin website uses the separate Owner-only topic and its server-guarded pages. Keep project-wide public Realtime access disabled and verify the corresponding `realtime.messages` RLS policies.
 
-### Flow D: Reporting Repair Telemetry
-Upon recipe completion or user cancellation, submit telemetry:
-```http
-POST /api/v1/repair-runs
-Authorization: Bearer <Firebase_ID_Token>
-Content-Type: application/json
+## Recipe signing security
 
-{
-  "device_id": "<saved_device_id>",
-  "tool_id": "tool_dns_repair",
-  "tool_version": 1,
-  "started_at": "2026-11-07T10:20:00.000Z",
-  "completed_at": "2026-11-07T10:20:25.000Z",
-  "result": "SUCCESS",
-  "step_results": [
-    { "step_id": "s1", "action_name": "CHECK_INTERNET", "status": "COMPLETED", "duration_ms": 120 },
-    { "step_id": "s2", "action_name": "DNS_LOOKUP", "status": "COMPLETED", "duration_ms": 95 }
-  ],
-  "app_version": "1.0.0"
-}
-```
+The Android app contains only the RSA public verification key. The matching RSA-3072 PKCS#8 private key belongs in Supabase Edge Function Secrets and must be used only by the server-side `admin-publish-tool` function.
 
----
+The live production keypair match was not independently verifiable during the 20 November 2026 audit. Do not publish a real repair tool until the Owner securely verifies that the deployed private key matches the Android public key. Never print or share the private key.
 
-## 4. Admin Panel Unlock PIN API Contract
+## Authoritative contracts and acceptance
 
-When porting administrative controls into the Android APK:
-1. Require an authenticated account with `role == 'owner'`.
-2. Prompt for the unlock PIN (`6993` default).
-3. Call server-side verification:
-   ```http
-   POST /api/v1/admin/pin/verify
-   Authorization: Bearer <Owner_Firebase_ID_Token>
-   Content-Type: application/json
+Read these before changing code or production configuration:
 
-   {
-     "pin": "6993"
-   }
-   ```
-4. If verified, use the returned `adminSessionToken` to access administrative mutations.
-5. The PIN is verified on the server using PBKDF2 with SHA-512 (100,000 iterations), constant-time comparison, and strict 5-attempt rate limiting.
+- [Production handover and live acceptance gates](PRODUCTION_SETUP_CHECKLIST.md)
+- [Android API contract](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/blob/main/docs/ANDROID_API_CONTRACT.md)
+- [Admin deployment and Supabase operations](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/blob/main/docs/DEPLOYMENT.md)
+- [Admin security model](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/blob/main/docs/SECURITY_MODEL.md)
+
+A green Android build, active Edge Function, or successful unauthenticated health probe is not end-to-end acceptance. The required physical-device sequence is invited Member OTP → server-issued device registration → Owner creates/tests/publishes/assigns a signed tool → Android verifies and runs a safe native action → report appears in Admin Logs.
+
+## Optional services are not part of the core live path
+
+Device Intelligence upload and Remote Support currently point at legacy `MAHI_API_BASE_URL` placeholders and intentionally fail closed. Do not point them at the Admin website or deploy the old local-JSON staging Express backend as production storage. Implement a separate durable authenticated API before enabling those optional features.
+
+## Firebase/Cloud Run material
+
+Firebase project metadata and the old Google AI Studio handoff files remain in the repository for historical/staging reference. They do not define the current Android Auth, catalogue, reporting or Realtime backend. Do not create a new Firebase project/database, provision Cloud Run, enable billing or migrate the clients as part of routine repair-app completion.
