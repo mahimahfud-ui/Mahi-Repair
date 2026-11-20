@@ -1,8 +1,31 @@
 # Mahi Repair — Live Production Handover
 
-**Last verified:** 11 November 2026
+**Production inspection updated:** 20 November 2026
 
-This document replaces the older setup guide. The production Supabase database and Edge Functions are already provisioned. Do **not** run migrations, recreate keys, or redeploy every function just to complete this handover.
+This is the operational checklist for the current shared-Supabase architecture. Read the status addendum below before using the older 11 November deployment observations.
+
+## 0. Latest production inspection — 20 November 2026
+
+A read-only inspection of the connected Supabase production project confirmed:
+
+- Project `shwqsljicmhflnvjqjah` is `ACTIVE_HEALTHY`, PostgreSQL 17.11, region `ap-south-1`.
+- Nine migrations are recorded as applied.
+- Seventeen Edge Functions report `ACTIVE`; sixteen require JWT verification and the signed Auth `send-email-hook` is the only JWT-disabled function.
+- All nine public tables have RLS enabled.
+- Profiles: one active Owner and one active Member.
+- Devices: 0; repair tools: 0; published versions: 0; repair runs: 0; audit events: 0.
+- `storage.buckets` returned no buckets.
+- Security Advisor reports `auth_leaked_password_protection` as a warning: leaked-password protection is disabled.
+
+The Owner's successful PIN login, live Auth redirect allowlist, email delivery, production RSA private/public-key match, physical-device workflow and production Android signing remain unverified. A configured or ACTIVE endpoint is not proof of end-to-end operation.
+
+The source-controlled Admin Render definition now declares repository `Mahi-Repair-Admin`, branch `main`, Singapore region and the `checksPass` deploy trigger. The canonical hostname recorded by the current Supabase config and production handover is `https://mahi-repair-admin-yy7c.onrender.com`. The last recorded Render LIVE/deployed-SHA evidence in this document is from 11 November; check the Render dashboard for the current deployed SHA before release.
+
+The Live App Update Engine is not provisioned in production: no update migration, private Storage bucket or `admin-publish-app-update` / `get-app-update-manifest` / `get-app-update-asset-url` functions were found during this inspection. The implementation in the unmerged Android feature branch must not be treated as live.
+
+Firebase/Cloud Run handoff files are historical migration proposals and have been superseded. The current Android and separate Owner Admin apps use the shared Supabase project. Do not provision a duplicate backend or start a Firebase cutover without a separately approved architecture change.
+
+Do not run migrations, recreate keys, or redeploy every function just to complete this handover.
 
 ## 1. Canonical architecture
 
@@ -24,8 +47,8 @@ Both clients use the same Supabase project and only its public publishable key. 
 - All 9 public tables have RLS enabled.
 - All 17 production Edge Functions are `ACTIVE`. 16 require JWT verification; the Auth `send-email-hook` validates its signed webhook payload.
 - Admin functions use the canonical Admin origin `https://mahi-repair-admin-yy7c.onrender.com`.
-- Render reports the standalone Admin service as `LIVE`. Its production build, TypeScript check, and server startup succeeded.
-- A live `/api/health` fetch returned `status=configured` and `ready=true`; the login page also loaded.
+- Historical Render evidence recorded on 11 November reported the standalone Admin service as `LIVE`; its production build, TypeScript check, and server startup succeeded at that time.
+- A live `/api/health` fetch on 11 November returned `status=configured` and `ready=true`; the login page also loaded. Recheck the current deployed SHA and endpoint in Render before release.
 - Android PR #27 is merged to `main`. Android CI, Backend CI, and legacy scaffold CI passed. A 24 MB debug APK artifact was produced.
 
 This verifies deployments and configuration shape, not the complete owner/member/device/repair workflow.

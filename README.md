@@ -6,7 +6,7 @@ Mahi Repair is the native Android repair client for invited Members. The Android
 
 Owner management is provided only by the standalone [Mahi Repair Admin repository](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at:
 
-https://mahi-repair-admin.onrender.com
+https://mahi-repair-admin-yy7c.onrender.com
 
 The Owner Console is a separate web application and is not embedded in this Android app. The Android client has no Owner Admin screen, route, Settings entry, or privileged Admin API client.
 
