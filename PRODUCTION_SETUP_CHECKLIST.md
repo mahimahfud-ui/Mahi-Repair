@@ -6,26 +6,33 @@ This is the operational checklist for the current shared-Supabase architecture. 
 
 ## 0. Latest production inspection — 20 November 2026
 
-A read-only inspection of the connected Supabase production project confirmed:
+Current source checkpoints:
+- Android `main`: `88850e27621322f2c546ecaf71f7dd285f2ffdda` (the source commit before this documentation-only runbook commit).
+- Separate Admin `main`: `2b1a354eeece55b0a495a139ad90309c02f75418`.
+- Android CI, Backend CI, and Admin CI were successful on the recorded source checkpoint.
 
-- Project `shwqsljicmhflnvjqjah` is `ACTIVE_HEALTHY`, PostgreSQL 17.11, region `ap-south-1`.
-- Nine migrations are recorded as applied.
-- Seventeen Edge Functions report `ACTIVE`; sixteen require JWT verification and the signed Auth `send-email-hook` is the only JWT-disabled function.
-- All nine public tables have RLS enabled.
-- Profiles: one active Owner and one active Member.
-- Devices: 0; repair tools: 0; published versions: 0; repair runs: 0; audit events: 0.
-- `storage.buckets` returned no buckets.
-- Security Advisor reports `auth_leaked_password_protection` as a warning: leaked-password protection is disabled.
+Production update-engine state from the latest inspection:
+- The signed app-update migration is applied in the shared production Supabase project `shwqsljicmhflnvjqjah` (`ap-south-1`).
+- Private Storage bucket `mahi-app-updates` exists with ZIP/APK restrictions and Owner-controlled upload paths.
+- App-update Edge Functions are active: `admin-publish-app-update` (v2), `get-app-update-manifest` (v1), and `get-app-update-asset-url` (v1). The publish function validates stored assets, signs canonical manifests with the existing server-side RSA key, verifies the signature against the Android public key, then commits the immutable release.
+- The app-update release table uses Owner-only read access and immutable release records. The Owner publish function is restricted to the service role; Member clients receive only authorized manifests and short-lived asset URLs.
+- Last observed state: zero published app-update releases and zero registered devices. Recheck live counts before any rollout; do not publish a dummy release to test.
+- Android `main` includes the signed update verifier, private asset download checks, system-installer handoff, data-package staging/activation and rollback. Update checks are wired after Member authentication, on app foreground, and on the device-scoped `app_update_published` Realtime event.
 
-The Owner's successful PIN login, live Auth redirect allowlist, email delivery, production RSA private/public-key match, physical-device workflow and production Android signing remain unverified. A configured or ACTIVE endpoint is not proof of end-to-end operation.
+Production app / Admin state:
+- Android remains Member-only; Owner actions remain in the separate Admin repository and Render website.
+- The canonical Admin login URL is `https://mahi-repair-admin-yy7c.onrender.com/login`. Login UI and unauthenticated route protection were observed, but a successful Owner PIN session has not been accepted.
+- Last observed profile state: one active Owner and one active Member. Real Member OTP delivery, device registration, repair execution and Admin report acceptance remain untested.
+- The Supabase Security Advisor warning `auth_leaked_password_protection` remains open.
 
-The source-controlled Admin Render definition now declares repository `Mahi-Repair-Admin`, branch `main`, Singapore region and the `checksPass` deploy trigger. The canonical hostname recorded by the current Supabase config and production handover is `https://mahi-repair-admin-yy7c.onrender.com`. The last recorded Render LIVE/deployed-SHA evidence in this document is from 11 November; check the Render dashboard for the current deployed SHA before release.
+Production APK signing:
+- No production APK/AAB or GitHub Release has been created.
+- The previous manual workflow run `44760926078` failed closed because the three Android upload-signing secrets were missing; the build steps were skipped.
+- A new permanent JKS upload keystore with alias `upload` has now been generated and its key-pair operation verified. Certificate SHA-256 (lowercase, no colons): `092cce4003935755b407f4670d50b84376c8e8f7495e0d81df679c7441b05636`.
+- The keystore and one-time credentials handoff file are delivered separately to the Owner. They are not committed to this repository. The Owner must configure `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_STORE_PASSWORD`, and `ANDROID_UPLOAD_KEY_PASSWORD` in GitHub Actions Secrets, then manually run the production workflow with confirmation `PUBLISH`.
+- The Owner reported that Mahi Repair is not installed on their device. The first official install should come from the signed GitHub Release, not the root-level debug APK.
 
-The Live App Update Engine is not provisioned in production: no update migration, private Storage bucket or `admin-publish-app-update` / `get-app-update-manifest` / `get-app-update-asset-url` functions were found during this inspection. The implementation in the unmerged Android feature branch must not be treated as live.
-
-Firebase/Cloud Run handoff files are historical migration proposals and have been superseded. The current Android and separate Owner Admin apps use the shared Supabase project. Do not provision a duplicate backend or start a Firebase cutover without a separately approved architecture change.
-
-Do not run migrations, recreate keys, or redeploy every function just to complete this handover.
+See [Production Release & Device Acceptance Runbook](docs/PRODUCTION_RELEASE_AND_DEVICE_ACCEPTANCE.md) for the exact release procedure and the real-device test sequence.
 
 ## 1. Canonical architecture
 
@@ -120,14 +127,14 @@ Current production data has 2 profiles (1 active Owner and 1 active Member) but 
 
 ## 8. Android build and release signing
 
-The CI artifact is a **debug APK**, about 24 MB, signed with an ephemeral CI debug keystore. It is suitable for initial installation/testing, not a production release. A future CI run may use a different debug keystore, so an installed debug build may need to be uninstalled before installing another debug artifact.
+The normal CI artifact is a **debug APK**, about 24 MB, and is not the production release. A permanent production JKS keystore with alias `upload` has now been generated and locally verified; its certificate SHA-256 is `092cce4003935755b407f4670d50b84376c8e8f7495e0d81df679c7441b05636` (lowercase, no colons).
 
-A production release requires the Owner's stable release keystore and protected build variables:
-- `KEYSTORE_PATH`
-- `STORE_PASSWORD`
-- `KEY_PASSWORD`
+The Owner must add these GitHub Actions repository secrets:
+- `ANDROID_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_UPLOAD_STORE_PASSWORD`
+- `ANDROID_UPLOAD_KEY_PASSWORD`
 
-Do not commit the keystore or passwords. Use protected GitHub Actions secrets or the approved release environment. No production release-signed APK/AAB has been produced or verified yet.
+The keystore and credentials were delivered separately and are not present in source control. Retain secure backups; never replace this key. After adding the secrets, manually run **Actions → Android Production Release** from `main` with confirmation `PUBLISH`. A successful signed APK/AAB and matching certificate fingerprint have not yet been produced or verified.
 
 ## 9. Optional legacy backend / remote support
 
