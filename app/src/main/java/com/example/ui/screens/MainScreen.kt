@@ -94,10 +94,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.R
 import com.example.data.local.RepairHistoryEntity
 import com.example.domain.models.RepairTool
 import com.example.ui.MainUiState
+import com.example.ui.AppUpdateUiState
 import com.example.ui.components.ExecutionDialog
 import com.example.ui.theme.MahiAccent
 import com.example.ui.theme.MahiAccentDim
@@ -143,7 +145,11 @@ fun MainScreen(
     onDismissExecution: () -> Unit,
     onRequestPermission: (String) -> Unit,
     onCancelPermission: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onCheckForAppUpdates: () -> Unit,
+    onInstallAppUpdate: () -> Unit,
+    onApplyDataUpdate: () -> Unit,
+    onRollbackDataUpdate: () -> Unit
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val desktop = screenWidth >= 1024
@@ -267,7 +273,11 @@ fun MainScreen(
                         device = device,
                         maxWidth = maxWidth,
                         onRefresh = onRetryAvailability,
-                        onSignOut = onSignOut
+                        onSignOut = onSignOut,
+                        onCheckForAppUpdates = onCheckForAppUpdates,
+                        onInstallAppUpdate = onInstallAppUpdate,
+                        onApplyDataUpdate = onApplyDataUpdate,
+                        onRollbackDataUpdate = onRollbackDataUpdate
                     )
                 }
             }
@@ -552,11 +562,31 @@ private fun SettingsPage(
     device: DeviceSnapshot,
     maxWidth: Dp,
     onRefresh: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onCheckForAppUpdates: () -> Unit,
+    onInstallAppUpdate: () -> Unit,
+    onApplyDataUpdate: () -> Unit,
+    onRollbackDataUpdate: () -> Unit
 ) {
     PageFrame(maxWidth) {
         PageHeading("PREFERENCES & ACCOUNT", "Settings", "Your account, device and local synchronization status.")
         Spacer(Modifier.height(18.dp))
+        state.remoteAnnouncement?.let { announcement ->
+            AppCard {
+                Text(announcement.title, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(announcement.body, color = MahiTextSecondary, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        AppUpdateCard(
+            state = state.appUpdate,
+            onCheck = onCheckForAppUpdates,
+            onInstall = onInstallAppUpdate,
+            onApplyData = onApplyDataUpdate,
+            onRollback = onRollbackDataUpdate
+        )
+        Spacer(Modifier.height(12.dp))
         AppCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = CircleShape, color = MahiAccentDim, modifier = Modifier.size(46.dp)) {
@@ -620,6 +650,75 @@ private fun SettingsPage(
             Icon(Icons.Default.Logout, null)
             Spacer(Modifier.width(8.dp))
             Text("Sign out", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+
+@Composable
+private fun AppUpdateCard(
+    state: AppUpdateUiState,
+    onCheck: () -> Unit,
+    onInstall: () -> Unit,
+    onApplyData: () -> Unit,
+    onRollback: () -> Unit
+) {
+    val installedVersion = BuildConfig.VERSION_CODE.toLong()
+    val release = state.release
+    val nativeAvailable = release?.isNativeUpdateAvailable(installedVersion) == true
+    val dataAvailable = release?.hasDataUpdate == true
+
+    AppCard {
+        Text("APP UPDATES", color = MahiTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("Installed version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = MahiTextSecondary, fontSize = 12.sp)
+        Button(
+            onClick = onCheck,
+            enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
+        ) {
+            if (state.isChecking) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
+            else Text("Check for updates")
+        }
+        state.message?.let { Text(it, color = MahiTextSecondary, fontSize = 12.sp) }
+        state.error?.let { Text(it, color = MahiRedPrimary, fontSize = 12.sp) }
+        if (release != null && (nativeAvailable || dataAvailable)) {
+            Text("Release #${release.releaseNumber} · ${release.appVersionName}", color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
+            if (release.releaseNotes.isNotBlank()) Text(release.releaseNotes, color = MahiTextSecondary, fontSize = 12.sp)
+            if (release.mandatory && release.requiresUpdate(installedVersion)) {
+                Text("The Owner marked this update as mandatory.", color = MahiWarningAmber, fontSize = 12.sp)
+            }
+            if (nativeAvailable) {
+                Button(
+                    onClick = onInstall,
+                    enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MahiRedPrimary)
+                ) {
+                    if (state.isInstalling) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
+                    else Text("Download & install APK")
+                }
+                Text("The APK is verified before Android opens the system installer. You must approve installation on this device.", color = MahiTextMuted, fontSize = 11.sp)
+            }
+            if (dataAvailable) {
+                Button(
+                    onClick = onApplyData,
+                    enabled = !state.isChecking && !state.isInstalling && !state.isApplyingDataUpdate,
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MahiAccent)
+                ) {
+                    if (state.isApplyingDataUpdate) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
+                    else Text("Download & apply signed data")
+                }
+                state.downloadProgress?.let { Text("Verified download progress: ${(it * 100).toInt()}%", color = MahiTextSecondary, fontSize = 11.sp) }
+                Text("Only signed configuration and declared JSON/image resources can be activated. No remote scripts or executable code are run.", color = MahiTextMuted, fontSize = 11.sp)
+                TextButton(onClick = onRollback, enabled = !state.isApplyingDataUpdate) {
+                    Text("Rollback to previous data release", color = MahiAccent)
+                }
+            }
         }
     }
 }
