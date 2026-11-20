@@ -61,11 +61,10 @@ data class MainUiState(
     val otpSentForEmail: String? = null,
     val history: List<RepairHistoryEntity> = emptyList(),
     val lastSyncTimestamp: Long = 0L,
-    val pendingReportCount: Int = 0
-,
+    val pendingReportCount: Int = 0,
     val appUpdate: AppUpdateUiState = AppUpdateUiState(),
     val remoteAnnouncement: VerifiedRemoteAnnouncement? = null
-
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MahiRepairApplication
