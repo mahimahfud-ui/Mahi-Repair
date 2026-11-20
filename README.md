@@ -36,6 +36,10 @@ Use the checked-in Gradle wrapper:
 
 The debug APK is for development/testing. A production release must use the owner's protected release-signing configuration and pass the physical-device acceptance gates documented in `PRODUCTION_SETUP_CHECKLIST.md`.
 
+## Get the APK from GitHub
+
+Follow the [GitHub APK download and production release guide](docs/GITHUB_APK_RELEASE.md) to download a temporary CI test APK or create a permanent signed GitHub Release.
+
 ## Release boundary
 
 A successful CI build does not prove live end-to-end operation. Before declaring production acceptance, verify the Owner PIN login, Member invitation/OTP delivery, RSA public/private key match, a real Member device registration, Owner tool publish, Android signature verification, safe repair execution, and report visibility in the Admin Console.
