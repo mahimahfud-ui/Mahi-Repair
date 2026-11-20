@@ -320,47 +320,7 @@ class SupabaseClient(
         }
     }
 
-    /**
-     * Submit repair run execution report to Supabase backend.
-     */
-    suspend fun submitRepairRun(report: SubmitRunRequest, authToken: String): Result<String> = withContext(Dispatchers.IO) {
-        if (!isConfigured()) {
-            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
-        }
 
-        val url = "$baseUrl/functions/v1/submit-repair-run"
-        val adapter = moshi.adapter(SubmitRunRequest::class.java)
-        val bodyJson = adapter.toJson(report)
-
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", anonKey)
-            .addHeader("Authorization", "Bearer $authToken")
-            .addHeader("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody(jsonMediaType))
-            .build()
-
-        try {
-            val response = okHttpClient.newCall(request).execute()
-            response.use {
-                val resBody = it.body?.string() ?: ""
-                if (it.isSuccessful) {
-                    val parsed = moshi.adapter(SubmitRunResponse::class.java).fromJson(resBody)
-                        ?: return@withContext Result.failure(IOException("Report acceptance response was empty."))
-                    if (!parsed.data.accepted || parsed.data.runId != report.runId) {
-                        return@withContext Result.failure(IOException("Server did not confirm acceptance of this repair report."))
-                    }
-                    Result.success(parsed.data.runId)
-                } else {
-                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "The server denied this report submission.")) else Result.failure(IOException("Failed to submit run report (HTTP ${it.code})."))
-                }
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 
     /**
      * Fetch the latest signed update manifest for this authenticated, registered device.
