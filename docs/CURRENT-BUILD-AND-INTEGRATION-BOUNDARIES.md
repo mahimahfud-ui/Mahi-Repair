@@ -1,31 +1,56 @@
-# Current Build and Release Requirements
+# Current Build and Integration Boundaries
 
-This repository currently contains a native Kotlin/Jetpack Compose Android application under `app/`, a legacy root Vite web prototype, an embedded Admin panel, and a Node.js backend prototype.
+**Last audited: 20 November 2026.** This file describes the current Android source and its production acceptance boundaries. The standalone Owner Console lives in the separate [Mahi-Repair-Admin repository](https://github.com/mahimahfud-ui/Mahi-Repair-Admin).
 
-## Build behavior
+## Product architecture
 
-- Android CI runs unit tests and produces a debug APK only when all tests pass.
-- CI creates an ephemeral debug keystore. Its APK is for testing and is not a production-signed release.
-- The root npm lockfile is synchronized from the root `package.json` on the feature-branch CI path before a clean install.
-- The embedded Admin panel has its own lockfile and independent CI checks.
+- `app/` is the native Kotlin/Jetpack Compose Android Member application.
+- The Owner Admin website is a separate Next.js application in the separate repository above. It is not part of the Android user experience.
+- The root Vite/React and Express files and the legacy `admin-panel/` subtree are not the production Android Member backend. Do not deploy their local JSON/demo backend as production storage.
+- Android Auth, device registration, recipe sync, repair-run reporting and private Realtime use the shared Supabase project `shwqsljicmhflnvjqjah`.
+- Firebase metadata/dependencies remain in the repository, but they do not establish that native Firebase Auth or Firestore is the active production runtime. Do not provision a parallel backend or run a Firebase migration based only on those files.
 
-## Runtime configuration
+## Android build behavior
 
-The Android build can compile with the explicit placeholder values in `.env.example`. Those values are intentionally unusable. A successful build does not mean any backend is configured.
+- Android CI runs unit tests and assembles a debug APK after tests pass.
+- CI creates an ephemeral debug keystore. The resulting APK is for development/testing and is not a production-signed release.
+- A separate manual GitHub Actions workflow builds the production APK/AAB using the existing upload keystore supplied through protected secrets.
+- Preserve application ID `com.aistudio.mahirepair.qrzntk`, versioning discipline and the existing upload signing identity. Do not generate a replacement upload key or change the package ID.
+- A successful build proves compilation/tests for that commit; it does not prove production credentials, deployed secrets, email delivery, device registration or physical-device repair behavior.
 
-Before a real release, configure:
-- A real Supabase URL and publishable/anon key for the current Android Supabase client.
-- A matching RSA-3072 signing private/public keypair. Keep the private PEM only in server-side secrets and embed only the matching public PEM in Android.
-- A real HTTPS remote-support API base URL pointing to a deployed service that implements the documented API.
-- The Owner account, roles, email delivery and server-side PIN configuration.
+## Active Supabase runtime
 
-## Current integration boundaries
+The native client uses:
 
-- The Android authentication, catalogue and foreground Realtime implementation still uses Supabase. Firebase project metadata in the repository is not, by itself, a native Firebase Auth/Firestore integration.
-- The root Express backend currently uses a local JSON staging database abstraction. It must be replaced with durable shared storage before multi-instance production deployment.
-- Remote diagnostic commands are restricted to signed, allowlisted read-only operations. Guided actions requiring foreground user confirmation are not dispatched by the background service.
-- The Android remote-support service does not currently implement a WebRTC screen capture/encoding/peer-connection pipeline. Its presence does not prove live laptop screen sharing.
-- Device intelligence collection is present, but uploading that profile to the currently configured Android backend still requires a completed repository integration.
-- Render Admin remains a separate Next.js application using its existing Supabase integration. Its production deployment has not been migrated by this build-stabilization branch.
+- `app/src/main/java/com/example/data/remote/SupabaseClient.kt` for OTP, session lifecycle, device registration, authorized catalogue, signed recipe and report APIs.
+- `app/src/main/java/com/example/data/repository/ToolRepository.kt` for device identity, signed release validation, catalogue synchronization and outbox report upload.
+- `app/src/main/java/com/example/sync/SupabaseRealtimeClient.kt` for private invalidation broadcasts.
+- `app/src/main/java/com/example/workers/ToolSyncWorker.kt` and `ReportUploadWorker.kt` for background sync and durable report retry.
+- `app/src/main/java/com/example/security/` for signature and recipe-contract verification.
 
-A test APK must not be described as production-ready until real credentials, matching signing keys, durable storage, deployed API routes and physical-device acceptance tests have been verified.
+Android must fetch a fresh server-authorized signed release before execution when current Member/device revocation must take effect. It executes only native, locally allowlisted action IDs, never downloaded scripts or arbitrary shell commands.
+
+## Optional APIs intentionally fail closed
+
+- `DeviceIntelligenceApiClient` and `RemoteSupportService` use the legacy `MAHI_API_BASE_URL` configuration.
+- The checked-in example value is an invalid placeholder so these optional network features fail closed until a real authenticated durable service is delivered.
+- Do not point these clients at the Owner website.
+- The existing Remote Support service source does not prove working live video transport; a real WebRTC/media pipeline, visible Member approval, Android MediaProjection consent, audit and stop/revoke flow are still required.
+
+## Production gates
+
+Before a production release:
+
+1. Confirm canonical standalone Admin URL, Render deployment SHA and Supabase Auth redirect configuration.
+2. Test Owner PIN login and Member denial on the real website.
+3. Verify Auth Send Email Hook wiring and actual invited Member OTP delivery.
+4. Prove the production RSA private/public signing-key match without exposing private material.
+5. Complete a real Android Member OTP → device registration → signed tool sync → safe action → report visible in Admin Logs flow.
+6. Test revocation, offline report retry/idempotency, token refresh, Realtime and update handling on physical hardware.
+7. Build and install the production-signed APK/AAB with the existing signing identity.
+
+See the root [PRODUCTION_SETUP_CHECKLIST.md](../PRODUCTION_SETUP_CHECKLIST.md) and the standalone Admin [current production handover](https://github.com/mahimahfud-ui/Mahi-Repair-Admin/blob/main/docs/CURRENT_PRODUCTION_HANDOVER.md).
+
+## Live application updates
+
+The signed App Update Engine exists in an unmerged Android integration branch, not in the current `main` production runtime. Its database migration, private Storage bucket and update Edge Functions were not present in production during the 20 November audit. Review and port the implementation as a separate staged change; do not merge stacked draft PRs or publish mandatory updates before physical-device acceptance.
