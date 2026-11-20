@@ -135,7 +135,11 @@ fun MahiRepairApp(
                 }
             },
             onCancelPermission = { viewModel.onCancelRuntimePermission() },
-            onSignOut = { viewModel.onSignOut() }
+            onSignOut = { viewModel.onSignOut() },
+            onCheckForAppUpdates = { viewModel.onCheckForAppUpdates() },
+            onInstallAppUpdate = { viewModel.onInstallAppUpdate() },
+            onApplyDataUpdate = { viewModel.onApplyDataUpdate() },
+            onRollbackDataUpdate = { viewModel.onRollbackDataUpdate() }
         )
     }
 }
