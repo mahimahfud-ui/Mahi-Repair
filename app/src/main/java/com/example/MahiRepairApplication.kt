@@ -6,6 +6,8 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.PreferencesManager
 import com.example.data.remote.SupabaseClient
 import com.example.data.repository.AuthRepository
+import com.example.data.repository.AppUpdateContentInstaller
+import com.example.data.repository.AppUpdateRepository
 import com.example.data.repository.HistoryRepository
 import com.example.data.repository.ToolRepository
 import com.example.domain.actions.ActionRegistry
@@ -22,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -29,6 +32,7 @@ class MahiRepairApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val realtimeEventDeduplicator = RealtimeEventDeduplicator(MAX_REMEMBERED_EVENTS)
+    val appUpdateEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     @Volatile private var appIsForeground = false
     private var realtimeJob: Job? = null
 
@@ -37,6 +41,8 @@ class MahiRepairApplication : Application() {
     lateinit var supabaseClient: SupabaseClient private set
     lateinit var authRepository: AuthRepository private set
     lateinit var toolRepository: ToolRepository private set
+    lateinit var appUpdateContentInstaller: AppUpdateContentInstaller private set
+    lateinit var appUpdateRepository: AppUpdateRepository private set
     lateinit var historyRepository: HistoryRepository private set
     lateinit var actionRegistry: ActionRegistry private set
     lateinit var recipeExecutionEngine: RecipeExecutionEngine private set
@@ -50,7 +56,9 @@ class MahiRepairApplication : Application() {
         preferencesManager = PreferencesManager(this)
         supabaseClient = SupabaseClient()
         authRepository = AuthRepository(preferencesManager, supabaseClient)
-        toolRepository = ToolRepository(this, database, preferencesManager, supabaseClient, authRepository)
+        appUpdateContentInstaller = AppUpdateContentInstaller(this)
+        toolRepository = ToolRepository(this, database, preferencesManager, supabaseClient, authRepository, appUpdateContentInstaller)
+        appUpdateRepository = AppUpdateRepository(this, supabaseClient, toolRepository, appUpdateContentInstaller)
         historyRepository = HistoryRepository(database)
         actionRegistry = ActionRegistry(this)
         recipeExecutionEngine = RecipeExecutionEngine(actionRegistry)
@@ -79,6 +87,7 @@ class MahiRepairApplication : Application() {
             realtimeJob = null
             return
         }
+        appUpdateEvents.tryEmit(Unit)
         if (realtimeJob?.isActive == true) return
 
         realtimeJob = applicationScope.launch {
@@ -150,6 +159,10 @@ class MahiRepairApplication : Application() {
         // Events only invalidate local freshness. The authenticated Edge Function
         // decides whether this member/device is still authorized; event labels never
         // authorize execution or revoke a session on their own.
+        if (event.name == "app_update_published") {
+            appUpdateEvents.tryEmit(Unit)
+            return
+        }
         val result = toolRepository.syncTools()
         if (result.isFailure) {
             Log.w(TAG, "Authorized catalog refresh after Realtime event failed.")

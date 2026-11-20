@@ -16,6 +16,9 @@ import com.example.domain.engine.PermissionExecutionResult
 import com.example.security.RuntimePermissionContract
 import com.example.domain.models.RepairTool
 import com.example.domain.models.RepairRunReport
+import com.example.security.VerifiedAppUpdateRelease
+import com.example.security.VerifiedRemoteAnnouncement
+import com.example.security.VerifiedRemoteConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +37,16 @@ data class PermissionLaunchRequest(
     val wasRequestedBefore: Boolean
 )
 
+data class AppUpdateUiState(
+    val isChecking: Boolean = false,
+    val isInstalling: Boolean = false,
+    val release: VerifiedAppUpdateRelease? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val isApplyingDataUpdate: Boolean = false,
+    val downloadProgress: Float? = null
+)
+
 data class MainUiState(
     val session: UserSession = UserSession("", "", "", false),
     val tools: List<RepairTool> = emptyList(),
@@ -48,7 +61,9 @@ data class MainUiState(
     val otpSentForEmail: String? = null,
     val history: List<RepairHistoryEntity> = emptyList(),
     val lastSyncTimestamp: Long = 0L,
-    val pendingReportCount: Int = 0
+    val pendingReportCount: Int = 0,
+    val appUpdate: AppUpdateUiState = AppUpdateUiState(),
+    val remoteAnnouncement: VerifiedRemoteAnnouncement? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -68,6 +83,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _history = MutableStateFlow<List<RepairHistoryEntity>>(emptyList())
     private val _lastSyncTimestamp = MutableStateFlow(0L)
     private val _pendingReportCount = MutableStateFlow(0)
+    private val _appUpdate = MutableStateFlow(AppUpdateUiState())
     private val executionMutex = Mutex()
 
     val uiState: StateFlow<MainUiState> = combine(
@@ -84,7 +100,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _otpSentForEmail,
         _history,
         _lastSyncTimestamp,
-        _pendingReportCount
+        _pendingReportCount,
+        _appUpdate,
+        app.appUpdateContentInstaller.activeRemoteConfigFlow
     ) { values ->
         MainUiState(
             session = values[0] as UserSession,
@@ -100,7 +118,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             otpSentForEmail = values[10] as String?,
             history = values[11] as List<RepairHistoryEntity>,
             lastSyncTimestamp = values[12] as Long,
-            pendingReportCount = values[13] as Int
+            pendingReportCount = values[13] as Int,
+            appUpdate = values[14] as AppUpdateUiState,
+            remoteAnnouncement = (values[15] as VerifiedRemoteConfig?)?.announcement
         )
     }.stateIn(
         viewModelScope,
@@ -109,6 +129,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        observeAppUpdateEvents()
         viewModelScope.launch {
             toolRepo.lastSyncFlow.collect { timestamp -> _lastSyncTimestamp.value = timestamp }
         }
@@ -136,11 +157,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (session.isAuthenticated) {
                     refreshTools()
                     syncDeviceIntelligence()
+                    onCheckForAppUpdates()
                 } else {
                     _isToolsLoading.value = false
                     _canRetryAvailability.value = false
                     _isToolPickerOpen.value = false
                     _repairStatusMessage.value = null
+                }
+            }
+        }
+    }
+
+    private fun observeAppUpdateEvents() {
+        viewModelScope.launch {
+            app.appUpdateEvents.collectLatest {
+                if (authRepo.sessionFlow.first().isAuthenticated) {
+                    onCheckForAppUpdates()
                 }
             }
         }
@@ -176,6 +208,85 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Exception) {
                 Log.w("MahiDeviceProfile", "Device profile collection or upload failed.", error)
             }
+        }
+    }
+
+
+    fun onCheckForAppUpdates() {
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling) return
+        _appUpdate.value = AppUpdateUiState(isChecking = true)
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.checkForUpdate()
+            if (result.isFailure) {
+                _appUpdate.value = AppUpdateUiState(
+                    error = result.exceptionOrNull()?.message ?: "The app-update service could not be reached."
+                )
+                return@launch
+            }
+            val release = result.getOrNull()
+            val installedVersion = BuildConfig.VERSION_CODE.toLong()
+            val message = when {
+                release == null -> "No signed stable release is currently published."
+                release.isNativeUpdateAvailable(installedVersion) && release.hasDataUpdate -> "A signed Android and data update are available."
+                release.isNativeUpdateAvailable(installedVersion) -> "A signed Android update is available."
+                release.hasDataUpdate -> "A signed configuration/content update is available."
+                release.requiresUpdate(installedVersion) -> "This app version is below the minimum supported version, but no compatible APK is available. Contact the Owner."
+                else -> "Mahi Repair is up to date."
+            }
+            _appUpdate.value = AppUpdateUiState(release = release, message = message)
+        }
+    }
+
+    fun onInstallAppUpdate() {
+        val release = _appUpdate.value.release ?: return
+        if (_appUpdate.value.isChecking || _appUpdate.value.isInstalling ||
+            !release.isNativeUpdateAvailable(BuildConfig.VERSION_CODE.toLong())
+        ) return
+        _appUpdate.value = _appUpdate.value.copy(isInstalling = true, error = null, message = null)
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.downloadAndPromptInstall(release)
+            _appUpdate.value = _appUpdate.value.copy(
+                isInstalling = false,
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message ?: if (result.isFailure) "The update could not be installed." else null
+            )
+        }
+    }
+
+    fun onApplyDataUpdate() {
+        val release = _appUpdate.value.release ?: return
+        if (!release.hasDataUpdate || _appUpdate.value.isChecking ||
+            _appUpdate.value.isInstalling || _appUpdate.value.isApplyingDataUpdate
+        ) return
+        _appUpdate.value = _appUpdate.value.copy(
+            isApplyingDataUpdate = true,
+            downloadProgress = 0f,
+            message = null,
+            error = null
+        )
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.applyDataUpdate(release) { progress ->
+                _appUpdate.value = _appUpdate.value.copy(downloadProgress = progress.coerceIn(0f, 1f))
+            }
+            _appUpdate.value = _appUpdate.value.copy(
+                isApplyingDataUpdate = false,
+                downloadProgress = null,
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message ?: if (result.isFailure) "The signed data update could not be activated." else null
+            )
+            if (result.isSuccess) refreshTools()
+        }
+    }
+
+    fun onRollbackDataUpdate() {
+        if (_appUpdate.value.isApplyingDataUpdate) return
+        viewModelScope.launch {
+            val result = app.appUpdateRepository.rollbackDataUpdate()
+            _appUpdate.value = _appUpdate.value.copy(
+                message = result.getOrNull(),
+                error = result.exceptionOrNull()?.message
+            )
+            if (result.isSuccess) refreshTools()
         }
     }
 
@@ -336,6 +447,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 authRepo.signOut()
                 _otpSentForEmail.value = null
+            _appUpdate.value = AppUpdateUiState()
                 _authStatusMessage.value = null
             } catch (cancelled: CancellationException) {
                 throw cancelled

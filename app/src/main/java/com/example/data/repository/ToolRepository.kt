@@ -19,6 +19,7 @@ import com.example.domain.models.RepairTool
 import com.example.domain.models.StepStatus
 import com.example.domain.models.ToolCategory
 import com.example.security.RecipeContractVerifier
+import com.example.security.VerifiedRemoteConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,8 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.example.sync.SyncManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -50,7 +53,8 @@ class ToolRepository(
     private val database: AppDatabase,
     private val preferencesManager: PreferencesManager,
     private val supabaseClient: SupabaseClient,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val appUpdateContentInstaller: AppUpdateContentInstaller? = null
 ) {
     private val toolDao = database.toolDao()
     private val historyDao = database.repairHistoryDao()
@@ -67,8 +71,23 @@ class ToolRepository(
     val lastSyncFlow: Flow<Long> = preferencesManager.lastSyncFlow
     val pendingReportCountFlow: Flow<Int> = reportOutboxDao.observeCount()
 
-    val toolsFlow: Flow<List<RepairTool>> = toolDao.getEnabledToolsFlow().map { entities ->
-        entities.map { it.toDomain() }
+    val toolsFlow: Flow<List<RepairTool>> = combine(
+        toolDao.getEnabledToolsFlow(),
+        appUpdateContentInstaller?.activeRemoteConfigFlow ?: flowOf<VerifiedRemoteConfig?>(null)
+    ) { entities, remoteConfig ->
+        entities.mapNotNull { entity ->
+            val slug = entity.recipeSlug
+            if (slug != null && remoteConfig?.repairTools?.get(slug) == false) {
+                return@mapNotNull null
+            }
+            val tool = entity.toDomain()
+            val metadata = slug?.let { remoteConfig?.toolMetadata?.get(it) }
+            tool.copy(
+                name = metadata?.title ?: tool.name,
+                description = metadata?.description ?: tool.description,
+                category = metadata?.category?.let(ToolCategory::fromCategory) ?: tool.category
+            )
+        }
     }
 
     /**

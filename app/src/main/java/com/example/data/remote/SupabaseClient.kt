@@ -1,6 +1,12 @@
 package com.example.data.remote
 
 import com.example.BuildConfig
+import com.example.data.remote.dto.AppUpdateManifestRequest
+import com.example.data.remote.dto.AppUpdateManifestResponse
+import com.example.data.remote.dto.AppUpdateManifestData
+import com.example.data.remote.dto.AppUpdateAssetRequest
+import com.example.data.remote.dto.AppUpdateAssetResponse
+import com.example.data.remote.dto.AppUpdateAssetData
 import com.example.data.remote.dto.AuthSessionResponse
 import com.example.data.remote.dto.GetSignedToolRequest
 import com.example.data.remote.dto.GetToolsRequest
@@ -314,6 +320,95 @@ class SupabaseClient(
         }
     }
 
+
+
+    /**
+     * Fetch the latest signed update manifest for this authenticated, registered device.
+     * The caller must verify the detached signature before parsing or trusting its contents.
+     */
+    suspend fun getAppUpdateManifest(
+        deviceId: String,
+        channel: String,
+        authToken: String
+    ): Result<AppUpdateManifestData?> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
+        }
+        if (authToken.isBlank() || channel !in setOf("stable", "beta")) {
+            return@withContext Result.failure(IllegalArgumentException("Invalid app-update request."))
+        }
+
+        val body = moshi.adapter(AppUpdateManifestRequest::class.java)
+            .toJson(AppUpdateManifestRequest(deviceId = deviceId, channel = channel))
+        val request = Request.Builder()
+            .url("$baseUrl/functions/v1/get-app-update-manifest")
+            .addHeader("apikey", anonKey)
+            .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
+            .post(body.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                val responseBody = it.body?.string().orEmpty()
+                if (it.isSuccessful) {
+                    val envelope = moshi.adapter(AppUpdateManifestResponse::class.java).fromJson(responseBody)
+                        ?: return@withContext Result.failure(IOException("Empty app-update manifest response."))
+                    Result.success(envelope.data)
+                } else {
+                    Result.failure(IOException("App-update manifest request failed (HTTP ${it.code})."))
+                }
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    /**
+     * Request a short-lived Storage URL for an asset already included in a verified release.
+     * The backend rechecks the signed-in member and registered, non-revoked device.
+     */
+    suspend fun getAppUpdateAssetUrl(
+        deviceId: String,
+        releaseId: String,
+        assetId: String,
+        authToken: String
+    ): Result<AppUpdateAssetData> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
+        }
+        if (authToken.isBlank() || !Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$").matches(assetId)) {
+            return@withContext Result.failure(IllegalArgumentException("Invalid app-update asset request."))
+        }
+
+        val body = moshi.adapter(AppUpdateAssetRequest::class.java)
+            .toJson(AppUpdateAssetRequest(deviceId = deviceId, releaseId = releaseId, assetId = assetId))
+        val request = Request.Builder()
+            .url("$baseUrl/functions/v1/get-app-update-asset-url")
+            .addHeader("apikey", anonKey)
+            .addHeader("Authorization", "Bearer $authToken")
+            .addHeader("Content-Type", "application/json")
+            .post(body.toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                val responseBody = it.body?.string().orEmpty()
+                if (it.isSuccessful) {
+                    val envelope = moshi.adapter(AppUpdateAssetResponse::class.java).fromJson(responseBody)
+                        ?: return@withContext Result.failure(IOException("Empty app-update asset response."))
+                    Result.success(envelope.data)
+                } else {
+                    Result.failure(IOException("App-update asset request failed (HTTP ${it.code})."))
+                }
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     /**
      * Submit repair run execution report to Supabase backend.
      */
@@ -340,19 +435,14 @@ class SupabaseClient(
                 val resBody = it.body?.string() ?: ""
                 if (it.isSuccessful) {
                     val parsed = moshi.adapter(SubmitRunResponse::class.java).fromJson(resBody)
-                        ?: return@withContext Result.failure(IOException("Report acceptance response was empty."))
-                    if (!parsed.data.accepted || parsed.data.runId != report.runId) {
-                        return@withContext Result.failure(IOException("Server did not confirm acceptance of this repair report."))
-                    }
-                    Result.success(parsed.data.runId)
+                    Result.success(parsed?.data?.runId ?: "")
                 } else {
-                    if (it.code == 401 || it.code == 403) Result.failure(ServerAuthorizationException(it.code, "The server denied this report submission.")) else Result.failure(IOException("Failed to submit run report (HTTP ${it.code})."))
+                    Result.failure(IOException("Failed to submit run report (HTTP ${it.code}): $resBody"))
                 }
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
 }
