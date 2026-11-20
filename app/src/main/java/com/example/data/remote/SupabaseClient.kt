@@ -85,8 +85,6 @@ class SupabaseClient(
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (cancelled: CancellationException) {
-            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
