@@ -248,6 +248,7 @@ fun MainScreen(
                         onOpenTools = { sectionName = AppSection.TOOLS.name },
                         onOpenHistory = { sectionName = AppSection.HISTORY.name },
                         onRunRepair = onRunRepair,
+                        runRepairEnabled = state.featureFlags["repair.run_enabled"] != false,
                         onRetryAvailability = onRetryAvailability,
                         onSelectTool = { selectedToolId = it }
                     )
@@ -333,6 +334,7 @@ private fun HomePage(
     onOpenTools: () -> Unit,
     onOpenHistory: () -> Unit,
     onRunRepair: () -> Unit,
+    runRepairEnabled: Boolean,
     onRetryAvailability: () -> Unit,
     onSelectTool: (String) -> Unit
 ) {
@@ -378,7 +380,7 @@ private fun HomePage(
         PrimaryActionButton(
             label = if (state.tools.isEmpty()) "Refresh repair library" else "Choose a repair",
             enabled = if (state.tools.isEmpty()) state.canRetryAvailability && !state.isToolsLoading
-                else !state.isToolsLoading && !state.isPreparingRepair,
+                else runRepairEnabled && !state.isToolsLoading && !state.isPreparingRepair,
             loading = state.isToolsLoading || state.isPreparingRepair,
             onClick = if (state.tools.isEmpty()) onRetryAvailability else onRunRepair,
             modifier = Modifier.testTag("run_repair_button")

@@ -63,6 +63,7 @@ data class MainUiState(
     val lastSyncTimestamp: Long = 0L,
     val pendingReportCount: Int = 0,
     val appUpdate: AppUpdateUiState = AppUpdateUiState(),
+    val featureFlags: Map<String, Boolean> = emptyMap(),
     val remoteAnnouncement: VerifiedRemoteAnnouncement? = null
 )
 
@@ -120,6 +121,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lastSyncTimestamp = values[12] as Long,
             pendingReportCount = values[13] as Int,
             appUpdate = values[14] as AppUpdateUiState,
+            featureFlags = (values[15] as VerifiedRemoteConfig?)?.featureFlags.orEmpty(),
             remoteAnnouncement = (values[15] as VerifiedRemoteConfig?)?.announcement
         )
     }.stateIn(
