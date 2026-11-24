@@ -91,8 +91,7 @@ fun MahiRepairApp(
     if (!state.session.isAuthenticated) {
         AuthScreen(
             state = state,
-            onRequestOtp = { viewModel.onRequestEmailOtp(it) },
-            onVerifyOtp = { viewModel.onVerifyEmailOtp(it) }
+            onSignIn = { memberId, pin -> viewModel.onSignInWithMemberCredentials(memberId, pin) }
         )
     } else {
         MainScreen(
