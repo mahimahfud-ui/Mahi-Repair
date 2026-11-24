@@ -8,10 +8,10 @@ import com.example.data.remote.dto.AppUpdateAssetRequest
 import com.example.data.remote.dto.AppUpdateAssetResponse
 import com.example.data.remote.dto.AppUpdateAssetData
 import com.example.data.remote.dto.AuthSessionResponse
+import com.example.data.remote.dto.MemberLoginRequest
 import com.example.data.remote.dto.GetSignedToolRequest
 import com.example.data.remote.dto.GetToolsRequest
 import com.example.data.remote.dto.GetToolsResponse
-import com.example.data.remote.dto.OtpRequest
 import com.example.data.remote.dto.RefreshTokenRequest
 import com.example.data.remote.dto.RegisterDeviceRequest
 import com.example.data.remote.dto.RegisterDeviceResponse
@@ -19,7 +19,6 @@ import com.example.data.remote.dto.RemoteSignedToolDto
 import com.example.data.remote.dto.SignedRecipeResponse
 import com.example.data.remote.dto.SubmitRunRequest
 import com.example.data.remote.dto.SubmitRunResponse
-import com.example.data.remote.dto.VerifyOtpRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.CancellationException
@@ -61,76 +60,41 @@ class SupabaseClient(
     }
 
     /**
-     * Request Email OTP from Supabase Auth.
+     * Exchange a server-issued Member ID and PIN for a scoped Supabase session.
+     * The real Auth identity is resolved inside the Edge Function only.
      */
-    suspend fun requestEmailOtp(email: String): Result<Unit> = withContext(Dispatchers.IO) {
-        if (!isConfigured()) {
-            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured in .env or settings."))
-        }
-
-        val url = "$baseUrl/auth/v1/otp"
-        val adapter = moshi.adapter(OtpRequest::class.java)
-        val bodyJson = adapter.toJson(OtpRequest(email = email, createUser = false))
-
+    suspend fun signInWithMemberCredentials(memberCode: String, pin: String): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext Result.failure(IllegalStateException("Repair service is not configured."))
+        val body = moshi.adapter(MemberLoginRequest::class.java).toJson(MemberLoginRequest(memberCode, pin))
         val request = Request.Builder()
-            .url(url)
+            .url("$baseUrl/functions/v1/member-login")
             .addHeader("apikey", anonKey)
             .addHeader("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody(jsonMediaType))
+            .post(body.toRequestBody(jsonMediaType))
             .build()
-
         try {
             val response = okHttpClient.newCall(request).execute()
             response.use {
+                val responseBody = it.body?.string().orEmpty()
                 if (it.isSuccessful) {
-                    Result.success(Unit)
-                } else {
-                    val errBody = it.body?.string() ?: ""
-                    Result.failure(IOException("Failed to send OTP (HTTP ${it.code})."))
-                }
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Verify 6-digit Email OTP from Supabase Auth.
-     */
-    suspend fun verifyEmailOtp(email: String, token: String): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
-        if (!isConfigured()) {
-            return@withContext Result.failure(IllegalStateException("Supabase backend is not configured."))
-        }
-
-        val url = "$baseUrl/auth/v1/verify"
-        val adapter = moshi.adapter(VerifyOtpRequest::class.java)
-        val bodyJson = adapter.toJson(VerifyOtpRequest(type = "email", email = email, token = token))
-
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", anonKey)
-            .addHeader("Content-Type", "application/json")
-            .post(bodyJson.toRequestBody(jsonMediaType))
-            .build()
-
-        try {
-            val response = okHttpClient.newCall(request).execute()
-            response.use {
-                val resBody = it.body?.string() ?: ""
-                if (it.isSuccessful) {
-                    val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(resBody)
-                        ?: return@withContext Result.failure(IOException("Empty session response"))
+                    val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(responseBody)
+                        ?: return@withContext Result.failure(IOException("Member sign-in response was empty."))
+                    if (session.accessToken.isNullOrBlank() || session.refreshToken.isNullOrBlank()) {
+                        return@withContext Result.failure(IOException("Member sign-in response omitted session tokens."))
+                    }
                     Result.success(session)
+                } else if (it.code == 401 || it.code == 403) {
+                    Result.failure(IOException("Member ID or PIN is incorrect, or account access is inactive."))
+                } else if (it.code == 429) {
+                    Result.failure(IOException("Too many sign-in attempts. Wait before trying again."))
                 } else {
-                    Result.failure(IOException("OTP verification failed (HTTP ${it.code})."))
+                    Result.failure(IOException("Member sign-in is temporarily unavailable (HTTP ${it.code})."))
                 }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (error: Exception) {
+            Result.failure(error)
         }
     }
 
