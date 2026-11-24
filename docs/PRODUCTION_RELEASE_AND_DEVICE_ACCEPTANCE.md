@@ -49,7 +49,7 @@ Install only this production Release APK for first production acceptance. Do not
 
 ## Owner / Member / physical-device acceptance
 
-This section requires a real Android device, a real Owner session, and a consenting Member email inbox. These steps cannot be marked complete by source-code inspection alone.
+This section requires a real Android device, a real Owner session, and an Owner-issued Member ID and PIN. These steps cannot be marked complete by source-code inspection alone.
 
 ### 1. Owner console
 - Open [Owner login](https://mahi-repair-admin-yy7c.onrender.com/login).
@@ -60,7 +60,7 @@ This section requires a real Android device, a real Owner session, and a consent
 
 ### 2. Member sign-in and device registration
 - Use an approved test Member identity and an inbox the Member controls.
-- Confirm the invitation/OTP email is actually delivered and the OTP is accepted by the Android app.
+- Confirm the Owner Console issues a Member ID + PIN and Android accepts those credentials without making an email request.
 - Confirm the signed-in role is Member, not Owner.
 - Confirm the Android device appears under that Member in the Admin console.
 - Confirm there is no Owner/Admin route, screen, credential, or navigation item in the Android app.
@@ -94,7 +94,7 @@ On the device, tap **Check for updates**, then **Download & install APK**. Confi
 - Do not use a native APK downgrade as a rollback test; this control is for the signed data/content release.
 
 ### 6. Final evidence
-Record the exact APK Release URL, release tag, workflow run URL, APK SHA-256, signing certificate fingerprint, device model/Android version, Owner login result, Member OTP result, registered device ID (do not expose it publicly), repair test outcome, native update result, data update result, and rollback result. Redact emails, OTPs, PINs, access tokens, and device identifiers from any public report.
+Record the exact APK Release URL, release tag, workflow run URL, APK SHA-256, signing certificate fingerprint, device model/Android version, Owner PIN result, Member ID/PIN result, registered device ID (do not expose it publicly), repair test outcome, native update result, data update result, and rollback result. Redact emails, OTPs, PINs, access tokens, and device identifiers from any public report.
 
 ## Current acceptance status
 
@@ -102,7 +102,7 @@ Record the exact APK Release URL, release tag, workflow run URL, APK SHA-256, si
 - Production APK signing: keystore generated and locally verified; **GitHub secrets still need Owner configuration**.
 - Production GitHub Release: pending successful manual workflow run.
 - Owner PIN login: not yet accepted.
-- Member OTP/device registration: not yet accepted.
+- Member ID/PIN/device registration: not yet accepted.
 - Physical repair run: not yet accepted.
 - Native APK update: not yet tested on a physical device.
 - Signed data update/rollback: source-wired, not yet tested on a physical device.
