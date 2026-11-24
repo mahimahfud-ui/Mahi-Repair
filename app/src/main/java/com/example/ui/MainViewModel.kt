@@ -58,7 +58,6 @@ data class MainUiState(
     val executionState: ExecutionEvent = ExecutionEvent.Idle,
     val authStatusMessage: String? = null,
     val isAuthLoading: Boolean = false,
-    val otpSentForEmail: String? = null,
     val history: List<RepairHistoryEntity> = emptyList(),
     val lastSyncTimestamp: Long = 0L,
     val pendingReportCount: Int = 0,
@@ -80,7 +79,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isToolPickerOpen = MutableStateFlow(false)
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     private val _isAuthLoading = MutableStateFlow(false)
-    private val _otpSentForEmail = MutableStateFlow<String?>(null)
     private val _history = MutableStateFlow<List<RepairHistoryEntity>>(emptyList())
     private val _lastSyncTimestamp = MutableStateFlow(0L)
     private val _pendingReportCount = MutableStateFlow(0)
@@ -98,7 +96,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         engine.engineState,
         _authStatusMessage,
         _isAuthLoading,
-        _otpSentForEmail,
         _history,
         _lastSyncTimestamp,
         _pendingReportCount,
@@ -116,13 +113,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             executionState = values[7] as ExecutionEvent,
             authStatusMessage = values[8] as String?,
             isAuthLoading = values[9] as Boolean,
-            otpSentForEmail = values[10] as String?,
-            history = values[11] as List<RepairHistoryEntity>,
-            lastSyncTimestamp = values[12] as Long,
-            pendingReportCount = values[13] as Int,
-            appUpdate = values[14] as AppUpdateUiState,
-            featureFlags = (values[15] as VerifiedRemoteConfig?)?.featureFlags.orEmpty(),
-            remoteAnnouncement = (values[15] as VerifiedRemoteConfig?)?.announcement
+            history = values[10] as List<RepairHistoryEntity>,
+            lastSyncTimestamp = values[11] as Long,
+            pendingReportCount = values[12] as Int,
+            appUpdate = values[13] as AppUpdateUiState,
+            featureFlags = (values[14] as VerifiedRemoteConfig?)?.featureFlags.orEmpty(),
+            remoteAnnouncement = (values[14] as VerifiedRemoteConfig?)?.announcement
         )
     }.stateIn(
         viewModelScope,
@@ -448,7 +444,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 authRepo.signOut()
-                _otpSentForEmail.value = null
             _appUpdate.value = AppUpdateUiState()
                 _authStatusMessage.value = null
             } catch (cancelled: CancellationException) {
@@ -459,45 +454,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onRequestEmailOtp(email: String) {
+    fun onSignInWithMemberCredentials(memberCode: String, pin: String) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authStatusMessage.value = null
             val result = try {
-                authRepo.requestEmailOtp(email)
+                authRepo.signInWithMemberCredentials(memberCode, pin)
             } catch (cancelled: CancellationException) {
                 _isAuthLoading.value = false
                 throw cancelled
-            }
-            _isAuthLoading.value = false
-            if (result.isSuccess) {
-                _otpSentForEmail.value = email
-                _authStatusMessage.value = result.getOrThrow()
-            } else {
-                _authStatusMessage.value = result.exceptionOrNull()?.message ?: "Failed to send OTP"
-            }
-        }
-    }
-
-    fun onVerifyEmailOtp(otp: String) {
-        val email = _otpSentForEmail.value ?: return
-        viewModelScope.launch {
-            _isAuthLoading.value = true
-            _authStatusMessage.value = null
-            val result = try {
-                authRepo.verifyEmailOtp(email, otp)
-            } catch (cancelled: CancellationException) {
+            } catch (error: Exception) {
                 _isAuthLoading.value = false
-                throw cancelled
+                _authStatusMessage.value = error.message ?: "Sign-in failed."
+                return@launch
             }
             _isAuthLoading.value = false
             if (result.isSuccess) {
                 toolRepo.clearAccessDeniedMessage()
                 toolRepo.enqueuePendingReportUploads()
                 _authStatusMessage.value = "Welcome to Mahi Repair!"
-                _otpSentForEmail.value = null
             } else {
-                _authStatusMessage.value = result.exceptionOrNull()?.message ?: "Verification failed"
+                _authStatusMessage.value = result.exceptionOrNull()?.message ?: "Member ID or PIN is incorrect."
             }
         }
     }

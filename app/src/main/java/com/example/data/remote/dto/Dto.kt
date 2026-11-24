@@ -4,16 +4,9 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
-data class OtpRequest(
-    val email: String,
-    @Json(name = "create_user") val createUser: Boolean = false
-)
-
-@JsonClass(generateAdapter = true)
-data class VerifyOtpRequest(
-    val type: String = "email",
-    val email: String,
-    val token: String
+data class MemberLoginRequest(
+    @Json(name = "member_code") val memberCode: String,
+    val pin: String
 )
 
 @JsonClass(generateAdapter = true)

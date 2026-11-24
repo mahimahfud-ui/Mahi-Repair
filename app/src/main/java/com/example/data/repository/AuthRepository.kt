@@ -23,68 +23,34 @@ class AuthRepository(
 
     suspend fun getSession(): UserSession = preferencesManager.sessionFlow.first()
 
-    suspend fun requestEmailOtp(email: String): Result<String> {
-        val cleanEmail = email.trim().lowercase()
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
-            return Result.failure(IllegalArgumentException("Please enter a valid invited email address."))
+    suspend fun signInWithMemberCredentials(memberCode: String, pin: String): Result<UserSession> = refreshMutex.withLock {
+        val cleanMemberCode = memberCode.trim().uppercase()
+        if (!Regex("^MR-[A-HJ-NP-Z2-9]{8}$").matches(cleanMemberCode)) {
+            return Result.failure(IllegalArgumentException("Enter the Member ID provided by the Owner."))
+        }
+        if (!Regex("^\\d{12}$").matches(pin)) {
+            return Result.failure(IllegalArgumentException("Enter the complete 12-digit PIN."))
         }
         if (!supabaseClient.isConfigured()) {
-            return Result.failure(IllegalStateException("Repair service is temporarily unavailable. Please try again later."))
+            return Result.failure(IllegalStateException("Repair service is temporarily unavailable."))
         }
-
-        val result = supabaseClient.requestEmailOtp(cleanEmail)
-        return if (result.isSuccess) {
-            Result.success("Access code sent to $cleanEmail. Check your inbox.")
-        } else {
-            Result.failure(IllegalStateException("Unable to send the access code. Check the address and try again.", result.exceptionOrNull()))
-        }
-    }
-
-    suspend fun verifyEmailOtp(email: String, otpToken: String): Result<UserSession> = refreshMutex.withLock {
-        val cleanEmail = email.trim().lowercase()
-        val cleanToken = otpToken.trim()
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
-            return Result.failure(IllegalArgumentException("Please enter a valid invited email address."))
-        }
-        if (cleanToken.length != 6 || cleanToken.any { !it.isDigit() }) {
-            return Result.failure(IllegalArgumentException("Enter the complete 6-digit access code."))
-        }
-        if (!supabaseClient.isConfigured()) {
-            return Result.failure(IllegalStateException("Repair service is temporarily unavailable. Please try again later."))
-        }
-
-        val result = supabaseClient.verifyEmailOtp(cleanEmail, cleanToken)
-        if (result.isFailure) {
-            val cause = result.exceptionOrNull()
-            return Result.failure(IllegalStateException("Verification failed. Check the code and try again.", cause))
-        }
+        val result = supabaseClient.signInWithMemberCredentials(cleanMemberCode, pin)
+        if (result.isFailure) return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Member sign-in failed."))
 
         val response = result.getOrThrow()
         val accessToken = response.accessToken?.takeIf { it.isNotBlank() }
             ?: return Result.failure(IllegalStateException("Authentication response did not include an access token."))
         val refreshToken = response.refreshToken?.takeIf { it.isNotBlank() }
             ?: return Result.failure(IllegalStateException("Authentication response did not include a refresh token."))
+        val user = response.user ?: return Result.failure(IllegalStateException("Authentication response did not include a Member identity."))
+        val role = user.appMetadata?.get("role")?.takeIf { it.isNotBlank() } ?: "member"
+        if (role != "member") return Result.failure(IllegalStateException("This credential is not authorized for Member access."))
+        val sessionIdentity = user.email?.takeIf { it.isNotBlank() } ?: cleanMemberCode
         val expiresAt = System.currentTimeMillis() + ((response.expiresIn ?: 0L) * 1000L)
-        val role = response.user?.appMetadata?.get("role")?.takeIf { it.isNotBlank() } ?: "member"
 
         return try {
-            preferencesManager.saveSession(
-                email = cleanEmail,
-                accessToken = accessToken,
-                refreshToken = refreshToken,
-                expiresAtMillis = expiresAt,
-                role = role
-            )
-            Result.success(
-                UserSession(
-                    email = cleanEmail,
-                    token = accessToken,
-                    role = role,
-                    isAuthenticated = true,
-                    refreshToken = refreshToken,
-                    expiresAtMillis = expiresAt
-                )
-            )
+            preferencesManager.saveSession(email = sessionIdentity, accessToken = accessToken, refreshToken = refreshToken, expiresAtMillis = expiresAt, role = role)
+            Result.success(UserSession(email = sessionIdentity, token = accessToken, role = role, isAuthenticated = true, refreshToken = refreshToken, expiresAtMillis = expiresAt))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
