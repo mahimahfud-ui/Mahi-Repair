@@ -42,4 +42,4 @@ Follow the [GitHub APK download and production release guide](docs/GITHUB_APK_RE
 
 ## Release boundary
 
-A successful CI build does not prove live end-to-end operation. Before declaring production acceptance, verify the Owner PIN login, Member invitation/OTP delivery, RSA public/private key match, a real Member device registration, Owner tool publish, Android signature verification, safe repair execution, and report visibility in the Admin Console.
+A successful CI build does not prove live end-to-end operation. Before declaring production acceptance, verify the Owner PIN login, Member ID/PIN sign-in and rate limiting, RSA public/private key match, a real Member device registration, Owner tool publish, Android signature verification, safe repair execution, and report visibility in the Admin Console.
