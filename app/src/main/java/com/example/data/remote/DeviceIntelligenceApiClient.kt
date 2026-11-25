@@ -16,11 +16,12 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Sends consented device intelligence to the authenticated Mahi API.
+ * Sends consented device intelligence to the authenticated Supabase register-device function.
  * A successful local collection is not reported as a successful upload.
  */
 class DeviceIntelligenceApiClient(
-    private val baseUrl: String = BuildConfig.MAHI_API_BASE_URL.trim().trimEnd('/')
+    private val supabaseUrl: String = BuildConfig.SUPABASE_URL.trim().trimEnd('/'),
+    private val publishableKey: String = BuildConfig.SUPABASE_ANON_KEY.trim()
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -44,15 +45,18 @@ class DeviceIntelligenceApiClient(
         if (accessToken.isBlank() || deviceId.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("A valid session and registered device are required."))
         }
-        if (!baseUrl.startsWith("https://") || baseUrl.endsWith(".invalid")) {
-            return@withContext Result.failure(IllegalStateException("Mahi API base URL is not configured."))
+        if (!supabaseUrl.startsWith("https://") ||
+            !supabaseUrl.endsWith(".supabase.co") ||
+            publishableKey.isBlank() ||
+            publishableKey.contains("placeholder", ignoreCase = true)
+        ) {
+            return@withContext Result.failure(IllegalStateException("Supabase device profile service is not configured."))
         }
 
         try {
             val body = JSONObject().apply {
                 put("device_id", deviceId)
-                put("device_label", deviceLabel)
-                put("app_installation_id", deviceId)
+                put("device_label", deviceLabel.take(60))
                 put("app_version", appVersion)
                 put("android_version", androidVersion)
                 put("android_api", androidApi)
@@ -64,7 +68,8 @@ class DeviceIntelligenceApiClient(
             }
 
             val request = Request.Builder()
-                .url("$baseUrl/api/v1/devices/register")
+                .url("$supabaseUrl/functions/v1/register-device")
+                .header("apikey", publishableKey)
                 .header("Authorization", "Bearer $accessToken")
                 .header("Content-Type", "application/json")
                 .post(body.toString().toRequestBody(jsonType))
@@ -78,7 +83,7 @@ class DeviceIntelligenceApiClient(
                 }
             }
         } catch (error: Exception) {
-            Result.failure(IOException("Device profile sync could not reach the configured API.", error))
+            Result.failure(IOException("Device profile sync could not reach Supabase.", error))
         }
     }
 
