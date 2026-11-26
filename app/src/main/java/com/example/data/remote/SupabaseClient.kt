@@ -72,7 +72,7 @@ class SupabaseClient(
             .url("$baseUrl/auth/v1/signup")
             .addHeader("apikey", anonKey)
             .addHeader("Content-Type", "application/json")
-            .post("{}".toRequestBody(jsonMediaType))
+            .post("""{"data":{},"gotrue_meta_security":{}}""".toRequestBody(jsonMediaType))
             .build()
         try {
             val response = okHttpClient.newCall(request).execute()
