@@ -1,7 +1,5 @@
 package com.example
 
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -62,7 +60,11 @@ class RunRepairScreenTest {
                 onDismissExecution = {},
                 onRequestPermission = {},
                 onCancelPermission = {},
-                onSignOut = {}
+                onSignOut = {},
+                onCheckForAppUpdates = {},
+                onInstallAppUpdate = {},
+                onApplyDataUpdate = {},
+                onRollbackDataUpdate = {}
             )
         }
     }
@@ -110,7 +112,7 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithText("Network Diagnostics").assertExists().assertIsDisplayed()
-        composeRule.onAllNodesWithText("DNS Troubleshooting").onLast().performClick()
+        composeRule.onAllNodesWithText("DNS Troubleshooting").get(1).performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
     }
 
