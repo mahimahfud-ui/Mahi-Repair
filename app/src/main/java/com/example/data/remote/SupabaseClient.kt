@@ -60,8 +60,52 @@ class SupabaseClient(
     }
 
     /**
+     * Create a per-installation anonymous Supabase identity. Anonymous Sign-Ins
+     * must be enabled in the project's Auth settings. This is a scoped Auth JWT,
+     * not a service-role bypass; device and tool authorization remain server-side.
+     */
+    suspend fun signInAnonymously(): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
+        if (!isConfigured()) {
+            return@withContext Result.failure(IllegalStateException("Repair service is not configured."))
+        }
+        val request = Request.Builder()
+            .url("$baseUrl/auth/v1/signup")
+            .addHeader("apikey", anonKey)
+            .addHeader("Content-Type", "application/json")
+            .post("{}".toRequestBody(jsonMediaType))
+            .build()
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use {
+                val body = it.body?.string().orEmpty()
+                if (it.isSuccessful) {
+                    val session = moshi.adapter(AuthSessionResponse::class.java).fromJson(body)
+                        ?: return@withContext Result.failure(IOException("Public access response was empty."))
+                    if (session.accessToken.isNullOrBlank() ||
+                        session.refreshToken.isNullOrBlank() ||
+                        session.user == null
+                    ) {
+                        return@withContext Result.failure(IOException("Public access response omitted its session identity."))
+                    }
+                    Result.success(session)
+                } else if (it.code == 429) {
+                    Result.failure(IOException("Public access is temporarily rate-limited. Please wait and try again."))
+                } else if (it.code == 400 || it.code == 422) {
+                    Result.failure(IOException("Public access is not enabled yet. Enable Anonymous Sign-Ins in Supabase Auth settings."))
+                } else {
+                    Result.failure(IOException("Public access is temporarily unavailable (HTTP ${it.code})."))
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    /**
      * Exchange a server-issued Member ID and PIN for a scoped Supabase session.
-     * The real Auth identity is resolved inside the Edge Function only.
+     * Retained only for compatibility with previously issued Member credentials.
      */
     suspend fun signInWithMemberCredentials(memberCode: String, pin: String): Result<AuthSessionResponse> = withContext(Dispatchers.IO) {
         if (!isConfigured()) return@withContext Result.failure(IllegalStateException("Repair service is not configured."))

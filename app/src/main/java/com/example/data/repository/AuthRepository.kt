@@ -2,6 +2,9 @@ package com.example.data.repository
 
 import com.example.data.local.PreferencesManager
 import com.example.data.local.UserSession
+import android.util.Base64
+import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 import com.example.data.remote.InvalidAuthSessionException
 import com.example.data.remote.SupabaseClient
 import kotlinx.coroutines.CancellationException
@@ -22,6 +25,133 @@ class AuthRepository(
     val sessionFlow: Flow<UserSession> = preferencesManager.sessionFlow
 
     suspend fun getSession(): UserSession = preferencesManager.sessionFlow.first()
+
+    /**
+     * Establish no-prompt public app access. A valid legacy Member session is kept
+     * for compatibility; otherwise the app silently creates an anonymous Supabase
+     * Auth user and stores its tokens encrypted by Android Keystore.
+     */
+    suspend fun ensurePublicSession(): Result<UserSession> = refreshMutex.withLock {
+        if (!supabaseClient.isConfigured()) {
+            return@withLock Result.failure(IllegalStateException("The public repair service is not configured."))
+        }
+
+        val current = preferencesManager.sessionFlow.first()
+        if (current.isAuthenticated && current.role == "member") {
+            if (current.refreshToken.isNotBlank() &&
+                current.expiresAtMillis > System.currentTimeMillis() + 60_000L
+            ) {
+                return@withLock Result.success(current)
+            }
+
+            if (current.refreshToken.isNotBlank()) {
+                val refreshed = supabaseClient.refreshSession(current.refreshToken)
+                if (refreshed.isSuccess) {
+                    val response = refreshed.getOrThrow()
+                    val accessToken = response.accessToken?.takeIf { it.isNotBlank() }
+                        ?: return@withLock Result.failure(IllegalStateException("Session refresh omitted the access token."))
+                    val refreshToken = response.refreshToken?.takeIf { it.isNotBlank() }
+                        ?: return@withLock Result.failure(IllegalStateException("Session refresh omitted the refresh token."))
+                    val role = response.user?.appMetadata?.get("role")?.takeIf { it.isNotBlank() } ?: current.role
+                    if (role == "member") {
+                        val expiresAt = System.currentTimeMillis() + ((response.expiresIn ?: 0L) * 1000L)
+                        return@withLock try {
+                            preferencesManager.saveSession(
+                                email = current.email,
+                                accessToken = accessToken,
+                                refreshToken = refreshToken,
+                                expiresAtMillis = expiresAt,
+                                role = role
+                            )
+                            Result.success(
+                                UserSession(
+                                    email = current.email,
+                                    token = accessToken,
+                                    role = role,
+                                    isAuthenticated = true,
+                                    refreshToken = refreshToken,
+                                    expiresAtMillis = expiresAt
+                                )
+                            )
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Result.failure(IllegalStateException("Could not securely persist the session.", error))
+                        }
+                    }
+                } else {
+                    val cause = refreshed.exceptionOrNull()
+                    if (cause !is InvalidAuthSessionException) {
+                        return@withLock Result.failure(cause ?: IllegalStateException("Session refresh failed."))
+                    }
+                }
+            }
+        }
+
+        if (current.isAuthenticated) preferencesManager.clearSession()
+
+        val anonymousResult = supabaseClient.signInAnonymously()
+        if (anonymousResult.isFailure) {
+            return@withLock Result.failure(
+                anonymousResult.exceptionOrNull()
+                    ?: IllegalStateException("Could not create public app access.")
+            )
+        }
+
+        val response = anonymousResult.getOrThrow()
+        val accessToken = response.accessToken?.takeIf { it.isNotBlank() }
+            ?: return@withLock Result.failure(IllegalStateException("Public access did not return an access token."))
+        val refreshToken = response.refreshToken?.takeIf { it.isNotBlank() }
+            ?: return@withLock Result.failure(IllegalStateException("Public access did not return a refresh token."))
+        val user = response.user
+            ?: return@withLock Result.failure(IllegalStateException("Public access did not return a user identity."))
+        val anonymous = user.isAnonymous ?: accessToken.isAnonymousJwt()
+        if (!anonymous) {
+            return@withLock Result.failure(IllegalStateException("Supabase returned a non-anonymous identity for public access."))
+        }
+        val role = user.appMetadata?.get("role")?.takeIf { it.isNotBlank() } ?: "member"
+        if (role != "member") {
+            return@withLock Result.failure(IllegalStateException("This identity is not authorized for public repair access."))
+        }
+
+        val identity = "anonymous:${user.id}"
+        val expiresAt = System.currentTimeMillis() + ((response.expiresIn ?: 0L) * 1000L)
+        return@withLock try {
+            preferencesManager.saveSession(
+                email = identity,
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresAtMillis = expiresAt,
+                role = role
+            )
+            Result.success(
+                UserSession(
+                    email = identity,
+                    token = accessToken,
+                    role = role,
+                    isAuthenticated = true,
+                    refreshToken = refreshToken,
+                    expiresAtMillis = expiresAt
+                )
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(IllegalStateException("Could not securely store public app access.", error))
+        }
+    }
+
+    private fun String.isAnonymousJwt(): Boolean {
+        return runCatching {
+            val parts = split('.')
+            require(parts.size == 3)
+            val decoded = Base64.decode(
+                parts[1],
+                Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+            )
+            JSONObject(String(decoded, StandardCharsets.UTF_8)).optBoolean("is_anonymous", false)
+        }.getOrDefault(false)
+    }
 
     suspend fun signInWithMemberCredentials(memberCode: String, pin: String): Result<UserSession> = refreshMutex.withLock {
         val cleanMemberCode = memberCode.trim().uppercase()
