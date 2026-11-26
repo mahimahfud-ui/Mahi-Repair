@@ -10,7 +10,7 @@ Updated: 20 November 2026
 - Current Android version: `versionCode = 1`, `versionName = 1.0`
 - Existing production release workflow: `.github/workflows/android-release.yml`
 - The previous production-release attempt failed closed at the missing Actions-secret validation step. No production APK/AAB or GitHub Release was created.
-- The app-update Android client is wired to check after Member authentication, when the app returns to the foreground, and after the device-scoped `app_update_published` Realtime event. The Member UI exposes check/install/data-apply/data-rollback actions.
+- The app-update Android client is wired to check after public anonymous session setup, when the app returns to the foreground, and after the device-scoped `app_update_published` Realtime event. The UI exposes check/install/data-apply/data-rollback actions.
 - The live update engine was separately provisioned in Supabase: private `mahi-app-updates` storage bucket and `admin-publish-app-update`, `get-app-update-manifest`, `get-app-update-asset-url` functions. Last observed published-release and registered-device counts were zero. Recheck current production state before any rollout.
 - No production update should be published merely to simulate a test.
 
@@ -47,30 +47,33 @@ Then open [Android Production Release](https://github.com/mahimahfud-ui/Mahi-Rep
 
 Install only this production Release APK for first production acceptance. Do not treat the root-level `Mahi-Repair-Installable.apk` or an old debug CI artifact as the production release.
 
-## Owner / Member / physical-device acceptance
+## Owner / public app / physical-device acceptance
 
-This section requires a real Android device, a real Owner session, and an Owner-issued Member ID and PIN. These steps cannot be marked complete by source-code inspection alone.
+This section requires a real Android device and a real Owner session. These steps cannot be marked complete by source-code inspection alone.
 
 ### 1. Owner console
 - Open [Owner login](https://mahi-repair-admin-yy7c.onrender.com/login).
-- Sign in with the existing 8–12 digit Owner PIN. Do not share the PIN.
+- Sign in with the existing Owner PIN. Do not share the PIN.
 - Confirm the Owner dashboard loads and `/updates` is accessible only after Owner authentication.
 - Confirm the production release manager loads and the private update bucket is available.
-- Do not invite or revoke anyone just to create test data.
+- No Owner authentication or administrative route may be embedded in the Android APK.
 
-### 2. Member sign-in and device registration
-- Use an approved test Member identity and an inbox the Member controls.
-- Confirm the Owner Console issues a Member ID + PIN and Android accepts those credentials without making an email request.
-- Confirm the signed-in role is Member, not Owner.
-- Confirm the Android device appears under that Member in the Admin console.
-- Confirm there is no Owner/Admin route, screen, credential, or navigation item in the Android app.
+### 2. Public anonymous access and device registration
+- In Supabase Dashboard → Authentication → Sign In / Providers, enable **Allow anonymous sign-ins**.
+- Install the APK on a clean Android device and launch it.
+- Confirm the app does not request email, OTP, Member ID, PIN, invitation, or manual registration.
+- Confirm it silently creates a Supabase anonymous Auth user and stores session tokens encrypted by Android Keystore.
+- Confirm the Auth trigger creates an active Member-profile row, the app registers its device, and the device appears in the separate Admin Console.
+- Confirm the Owner can revoke the device and the same installation remains blocked after refresh/relaunch. Clearing app data/reinstalling creates a new anonymous identity and cannot be treated as a person-level identity.
 
-### 3. Repair permission and safe run
-- Confirm the published tool list is loaded from the shared Supabase backend.
-- Confirm `repair.run_enabled = false` prevents the Run Repair action and `true` enables it only after server authorization.
-- Use only a non-destructive diagnostic or guided action whose recipe is approved for that test device.
-- Confirm the resulting repair report appears under the correct Member/device in Admin.
-- Verify that a repeated request does not create duplicate execution and that revoked/disabled authorization fails closed.
+### 3. Public tool publication and safe run
+- Publish a validated tool with audience `all_active_members` from the Owner Console.
+- Confirm the anonymous app receives the tool from Supabase and verifies its RSA-SHA256 signature.
+- Confirm a `selected_members` tool stays unavailable to anonymous public users.
+- Confirm `repair.run_enabled = false` disables Run Repair and `true` enables it only for a currently published, server-authorized recipe.
+- Use only a non-destructive diagnostic/guided action explicitly approved and covered by the Android allowlist.
+- Confirm the repair report appears in the Owner Console under the anonymous profile/device.
+- Verify duplicate-run protection, tool disable/unpublish, and device revocation fail closed.
 
 ### 4. Native app update
 A native update must be a real, newer release. The currently configured app is version code 1; an update APK must have a higher version code and use the permanent upload key above.
@@ -83,7 +86,7 @@ Before publishing:
 - upload to the private stable/beta path through the authenticated Owner release manager;
 - confirm server-side asset verification and manifest self-signature validation succeed.
 
-On the device, tap **Check for updates**, then **Download & install APK**. Confirm the app verifies the downloaded bytes and signing certificate, opens Android's system installer, and installs only after the user approves. Do not mark this test passed until the installed version code is newer and sign-in/device registration still work.
+On the device, tap **Check for updates**, then **Download & install APK**. Confirm the app verifies the downloaded bytes and signing certificate, opens Android's system installer, and installs only after the user approves. Do not mark this test passed until the installed version code is newer and the public anonymous session/device registration still work.
 
 ### 5. Signed data update and rollback
 - Use a narrowly scoped, non-destructive configuration or content change approved by the Owner.
@@ -94,15 +97,15 @@ On the device, tap **Check for updates**, then **Download & install APK**. Confi
 - Do not use a native APK downgrade as a rollback test; this control is for the signed data/content release.
 
 ### 6. Final evidence
-Record the exact APK Release URL, release tag, workflow run URL, APK SHA-256, signing certificate fingerprint, device model/Android version, Owner PIN result, Member ID/PIN result, registered device ID (do not expose it publicly), repair test outcome, native update result, data update result, and rollback result. Redact emails, OTPs, PINs, access tokens, and device identifiers from any public report.
+Record the exact APK Release URL, release tag, workflow run URL, APK SHA-256, signing certificate fingerprint, device model/Android version, Owner PIN result (Admin only), anonymous public-session result, registered device ID (do not expose it publicly), repair test outcome, native update result, data update result, and rollback result. Redact emails, OTPs, PINs, access tokens, and device identifiers from any public report.
 
 ## Current acceptance status
 
 - Source and CI: passed on the recorded main commits.
 - Production APK signing: keystore generated and locally verified; **GitHub secrets still need Owner configuration**.
 - Production GitHub Release: pending successful manual workflow run.
-- Owner PIN login: not yet accepted.
-- Member ID/PIN/device registration: not yet accepted.
+- Owner PIN login: not yet accepted (Admin Console only; unrelated to Android public access).
+- Public anonymous first-launch session/device registration: not yet accepted.
 - Physical repair run: not yet accepted.
 - Native APK update: not yet tested on a physical device.
 - Signed data update/rollback: source-wired, not yet tested on a physical device.
