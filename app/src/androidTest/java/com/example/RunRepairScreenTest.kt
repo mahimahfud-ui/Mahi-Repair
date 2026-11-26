@@ -126,6 +126,19 @@ class RunRepairScreenTest {
     }
 
     @Test
+    fun settingsExplainsPublicAccessWithoutAccountCredentialsOrSignOut() {
+        setMainScreen(MainUiState(tools = emptyList(), isToolsLoading = false))
+
+        composeRule.onNodeWithContentDescription("Settings").performClick()
+        composeRule.onNodeWithText("Public access").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("No email, PIN, Member ID or invitation is required. This device connects automatically.")
+            .assertExists()
+        composeRule.onNodeWithText("Sign out").assertDoesNotExist()
+        composeRule.onNodeWithText("Member Sign In").assertDoesNotExist()
+        composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
+    }
+
+    @Test
     fun unavailableCatalogueKeepsRunRepairDisabled() {
         setMainScreen(
             MainUiState(
