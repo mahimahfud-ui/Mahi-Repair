@@ -239,14 +239,21 @@ class ToolRepository(
         if (rejection == null && !expiredSession) return
 
         // Publish the reason before changing DataStore; session observers may react immediately.
+        val currentSession = authRepository.getSession()
+        val publicDeviceBlocked = currentSession.email.startsWith("anonymous:") &&
+            rejection?.statusCode == 403
         _accessDeniedMessage.value = when {
+            publicDeviceBlocked ->
+                "Public access for this device has been disabled by the Owner."
             rejection?.statusCode == 403 ->
-                "Access to Mahi Repair was denied for this account or device. Sign in again or contact the Owner."
-            else -> "Your repair session expired or is no longer authorized. Please sign in again."
+                "Access to Mahi Repair was denied for this account or device."
+            else -> "Your repair session expired. Reconnecting to public access..."
         }
         clearLocalCatalog()
-        preferencesManager.clearDeviceId()
-        authRepository.invalidateLocalSession()
+        if (!publicDeviceBlocked) {
+            preferencesManager.clearDeviceId()
+            authRepository.invalidateLocalSession()
+        }
     }
 
     /**
