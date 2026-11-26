@@ -1,14 +1,22 @@
-# Mahi Repair — Android Member App
+# Mahi Repair — Public Android Repair App
 
-Mahi Repair is the native Android repair client for invited Members. The Android app contains only the Member experience: sign-in, the authorized repair library, guided repair execution, device status, and local repair history.
+Mahi Repair is a public native Android repair app. Anyone can install and open it; the app creates its own anonymous Supabase session in the background. Users do not need an email address, Member ID, PIN, invitation, or account-registration form.
+
+## Public tool access
+
+- The Android app automatically creates one anonymous Auth identity per app installation.
+- The app downloads only Owner-published, RSA-signed repair recipes and verifies each signature before use.
+- Tools published for **all active members** are available to public app users. Tools assigned only to selected members remain restricted.
+- Device registration, server-side authorization, rate limits, recipe allowlists, safe execution prompts, and run-report validation remain active.
+- A revoked public device remains blocked while its local app identity is retained. Anonymous access is not a person-level identity; clearing app data or reinstalling can create a new anonymous identity.
 
 ## Separate Owner Console
 
 Owner management is provided only by the standalone [Mahi Repair Admin repository](https://github.com/mahimahfud-ui/Mahi-Repair-Admin), hosted at:
 
-https://mahi-repair-admin-yy7c.onrender.com
+https://mahi-repair-admin-yy7c.onrender.com/login
 
-The Owner Console is a separate web application and is not embedded in this Android app. The Android client has no Owner Admin screen, route, Settings entry, or privileged Admin API client.
+The Owner Console is a separate web application. It is not embedded in the Android app and remains protected by Owner authentication. There is no Admin screen, route, button, or privileged Owner API client in the Android app.
 
 ## Shared Supabase backend
 
@@ -16,14 +24,14 @@ Both applications use the same Supabase project:
 
 - Project ref: `shwqsljicmhflnvjqjah`
 - Region: `ap-south-1`
-- Android: Member Auth, device registration, signed tool retrieval, and idempotent repair reports.
+- Android: anonymous Auth session, device registration, signed public tool retrieval, and repair-run reports.
 - Admin website: Owner-only member/device management, tool authoring, validation, publishing, and audit views.
 
-The Android client uses only the public Supabase publishable key. The service-role/secret key and RSA recipe-signing private key must remain server-side in Supabase secrets. The APK embeds only the RSA public key used to verify signed recipes.
+The Android client uses only the public Supabase publishable key. The service-role/secret key and RSA recipe-signing private key remain server-side in Supabase secrets. The APK embeds only the RSA public key used to verify signed recipes.
 
-## Android configuration
+## Required Supabase Auth setting
 
-Copy `.env.example` to `.env` for a local build. Never place Supabase service-role keys, Edge Function secrets, Owner PINs, or private signing material in this file or in the APK.
+Before public access works in production, enable **Allow anonymous sign-ins** in Supabase Dashboard → Authentication → Sign In / Providers → Anonymous. Keep Auth and Edge Function rate limits enabled. Consider CAPTCHA/Turnstile protection against automated account creation.
 
 ## Build and verification
 
@@ -34,7 +42,7 @@ Use the checked-in Gradle wrapper:
 ./gradlew :app:assembleDebug
 ```
 
-The debug APK is for development/testing. A production release must use the owner's protected release-signing configuration and pass the physical-device acceptance gates documented in `PRODUCTION_SETUP_CHECKLIST.md`.
+The debug APK is for development/testing. A production release must use the Owner's protected, permanent release-signing configuration and pass the physical-device acceptance gates in `PRODUCTION_SETUP_CHECKLIST.md`.
 
 ## Get the APK from GitHub
 
@@ -42,4 +50,4 @@ Follow the [GitHub APK download and production release guide](docs/GITHUB_APK_RE
 
 ## Release boundary
 
-A successful CI build does not prove live end-to-end operation. Before declaring production acceptance, verify the Owner PIN login, Member ID/PIN sign-in and rate limiting, RSA public/private key match, a real Member device registration, Owner tool publish, Android signature verification, safe repair execution, and report visibility in the Admin Console.
+A successful CI build does not prove live operation. Before production acceptance, verify Supabase anonymous sign-in, public all-active-members tool publication, selected-member tool isolation, device registration/revocation, signature verification, a safe repair run, Admin report visibility, app updates, and data-update rollback.

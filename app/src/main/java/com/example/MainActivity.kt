@@ -25,7 +25,6 @@ import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.ui.MainViewModel
-import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MainScreen
 import com.example.ui.theme.MahiBlack
 import com.example.ui.theme.MahiRepairTheme
@@ -88,59 +87,51 @@ fun MahiRepairApp(
         permissionRequestInFlight.value = false
     }
 
-    if (!state.session.isAuthenticated) {
-        AuthScreen(
-            state = state,
-            onSignIn = { memberId, pin -> viewModel.onSignInWithMemberCredentials(memberId, pin) }
-        )
-    } else {
-        MainScreen(
-            state = state,
-            onRunRepair = { viewModel.onRunRepair() },
-            onRetryAvailability = { viewModel.onRetryAvailability() },
-            onSelectTool = { viewModel.onSelectTool(it) },
-            onDismissToolPicker = { viewModel.onDismissToolPicker() },
-            onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
-            onDismissExecution = { viewModel.onDismissExecution() },
-            onRequestPermission = { permissionName ->
-                if (!permissionRequestInFlight.value) {
-                    permissionRequestInFlight.value = true
-                    scope.launch {
-                        try {
-                            val request = viewModel.prepareRuntimePermissionRequest(permissionName)
-                            if (request == null) {
-                                permissionRequestInFlight.value = false
-                            } else {
-                                activePermissionName.value = request.permissionName
-                                activePermissionWasRequestedBefore.value = request.wasRequestedBefore
-                                permissionLauncher.launch(request.androidPermission)
-                            }
-                        } catch (cancelled: CancellationException) {
-                            viewModel.onCancelRuntimePermission()
+    MainScreen(
+        state = state,
+        onRunRepair = { viewModel.onRunRepair() },
+        onRetryAvailability = { viewModel.onRetryAvailability() },
+        onSelectTool = { viewModel.onSelectTool(it) },
+        onDismissToolPicker = { viewModel.onDismissToolPicker() },
+        onSubmitUserAction = { viewModel.onSubmitUserAction(it) },
+        onDismissExecution = { viewModel.onDismissExecution() },
+        onRequestPermission = { permissionName ->
+            if (!permissionRequestInFlight.value) {
+                permissionRequestInFlight.value = true
+                scope.launch {
+                    try {
+                        val request = viewModel.prepareRuntimePermissionRequest(permissionName)
+                        if (request == null) {
                             permissionRequestInFlight.value = false
-                            throw cancelled
-                        } catch (_: Exception) {
-                            // A failed local preparation must not leave recipe execution suspended.
-                            viewModel.onRuntimePermissionResult(
-                                permissionName = permissionName,
-                                granted = false,
-                                permanentlyDenied = false
-                            )
-                            activePermissionName.value = ""
-                            activePermissionWasRequestedBefore.value = false
-                            permissionRequestInFlight.value = false
+                        } else {
+                            activePermissionName.value = request.permissionName
+                            activePermissionWasRequestedBefore.value = request.wasRequestedBefore
+                            permissionLauncher.launch(request.androidPermission)
                         }
+                    } catch (cancelled: CancellationException) {
+                        viewModel.onCancelRuntimePermission()
+                        permissionRequestInFlight.value = false
+                        throw cancelled
+                    } catch (_: Exception) {
+                        viewModel.onRuntimePermissionResult(
+                            permissionName = permissionName,
+                            granted = false,
+                            permanentlyDenied = false
+                        )
+                        activePermissionName.value = ""
+                        activePermissionWasRequestedBefore.value = false
+                        permissionRequestInFlight.value = false
                     }
                 }
-            },
-            onCancelPermission = { viewModel.onCancelRuntimePermission() },
-            onSignOut = { viewModel.onSignOut() },
-            onCheckForAppUpdates = { viewModel.onCheckForAppUpdates() },
-            onInstallAppUpdate = { viewModel.onInstallAppUpdate() },
-            onApplyDataUpdate = { viewModel.onApplyDataUpdate() },
-            onRollbackDataUpdate = { viewModel.onRollbackDataUpdate() }
-        )
-    }
+            }
+        },
+        onCancelPermission = { viewModel.onCancelRuntimePermission() },
+        onSignOut = { viewModel.onSignOut() },
+        onCheckForAppUpdates = { viewModel.onCheckForAppUpdates() },
+        onInstallAppUpdate = { viewModel.onInstallAppUpdate() },
+        onApplyDataUpdate = { viewModel.onApplyDataUpdate() },
+        onRollbackDataUpdate = { viewModel.onRollbackDataUpdate() }
+    )
 }
 
 

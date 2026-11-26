@@ -61,7 +61,7 @@ jobs:
         id: gradle-build
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest
 
       - name: Upload Android unit-test reports
         if: always()

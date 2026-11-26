@@ -28,7 +28,8 @@ data class AuthUser(
     val id: String,
     val email: String?,
     @Json(name = "user_metadata") val userMetadata: Map<String, String>? = null,
-    @Json(name = "app_metadata") val appMetadata: Map<String, String>? = null
+    @Json(name = "app_metadata") val appMetadata: Map<String, String>? = null,
+    @Json(name = "is_anonymous") val isAnonymous: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)

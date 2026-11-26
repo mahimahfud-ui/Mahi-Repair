@@ -1,7 +1,5 @@
 package com.example
 
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -62,7 +60,11 @@ class RunRepairScreenTest {
                 onDismissExecution = {},
                 onRequestPermission = {},
                 onCancelPermission = {},
-                onSignOut = {}
+                onSignOut = {},
+                onCheckForAppUpdates = {},
+                onInstallAppUpdate = {},
+                onApplyDataUpdate = {},
+                onRollbackDataUpdate = {}
             )
         }
     }
@@ -110,7 +112,7 @@ class RunRepairScreenTest {
         )
 
         composeRule.onNodeWithText("Network Diagnostics").assertExists().assertIsDisplayed()
-        composeRule.onAllNodesWithText("DNS Troubleshooting").onLast().performClick()
+        composeRule.onAllNodesWithText("DNS Troubleshooting").get(1).performClick()
         composeRule.runOnIdle { assertEquals("dns-tool-id", selectedToolId) }
     }
 
@@ -123,6 +125,19 @@ class RunRepairScreenTest {
         composeRule.onNodeWithContentDescription("Tools").performClick()
         composeRule.onNodeWithText("VERIFIED LIBRARY").assertExists()
         composeRule.onNodeWithTag("search_bar").assertExists().assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsExplainsPublicAccessWithoutAccountCredentialsOrSignOut() {
+        setMainScreen(MainUiState(tools = emptyList(), isToolsLoading = false))
+
+        composeRule.onNodeWithContentDescription("Settings").performClick()
+        composeRule.onNodeWithText("Public access").assertExists().assertIsDisplayed()
+        composeRule.onNodeWithText("No email, PIN, Member ID or invitation is required. This device connects automatically.")
+            .assertExists()
+        composeRule.onNodeWithText("Sign out").assertDoesNotExist()
+        composeRule.onNodeWithText("Member Sign In").assertDoesNotExist()
+        composeRule.onNodeWithText("Admin Panel", substring = true).assertDoesNotExist()
     }
 
     @Test

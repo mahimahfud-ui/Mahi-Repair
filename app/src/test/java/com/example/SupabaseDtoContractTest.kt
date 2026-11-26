@@ -28,6 +28,27 @@ class SupabaseDtoContractTest {
     }
 
     @Test
+    fun anonymousAuthResponseExposesAnonymousIdentityClaim() {
+        val json = """
+            {
+              "access_token": "access-token",
+              "token_type": "bearer",
+              "expires_in": 3600,
+              "refresh_token": "refresh-token",
+              "user": {
+                "id": "a0000000-0000-0000-0000-000000000099",
+                "is_anonymous": true,
+                "app_metadata": {}
+              }
+            }
+        """.trimIndent()
+        val parsed = moshi.adapter(com.example.data.remote.dto.AuthSessionResponse::class.java).fromJson(json)
+        assertNotNull(parsed?.user)
+        assertTrue(parsed?.user?.isAnonymous == true)
+        assertEquals("a0000000-0000-0000-0000-000000000099", parsed?.user?.id)
+    }
+
+    @Test
     fun registerDeviceRequestUsesCurrentEdgeFunctionContract() {
         val request = RegisterDeviceRequest(
             deviceId = "a0000000-0000-0000-0000-000000000001",

@@ -147,20 +147,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             toolRepo.accessDeniedMessage.collectLatest { message ->
-                if (!message.isNullOrBlank()) _authStatusMessage.value = message
+                if (!message.isNullOrBlank()) {
+                    _authStatusMessage.value = message
+                    _repairStatusMessage.value = message
+                    _canRetryAvailability.value = !message.contains("disabled", ignoreCase = true)
+                }
             }
         }
         viewModelScope.launch {
             authRepo.sessionFlow.collect { session ->
                 if (session.isAuthenticated) {
                     refreshTools()
+                    toolRepo.enqueuePendingReportUploads()
                     syncDeviceIntelligence()
                     onCheckForAppUpdates()
                 } else {
-                    _isToolsLoading.value = false
-                    _canRetryAvailability.value = false
                     _isToolPickerOpen.value = false
-                    _repairStatusMessage.value = null
+                    establishPublicSession()
                 }
             }
         }
@@ -290,7 +293,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onRetryAvailability() {
         if (_isToolsLoading.value || _isPreparingRepair.value) return
-        viewModelScope.launch { refreshTools() }
+        viewModelScope.launch {
+            if (authRepo.getSession().isAuthenticated) refreshTools()
+            else establishPublicSession()
+        }
+    }
+
+    private suspend fun establishPublicSession() {
+        _isToolsLoading.value = true
+        _canRetryAvailability.value = false
+        _repairStatusMessage.value = "Connecting to the public repair service..."
+
+        val result = authRepo.ensurePublicSession()
+        if (result.isSuccess) {
+            toolRepo.clearAccessDeniedMessage()
+            return
+        }
+
+        _isToolsLoading.value = false
+        _canRetryAvailability.value = true
+        _repairStatusMessage.value = result.exceptionOrNull()?.message
+            ?: "Public repair access is temporarily unavailable. Check your connection and try again."
     }
 
     private suspend fun refreshTools() {

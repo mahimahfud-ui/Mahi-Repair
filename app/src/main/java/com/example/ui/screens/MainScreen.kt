@@ -339,7 +339,7 @@ private fun HomePage(
     onSelectTool: (String) -> Unit
 ) {
     PageFrame(maxWidth) {
-        PageHeading("YOUR REPAIR HUB", "Everything running smoothly?", "A clearer view of your device and the tools available to help.")
+        PageHeading("YOUR REPAIR HUB", "Everything running smoothly?", "Open Mahi Repair and use published repair tools—no sign-in required.")
         Spacer(Modifier.height(20.dp))
         DeviceOverviewCard(device)
         Spacer(Modifier.height(16.dp))
@@ -355,7 +355,7 @@ private fun HomePage(
         SectionHeading("Repair tools", "View all", onOpenTools)
         Spacer(Modifier.height(10.dp))
         when {
-            state.isToolsLoading && state.tools.isEmpty() -> LoadingCard("Checking your authorized repair library…")
+            state.isToolsLoading && state.tools.isEmpty() -> LoadingCard("Connecting to the public repair library…")
             state.tools.isEmpty() -> EmptyCard(
                 "No repair tools available",
                 state.repairStatusMessage ?: "Connect to the internet and refresh your authorized tool list.",
@@ -414,7 +414,7 @@ private fun ToolsPage(
                 tool.description.contains(searchQuery, true) || tool.category.title.contains(searchQuery, true))
     }
     PageFrame(maxWidth) {
-        PageHeading("VERIFIED LIBRARY", "Repair tools", "Only releases authorized for your account and this device are shown.")
+        PageHeading("VERIFIED LIBRARY", "Repair tools", "Published and verified repair tools available to this app.")
         Spacer(Modifier.height(18.dp))
         OutlinedTextField(
             value = searchQuery,
@@ -572,7 +572,7 @@ private fun SettingsPage(
     onRollbackDataUpdate: () -> Unit
 ) {
     PageFrame(maxWidth) {
-        PageHeading("PREFERENCES & ACCOUNT", "Settings", "Your account, device and local synchronization status.")
+        PageHeading("APP & DEVICE", "Settings", "Public access, device status and local synchronization.")
         Spacer(Modifier.height(18.dp))
         state.remoteAnnouncement?.let { announcement ->
             AppCard {
@@ -597,9 +597,13 @@ private fun SettingsPage(
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Signed-in account", color = MahiTextMuted, fontSize = 12.sp)
-                    Text(state.session.email, color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text(state.session.role.replaceFirstChar { it.uppercase() }, color = MahiTextSecondary, fontSize = 12.sp)
+                    Text("Public access", color = MahiTextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "No email, PIN, Member ID or invitation is required. This device connects automatically.",
+                        color = MahiTextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
                 }
             }
         }
@@ -641,19 +645,12 @@ private fun SettingsPage(
             )
         }
         Spacer(Modifier.height(18.dp))
-        Button(
-            onClick = onSignOut,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MahiRedPrimary.copy(alpha = 0.13f),
-                contentColor = MahiRedPrimary
-            )
-        ) {
-            Icon(Icons.Default.Logout, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Sign out", fontWeight = FontWeight.SemiBold)
-        }
+        Text(
+            "Owner management stays in the separate, protected Mahi Repair Admin website.",
+            color = MahiTextMuted,
+            fontSize = 11.sp,
+            lineHeight = 16.sp
+        )
     }
 }
 
