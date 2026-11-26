@@ -102,6 +102,13 @@ class ToolRepository(
                 UUID.fromString(savedId)
                 return@withLock savedId
             }
+            val previousIdentityWasPublic = savedOwner?.startsWith("anonymous:") == true
+            val currentIdentityIsPublic = ownerEmail.startsWith("anonymous:")
+            if (!savedId.isNullOrBlank() && previousIdentityWasPublic && currentIdentityIsPublic) {
+                throw IllegalStateException(
+                    "This public device identity is no longer valid. The Owner may have revoked this device."
+                )
+            }
             if (!savedId.isNullOrBlank()) preferencesManager.clearDeviceId()
 
             val request = RegisterDeviceRequest(
@@ -240,20 +247,20 @@ class ToolRepository(
 
         // Publish the reason before changing DataStore; session observers may react immediately.
         val currentSession = authRepository.getSession()
-        val publicDeviceBlocked = currentSession.email.startsWith("anonymous:") &&
-            rejection?.statusCode == 403
+        val savedDeviceOwner = preferencesManager.deviceOwnerEmailFlow.first()
+        val publicIdentity = currentSession.email.startsWith("anonymous:") ||
+            savedDeviceOwner?.startsWith("anonymous:") == true
+        val publicDeviceBlocked = publicIdentity && rejection?.statusCode == 403
         _accessDeniedMessage.value = when {
             publicDeviceBlocked ->
                 "Public access for this device has been disabled by the Owner."
             rejection?.statusCode == 403 ->
                 "Access to Mahi Repair was denied for this account or device."
-            else -> "Your repair session expired. Reconnecting to public access..."
+            else -> "Your public session expired. Reconnecting without resetting this device identity..."
         }
         clearLocalCatalog()
-        if (!publicDeviceBlocked) {
-            preferencesManager.clearDeviceId()
-            authRepository.invalidateLocalSession()
-        }
+        if (!publicIdentity) preferencesManager.clearDeviceId()
+        if (!publicDeviceBlocked) authRepository.invalidateLocalSession()
     }
 
     /**
